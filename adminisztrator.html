@@ -701,67 +701,55 @@ button.submit-btn:hover::before{
 
 <script>
 const content = document.getElementById("content");
-const pageCard = document.getElementById("pageCard");
-const mainLogo = document.querySelector(".logo img");
 const faders = document.querySelectorAll(".fade-in");
 
 function createBgParticles(){
   const container = document.querySelector(".bg-particles");
 
-  for(let i=0;i<80;i++){
-    const dot=document.createElement("span");
-    dot.style.left=Math.random()*100+"%";
-    dot.style.top=(50+Math.random()*50)+"%";
-    dot.style.animationDuration=(10+Math.random()*10)+"s";
-    dot.style.animationDelay=(Math.random()*8)+"s";
-    dot.style.width=dot.style.height=(3+Math.random()*4)+"px";
+  for(let i=0;i<90;i++){
+    const dot = document.createElement("span");
+    const size = 3 + Math.random() * 4;
+
+    dot.style.left = Math.random() * 100 + "%";
+    dot.style.top = (50 + Math.random() * 50) + "%";
+    dot.style.width = size + "px";
+    dot.style.height = size + "px";
+    dot.style.animationDuration = (10 + Math.random() * 10) + "s";
+    dot.style.animationDelay = (Math.random() * 8) + "s";
+
     container.appendChild(dot);
   }
 }
 
 function goBackToChooser(){
+  content.classList.add("page-exit");
   sessionStorage.setItem("skipIntro", "true");
-  pageCard.classList.add("page-exit");
   setTimeout(() => {
     window.location.href = "index.html";
   }, 420);
 }
 
-function startLogoFollow(){
-  let targetX = 0, targetY = 0, logoX = 0, logoY = 0;
-  const easing = 0.05;
-
-  document.addEventListener("mousemove", (e) => {
-    targetX = (e.clientX - window.innerWidth / 2) * 0.02;
-    targetY = (e.clientY - window.innerHeight / 2) * 0.02;
-  });
-
-  function followCursor(){
-    logoX += (targetX - logoX) * easing;
-    logoY += (targetY - logoY) * easing;
-    mainLogo.style.transform = `translate(${logoX}px, ${logoY}px)`;
-    requestAnimationFrame(followCursor);
-  }
-  followCursor();
-}
-
-function checkFade() {
-  const trigger = window.innerHeight * 1;
+function checkFade(){
+  const trigger = window.innerHeight * 1.05;
   faders.forEach(el => {
     const top = el.getBoundingClientRect().top;
-    if (top < trigger) el.classList.add("visible");
+    if(top < trigger){
+      el.classList.add("visible");
+    }
   });
 }
 
 window.addEventListener("scroll", checkFade);
+
 window.addEventListener("load", () => {
   createBgParticles();
+
   requestAnimationFrame(() => {
     content.style.opacity = "1";
     content.style.filter = "blur(0)";
     content.style.transform = "translateY(0)";
   });
-  startLogoFollow();
+
   checkFade();
 });
 </script>

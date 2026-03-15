@@ -765,31 +765,18 @@ window.addEventListener("load", () => {
   checkFade();
 });
 
-  const form = document.getElementById("adminForm");
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-
-    const res = await fetch("/.netlify/functions/send-admin-application", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(data)
-    });
-
-    const result = await res.json();
-
-    if (result.success) {
-      alert("Sikeresen elküldve!");
-      form.reset();
-    } else {
-      alert("Hiba történt: " + (result.details || result.error));
-    }
-  });
+fetch("https://internalgaming-production.up.railway.app", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    karakterNev: "Teszt",
+    jatekosNev: "Balazs",
+    eletkor: "20",
+    discordNev: "balazs#1234"
+  })
+})
 </script>
 
 </body>

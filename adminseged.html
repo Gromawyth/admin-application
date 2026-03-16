@@ -694,14 +694,11 @@ document.getElementById("adminSegedForm").addEventListener("submit", async funct
     console.log("Szerver válasz:", result);
 
     if (response.ok && result.success) {
-      alert("Sikeresen elküldve!");
       this.reset();
     } else {
-      alert(`Hiba történt: ${result.error || "ismeretlen hiba"}`);
     }
   } catch (error) {
     console.error("Kapcsolódási hiba:", error);
-    alert("Nem sikerült kapcsolódni a szerverhez. Nézd meg az F12 konzolt.");
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = originalButtonText;

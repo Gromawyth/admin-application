@@ -585,6 +585,111 @@ button.submit-btn:hover::before{
   100%{ left:115%; }
 }
 
+/* hibás mező */
+/* ===== MODERN VALIDÁCIÓ ===== */
+
+.form-group{
+  position:relative;
+}
+
+.input-error{
+  border:1px solid rgba(255, 196, 64, 0.95) !important;
+  background:rgba(255, 196, 64, 0.08) !important;
+  box-shadow:
+    0 0 0 4px rgba(255, 196, 64, 0.10),
+    0 0 18px rgba(255, 196, 64, 0.18),
+    0 10px 24px rgba(0,0,0,0.22) !important;
+}
+
+.input-valid{
+  border:1px solid rgba(31,143,78,0.8) !important;
+  box-shadow:
+    0 0 0 4px rgba(31,143,78,0.08),
+    0 0 16px rgba(31,143,78,0.14) !important;
+}
+
+.error-message{
+  max-height:0;
+  opacity:0;
+  overflow:hidden;
+  transform:translateY(-4px);
+  transition:
+    max-height .35s ease,
+    opacity .25s ease,
+    transform .25s ease,
+    margin-top .25s ease;
+  color:#ffd76a;
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:.15px;
+  margin-top:0;
+  padding-left:2px;
+  text-shadow:0 0 10px rgba(255,215,106,0.10);
+}
+
+.error-message.show{
+  max-height:32px;
+  opacity:1;
+  transform:translateY(0);
+  margin-top:8px;
+}
+
+.form-group.error-label label{
+  color:#ffe08a;
+  text-shadow:0 0 12px rgba(255,215,106,0.08);
+}
+
+@keyframes smoothShake{
+  0%{ transform:translateX(0); }
+  20%{ transform:translateX(-5px); }
+  40%{ transform:translateX(4px); }
+  60%{ transform:translateX(-3px); }
+  80%{ transform:translateX(2px); }
+  100%{ transform:translateX(0); }
+}
+
+.shake-field{
+  animation:smoothShake .34s ease;
+}
+
+.validation-summary{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:0 0 18px;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid rgba(255, 196, 64, 0.28);
+  background:rgba(255, 196, 64, 0.08);
+  color:#ffe08a;
+  font-size:13px;
+  font-weight:700;
+  box-shadow:0 12px 30px rgba(0,0,0,0.18);
+  backdrop-filter:blur(8px);
+  opacity:0;
+  transform:translateY(-8px);
+  pointer-events:none;
+  transition:opacity .28s ease, transform .28s ease;
+}
+
+.validation-summary.show{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+
+.validation-summary-icon{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255, 196, 64, 0.18);
+  color:#ffd35a;
+  font-weight:900;
+  flex:0 0 auto;
+}
 </style>
 </head>
 <body>
@@ -634,42 +739,53 @@ button.submit-btn:hover::before{
       </ul>
     </div>
 
-    <form id="adminSegedForm">
-      <div class="section-title fade-in"><span class="badge">I.</span> Általános kérdések</div>
+    <form id="adminSegedForm" novalidate>
+      <div class="validation-summary" id="validationSummary">
+  <span class="validation-summary-icon">!</span>
+  <span>Kérlek töltsd ki a kiemelt mezőket.</span>
+</div>
 
+      <div class="section-title fade-in"><span class="badge">I.</span> Általános kérdések</div>
       <div class="form-group fade-in">
         <label>Mi a karaktered neve?</label>
         <input type="text" name="karaktered" placeholder="- Válaszod -" required>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi a Discord User ID-d?</label>
         <input type="text" name="discordID" placeholder="- Hol találom? > Beállítás > Fejlett > Fejlesztői mód > Jobb klikk a profilra > Azonosító másolása -" required>
+      <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi a Discord neved?</label>
         <input type="text" name="discord1" placeholder="- Válaszod -" required>
+      <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Életkorod:</label>
         <input type="number" name="eletkor" placeholder="- Válaszod -" required>
+      <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Heti szinten mennyi időt tudnál az adminsegéd feladatokra fordítani?</label>
         <textarea name="hetiIdo" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Önmagad rövid bemutatása:</label>
         <textarea name="bemutatkozas" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Voltál-e már adminisztrátor vagy adminsegéd tag más szerveren? Ha igen, hol és milyen pozícióban?</label>
         <textarea name="voltStaff" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">II.</span> Szituációs feladatok</div>
@@ -677,21 +793,25 @@ button.submit-btn:hover::before{
       <div class="form-group fade-in">
         <label>Egy játékos bizonyíthatóan visszaél egy rendszerhibával (bug), de népszerű tag. Hogyan jársz el?</label>
         <textarea name="bugVisszaeles" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Elkapsz egy ütközést. Annyi RP-t látsz, hogy /do megrázkódik vagy /do kocc. Mi itt a probléma? Hogyan jársz el? Ha szankcionálsz, miként teszed azt?</label>
         <textarea name="utkozesHelyzet" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>A rendvédelem valamely tagja jelez feléd, hogy direkt provokálják őket. Mit teszel?</label>
         <textarea name="rendvedelemProvokacio" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Egy új játékos sok kérdést tesz fel, de a válaszaid lassan érkeznek, ami frusztrálja őt. Hogyan reagálsz?</label>
         <textarea name="ujJatekosKezeles" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">III.</span> Kompetencia és hozzáállás</div>
@@ -699,16 +819,19 @@ button.submit-btn:hover::before{
       <div class="form-group fade-in">
         <label>Mit jelent számodra a pártatlan eljárás egy adminügy kapcsán?</label>
         <textarea name="partatlansag" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Szerinted jó adminisztrátor válna belőled? Indokold!</label>
         <textarea name="joAdminLennek" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Te miként definiálnád a rugalmasság fogalmát?​</label>
         <textarea name="rugalmassag" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
 <button type="submit" class="submit-btn fade-in">
@@ -808,7 +931,121 @@ document.getElementById("adminSegedForm").addEventListener("submit", async funct
       label.style.transform = "translateY(0)";
     }, 180);
   };
+//remegés-sárga
+function setupModernValidation(formId) {
+  const form = document.getElementById(formId);
+  if (!form) return;
 
+  const summary = form.querySelector(".validation-summary");
+  const fields = form.querySelectorAll("input, textarea");
+
+  function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
+    const group = field.closest(".form-group");
+    if (!group) return;
+
+    const error = group.querySelector(".error-message");
+
+    field.classList.remove("input-valid");
+    field.classList.add("input-error");
+    group.classList.add("error-label");
+
+    field.classList.remove("shake-field");
+    void field.offsetWidth;
+    field.classList.add("shake-field");
+
+    if (error) {
+      error.textContent = message;
+      error.classList.add("show");
+    }
+  }
+
+  function clearFieldError(field) {
+    const group = field.closest(".form-group");
+    if (!group) return;
+
+    const error = group.querySelector(".error-message");
+
+    field.classList.remove("input-error", "shake-field");
+    group.classList.remove("error-label");
+
+    if (field.value.trim()) {
+      field.classList.add("input-valid");
+    } else {
+      field.classList.remove("input-valid");
+    }
+
+    if (error) {
+      error.classList.remove("show");
+    }
+  }
+
+  function validateField(field) {
+    const value = field.value.trim();
+
+    if (field.hasAttribute("required") && !value) {
+      showFieldError(field);
+      return false;
+    }
+
+    if (field.type === "number" && value) {
+      const numeric = Number(value);
+      if (Number.isNaN(numeric) || numeric <= 0) {
+        showFieldError(field, "Kérlek adj meg egy érvényes számot.");
+        return false;
+      }
+    }
+
+    clearFieldError(field);
+    return true;
+  }
+
+  fields.forEach(field => {
+    field.addEventListener("input", () => validateField(field));
+    field.addEventListener("blur", () => validateField(field));
+  });
+
+  form.addEventListener("submit", function(e) {
+    let isValid = true;
+    let firstInvalid = null;
+
+    fields.forEach(field => {
+      const ok = validateField(field);
+      if (!ok && !firstInvalid) firstInvalid = field;
+      if (!ok) isValid = false;
+    });
+
+    if (!isValid) {
+      e.preventDefault();
+
+      if (summary) {
+        summary.classList.add("show");
+        setTimeout(() => summary.classList.remove("show"), 2800);
+      }
+
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+
+        setTimeout(() => firstInvalid.focus(), 250);
+      }
+
+      return false;
+    }
+  });
+}
+
+setupModernValidation("adminSegedForm");
+//vége
+inputs.forEach(input => {
+
+  input.addEventListener("input", () => {
+    input.classList.remove("input-error","shake");
+  });
+
+});
+//
   btn.disabled = true;
   btn.classList.remove("success", "error", "resetting");
   check.style.opacity = "0";

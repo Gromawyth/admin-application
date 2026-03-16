@@ -1160,9 +1160,9 @@ window.addEventListener("load", () => {
   checkFade();
 });
 
-setupModernValidation("adminSegedForm");
+setupModernValidation("adminForm");
 
-document.getElementById("adminSegedForm").addEventListener("submit", async function (e) {
+document.getElementById("adminForm").addEventListener("submit", async function (e) {
   e.preventDefault();
 
   const fields = this.querySelectorAll("input, textarea");
@@ -1206,7 +1206,7 @@ document.getElementById("adminSegedForm").addEventListener("submit", async funct
 
   const formData = new FormData(this);
   const data = Object.fromEntries(formData.entries());
-  data.applicationType = "adminseged";
+  data.applicationType = "adminisztrator";
 
   try {
     await new Promise((resolve) => setTimeout(resolve, 4200));

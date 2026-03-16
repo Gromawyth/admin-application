@@ -498,39 +498,39 @@ button.submit-btn:hover::before{
 
       <div class="form-group fade-in">
         <label>Hány éves vagy?</label>
-        <input type="text" name="eletkor" placeholder="- Válaszod -" required>
+        <input type="number" name="eletkor" placeholder="- Válaszod -" required>
       </div>
 
       <div class="form-group fade-in">
         <label>Mennyi ideje játszol az internalGamingen?</label>
-        <input type="text" name="jatszottIdo" placeholder="- Válaszod -" required>
+        <textarea name="jatszottIdo" placeholder="- Válaszod -" required></textarea>
       </div>
 
       <div class="form-group fade-in">
         <label>Honnan találtál rá a szerverre?</label>
-        <input type="text" name="internalTalalat" placeholder="- Válaszod -" required>
+        <textarea name="internalTalalat" placeholder="- Válaszod -" required></textarea>
       </div>
 
       <div class="section-title fade-in"><span class="badge">02.</span> Időbeosztás</div>
 
       <div class="form-group fade-in">
         <label>Mikor szoktál általában fent lenni hétköznap?</label>
-        <input type="text" name="hetkoznapAktivitas" placeholder="- Válaszod -" required>
+        <textarea name="hetkoznapAktivitas" placeholder="- Válaszod -" required></textarea>
       </div>
 
       <div class="form-group fade-in">
         <label>Mikor szoktál általában fent lenni hétvégén?</label>
-        <input type="text" name="hetvegeAktivitas" placeholder="- Válaszod -" required>
+        <textarea name="hetvegeAktivitas" placeholder="- Válaszod -" required></textarea>
       </div>
 
       <div class="form-group fade-in">
         <label>Heti hány órát tudsz aktívan játszani?</label>
-        <input type="text" name="hetiOra" placeholder="- Válaszod -" required>
+        <textarea name="hetiOra" placeholder="- Válaszod -" required></textarea>
       </div>
 
       <div class="form-group fade-in">
         <label>Mennyi időt tudnál az Admin Staff feladataira szánni?</label>
-        <input type="text" name="staffIdo" placeholder="- Válaszod -" required>
+        <textarea name="staffIdo" placeholder="- Válaszod -" required></textarea>
       </div>
 
       <div class="form-group fade-in">
@@ -780,7 +780,7 @@ document.getElementById("adminForm").addEventListener("submit", async function (
 
   const formData = new FormData(this);
   const data = Object.fromEntries(formData.entries());
-
+  data.applicationType = "adminisztrator";
   try {
     const response = await fetch("https://internalgaming-production.up.railway.app/application", {
       method: "POST",

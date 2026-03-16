@@ -43,33 +43,37 @@ function limitField(value, max = 1024) {
   return text.slice(0, max - 3) + "...";
 }
 
-function buildActionRow(disabled = false) {
+function buildActionRow(applicationType, disabled = false) {
+  const suffix = applicationType === "adminseged" ? "adminseged" : "admin";
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("accept")
+      .setCustomId(`accept_${suffix}`)
       .setLabel("Elfogadás")
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
     new ButtonBuilder()
-      .setCustomId("reject")
+      .setCustomId(`reject_${suffix}`)
       .setLabel("Elutasítás")
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled)
   );
 }
 
-function buildApplicationEmbeds(data) {
+function buildAdminEmbeds(data) {
   const discordUserId = safeValue(data.discordNev);
 
   return [
     new EmbedBuilder()
+      .setTitle("🟢 Új Adminisztrátori jelentkezés")
       .setDescription("━━━━━━━━━━ **01. ALAPADATOK** ━━━━━━━━━━")
       .setColor(0x1f8b4c)
       .addFields(
-        { name: "👤 Mi a karaktered neve?", value: limitField(data.karakterNev), inline: true },
-        { name: "🆔 Discord User ID", value: limitField(discordUserId), inline: true },
-        { name: "🎂 Hány éves vagy?", value: limitField(data.eletkor), inline: true },
-        { name: "⏱️ Mennyi ideje játszol az internalGamingen?", value: limitField(data.jatszottIdo), inline: true },
+        { name: "📌 Jelentkezés típusa", value: "Adminisztrátor", inline: true },
+        { name: "👤 Mi a karaktered neve?", value: limitField(data.karakterNev), inline: false },
+        { name: "🆔 Discord User ID", value: limitField(discordUserId), inline: false },
+        { name: "🎂 Hány éves vagy?", value: limitField(data.eletkor), inline: false },
+        { name: "⏱️ Mennyi ideje játszol az internalGamingen?", value: limitField(data.jatszottIdo), inline: false },
         { name: "📅 Honnan találtál rá a szerverre?", value: limitField(data.internalTalalat), inline: false }
       ),
 
@@ -79,7 +83,7 @@ function buildApplicationEmbeds(data) {
       .addFields(
         { name: "🕒 Mikor szoktál általában fent lenni hétköznap?", value: limitField(data.hetkoznapAktivitas), inline: false },
         { name: "🕒 Mikor szoktál általában fent lenni hétvégén?", value: limitField(data.hetvegeAktivitas), inline: false },
-        { name: "⏱️ Heti hány órát tudsz aktívan játszani?", value: limitField(data.hetiOra), inline: true },
+        { name: "⏱️ Heti hány órát tudsz aktívan játszani?", value: limitField(data.hetiOra), inline: false },
         { name: "🛠️ Mennyi időt tudnál az Admin Staff feladataira szánni?", value: limitField(data.staffIdo), inline: false },
         { name: "🔄 Változik ez az időbeosztásod gyakran?", value: limitField(data.idobeosztasValtozas), inline: false }
       ),
@@ -147,6 +151,46 @@ function buildApplicationEmbeds(data) {
   ];
 }
 
+function buildAdminSegedEmbeds(data) {
+  const discordUserId = safeValue(data.discordID);
+
+  return [
+    new EmbedBuilder()
+      .setTitle("🟢 Új Adminsegéd jelentkezés")
+      .setDescription("━━━━━━━━━━ **I. ÁLTALÁNOS KÉRDÉSEK** ━━━━━━━━━━")
+      .setColor(0x2ecc71)
+      .addFields(
+        { name: "📌 Jelentkezés típusa", value: "Adminsegéd", inline: true },
+        { name: "🆔 Discord User ID", value: limitField(discordUserId), inline: false },
+        { name: "🎂 Életkorod", value: limitField(data.eletkor), inline: false },
+        { name: "⏱ Heti szinten mennyi időt tudnál az adminsegéd feladatokra fordítani?", value: limitField(data.hetiIdo), inline: false },
+        { name: "👤 Önmagad rövid bemutatása", value: limitField(data.bemutatkozas), inline: false },
+        { name: "🛡 Voltál-e már adminisztrátor vagy adminsegéd tag más szerveren? Ha igen, hol és milyen pozícióban?", value: limitField(data.voltStaff), inline: false }
+      ),
+
+    new EmbedBuilder()
+      .setDescription("━━━━━━━━━━ **II. SZITUÁCIÓS FELADATOK** ━━━━━━━━━━")
+      .setColor(0x27ae60)
+      .addFields(
+        { name: "⚠ Egy játékos bizonyíthatóan visszaél egy rendszerhibával (bug), de népszerű tag. Hogyan jársz el?", value: limitField(data.bugVisszaeles), inline: false },
+        { name: "🚗 Elkapsz egy ütközést. Annyi RP-t látsz, hogy /do megrázkódik vagy /do kocc. Mi itt a probléma? Hogyan jársz el? Ha szankcionálsz, miként teszed azt?", value: limitField(data.utkozesHelyzet), inline: false },
+        { name: "👮 A rendvédelem valamely tagja jelez feléd, hogy direkt provokálják őket. Mit teszel?", value: limitField(data.rendvedelemProvokacio), inline: false },
+        { name: "🆕 Egy új játékos sok kérdést tesz fel, de a válaszaid lassan érkeznek, ami frusztrálja őt. Hogyan reagálsz?", value: limitField(data.ujJatekosKezeles), inline: false }
+      ),
+
+    new EmbedBuilder()
+      .setDescription("━━━━━━━━━━ **III. KOMPETENCIA ÉS HOZZÁÁLLÁS** ━━━━━━━━━━")
+      .setColor(0x1f8b4c)
+      .addFields(
+        { name: "⚖ Mit jelent számodra a pártatlan eljárás egy adminügy kapcsán?", value: limitField(data.partatlansag), inline: false },
+        { name: "⭐ Szerinted jó adminisztrátor válna belőled? Indokold!", value: limitField(data.joAdminLennek), inline: false },
+        { name: "🔄 Te miként definiálnád a rugalmasság fogalmát?", value: limitField(data.rugalmassag), inline: false }
+      )
+      .setFooter({ text: "Adminsegéd jelentkezési rendszer" })
+      .setTimestamp()
+  ];
+}
+
 client.once(Events.ClientReady, () => {
   console.log(`✅ Bot online: ${client.user.tag}`);
 });
@@ -159,7 +203,8 @@ app.get("/health", (req, res) => {
   res.status(200).json({
     success: true,
     botReady: client.isReady(),
-    hasChannelId: !!process.env.CHANNEL_ID,
+    hasAdminChannelId: !!process.env.ADMIN_CHANNEL_ID,
+    hasAdminSegedChannelId: !!process.env.ADMINSEGED_CHANNEL_ID,
     hasStaffRoleId: !!process.env.STAFF_ROLE_ID
   });
 });
@@ -181,9 +226,23 @@ app.post("/application", async (req, res) => {
     }
 
     const data = req.body || {};
-    console.log("📥 Jelentkezés érkezett:", Object.keys(data));
+    const applicationType = data.applicationType === "adminseged" ? "adminseged" : "adminisztrator";
 
-    const channel = await client.channels.fetch(process.env.CHANNEL_ID).catch((err) => {
+    console.log("📥 Jelentkezés érkezett:", applicationType, Object.keys(data));
+
+    const channelId =
+      applicationType === "adminseged"
+        ? process.env.ADMINSEGED_CHANNEL_ID
+        : process.env.ADMIN_CHANNEL_ID;
+
+    if (!channelId) {
+      return res.status(500).json({
+        success: false,
+        error: "Hiányzik a megfelelő csatornaazonosító az ENV-ből."
+      });
+    }
+
+    const channel = await client.channels.fetch(channelId).catch((err) => {
       console.error("❌ Channel fetch hiba:", err);
       return null;
     });
@@ -191,22 +250,29 @@ app.post("/application", async (req, res) => {
     if (!channel) {
       return res.status(404).json({
         success: false,
-        error: "Nem találom a csatornát."
+        error: "Nem találom a célcsatornát."
       });
     }
 
     if (typeof channel.send !== "function") {
       return res.status(400).json({
         success: false,
-        error: "A CHANNEL_ID nem szöveges csatornára mutat."
+        error: "A megadott csatorna nem szöveges csatorna."
       });
     }
 
-    const embeds = buildApplicationEmbeds(data);
-    const row = buildActionRow(false);
+    const embeds =
+      applicationType === "adminseged"
+        ? buildAdminSegedEmbeds(data)
+        : buildAdminEmbeds(data);
+
+    const row = buildActionRow(applicationType, false);
 
     const message = await channel.send({
-      content: "📩 **Új admin jelentkezés érkezett!**",
+      content:
+        applicationType === "adminseged"
+          ? "🟢 **Új adminsegéd jelentkezés érkezett!**"
+          : "📩 **Új admin jelentkezés érkezett!**",
       embeds,
       components: [row],
     });
@@ -240,6 +306,20 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
+    const isAdminSeged = interaction.customId === "accept_adminseged" || interaction.customId === "reject_adminseged";
+    const isAdmin = interaction.customId === "accept_admin" || interaction.customId === "reject_admin";
+
+    if (!isAdminSeged && !isAdmin) {
+      await interaction.reply({
+        content: "Ismeretlen gomb.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const accepted = interaction.customId.startsWith("accept_");
+    const applicationType = isAdminSeged ? "adminseged" : "adminisztrator";
+
     const originalEmbeds = interaction.message.embeds || [];
     const firstEmbed = originalEmbeds[0];
 
@@ -257,42 +337,41 @@ client.on("interactionCreate", async (interaction) => {
 
     const discordUserId = applicantField?.value?.trim();
 
-    let dmText = "";
-
-    if (interaction.customId === "accept") {
-      dmText =
-        "Szia! Örömmel értesítünk, hogy az admin jelentkezésed **elfogadásra került**. Kérlek keresd fel a vezető adminisztrátort privát üzenetben.";
-    } else if (interaction.customId === "reject") {
-      dmText =
-        "Szia! Értesítünk, hogy az admin jelentkezésed **elutasításra került**. Köszönjük a jelentkezésedet és az idődet.";
-    } else {
-      await interaction.reply({
-        content: "Ismeretlen gomb.",
-        ephemeral: true,
-      });
-      return;
-    }
+    const dmText = accepted
+      ? applicationType === "adminseged"
+        ? "Szia! Örömmel értesítünk, hogy az adminsegéd jelentkezésed **elfogadásra került**. Kérlek keresd fel a vezetőséget privát üzenetben a további részletekért."
+        : "Szia! Örömmel értesítünk, hogy az admin jelentkezésed **elfogadásra került**. Kérlek keresd fel a vezető adminisztrátort privát üzenetben."
+      : applicationType === "adminseged"
+        ? "Szia! Értesítünk, hogy az adminsegéd jelentkezésed **elutasításra került**. Köszönjük a jelentkezésedet és az idődet."
+        : "Szia! Értesítünk, hogy az admin jelentkezésed **elutasításra került**. Köszönjük a jelentkezésedet és az idődet.";
 
     const reviewEmbed = new EmbedBuilder()
-      .setTitle("📋 Jelentkezés elbírálva")
-      .setColor(interaction.customId === "accept" ? 0x2ecc71 : 0xe74c3c)
+      .setTitle(
+        applicationType === "adminseged"
+          ? "📋 Adminsegéd jelentkezés elbírálva"
+          : "📋 Admin jelentkezés elbírálva"
+      )
+      .setColor(accepted ? 0x2ecc71 : 0xe74c3c)
       .addFields(
         {
           name: "Eredmény",
-          value: interaction.customId === "accept"
-            ? "✅ **ELFOGADVA**"
-            : "❌ **ELUTASÍTVA**",
+          value: accepted ? "✅ **ELFOGADVA**" : "❌ **ELUTASÍTVA**",
           inline: true
         },
         {
           name: "Elbírálta",
           value: `<@${interaction.user.id}>`,
           inline: true
+        },
+        {
+          name: "Jelentkezés típusa",
+          value: applicationType === "adminseged" ? "Adminsegéd" : "Adminisztrátor",
+          inline: true
         }
       )
       .setTimestamp();
 
-    const disabledRow = buildActionRow(true);
+    const disabledRow = buildActionRow(applicationType, true);
 
     await interaction.update({
       embeds: [...originalEmbeds, reviewEmbed],
@@ -306,12 +385,16 @@ client.on("interactionCreate", async (interaction) => {
         await user.send({
           embeds: [
             new EmbedBuilder()
-              .setTitle("📨 Admin jelentkezés elbírálása")
-              .setColor(interaction.customId === "accept" ? 0x2ecc71 : 0xe74c3c)
+              .setTitle(
+                applicationType === "adminseged"
+                  ? "📨 Adminsegéd jelentkezés elbírálása"
+                  : "📨 Admin jelentkezés elbírálása"
+              )
+              .setColor(accepted ? 0x2ecc71 : 0xe74c3c)
               .setDescription(dmText)
               .addFields(
                 {
-                  name: "Szerver:",
+                  name: "Szerver",
                   value: safeValue(interaction.guild?.name || "internalGaming"),
                   inline: true,
                 },
@@ -349,5 +432,9 @@ const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
 });
+
+console.log("DISCORD_TOKEN megvan:", !!process.env.DISCORD_TOKEN);
+console.log("DISCORD_TOKEN hossza:", process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.length : 0);
+console.log("DISCORD_TOKEN eleje:", process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.slice(0, 10) : "nincs");
 
 client.login(process.env.DISCORD_TOKEN);

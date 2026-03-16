@@ -584,6 +584,26 @@ button.submit-btn:hover::before{
   0%{ left:-30%; }
   100%{ left:115%; }
 }
+/* hibás mező */
+.input-error {
+  border: 2px solid #ffc107;
+  background: rgba(255,193,7,0.08);
+  box-shadow: 0 0 10px rgba(255,193,7,0.35);
+  transition: all 0.3s ease;
+}
+
+/* shake animáció */
+@keyframes fieldShake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-4px); }
+  100% { transform: translateX(0); }
+}
+
+.input-error.shake {
+  animation: fieldShake 0.3s;
+}
 </style>
 </head>
 <body>
@@ -627,7 +647,7 @@ button.submit-btn:hover::before{
       </ul>
     </div>
 
-    <form id="adminForm">
+    <form id="adminForm" novalidate>
       <div class="section-title fade-in"><span class="badge">01.</span> Alapadatok</div>
 
       <div class="form-group fade-in">
@@ -952,6 +972,41 @@ document.getElementById("adminForm").addEventListener("submit", async function (
 
   void btn.offsetWidth;
 
+ //remegés sárga
+const inputs = form.querySelectorAll("input, textarea");
+
+let valid = true;
+
+inputs.forEach(input => {
+
+  input.classList.remove("input-error","shake");
+
+  if (input.hasAttribute("required") && !input.value.trim()) {
+
+    valid = false;
+
+    input.classList.add("input-error");
+
+    setTimeout(() => {
+      input.classList.add("shake");
+    }, 50);
+
+  }
+
+});
+
+if(!valid) return;
+//remegés sárga vége
+//eltűnés
+inputs.forEach(input => {
+
+  input.addEventListener("input", () => {
+    input.classList.remove("input-error","shake");
+  });
+
+});
+//eltűnés vége
+  
   btn.classList.add("loading");
   setLabelSmooth("Jelentkezés elküldése");
 

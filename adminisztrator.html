@@ -584,6 +584,43 @@ button.submit-btn:hover::before{
   0%{ left:-30%; }
   100%{ left:115%; }
 }
+.validation-summary{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:0 0 18px;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid rgba(255, 196, 64, 0.28);
+  background:rgba(255, 196, 64, 0.08);
+  color:#ffe08a;
+  font-size:13px;
+  font-weight:700;
+  box-shadow:0 12px 30px rgba(0,0,0,0.18);
+  backdrop-filter:blur(8px);
+  opacity:0;
+  transform:translateY(-8px);
+  pointer-events:none;
+  transition:opacity .28s ease, transform .28s ease;
+}
+
+.validation-summary.show{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+
+.validation-summary-icon{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255, 196, 64, 0.18);
+  color:#ffd35a;
+  font-weight:900;
+}
 /* ===== MODERN VALIDÁCIÓ ===== */
 
 .form-group{

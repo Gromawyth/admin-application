@@ -43,6 +43,16 @@ function limitField(value, max = 1024) {
   return text.slice(0, max - 3) + "...";
 }
 
+function formatDiscordUser(value) {
+  const text = safeValue(value);
+
+  if (/^\d+$/.test(text)) {
+    return `<@${text}>\n\`${text}\``;
+  }
+
+  return limitField(text);
+}
+
 function buildActionRow(applicationType, disabled = false) {
   const suffix = applicationType === "adminseged" ? "adminseged" : "admin";
 
@@ -52,6 +62,7 @@ function buildActionRow(applicationType, disabled = false) {
       .setLabel("Elfogadás")
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
+
     new ButtonBuilder()
       .setCustomId(`reject_${suffix}`)
       .setLabel("Elutasítás")
@@ -65,13 +76,13 @@ function buildAdminEmbeds(data) {
 
   return [
     new EmbedBuilder()
-      .setTitle("🟢 Új Adminisztrátori jelentkezés")
+      .setTitle("📨 Új Adminisztrátori jelentkezés")
       .setDescription("━━━━━━━━━━ **01. ALAPADATOK** ━━━━━━━━━━")
       .setColor(0x1f8b4c)
       .addFields(
-        { name: "📌 Jelentkezés típusa", value: "Adminisztrátor", inline: true },
         { name: "👤 Mi a karaktered neve?", value: limitField(data.karakterNev), inline: false },
-        { name: "🆔 Discord User ID", value: limitField(discordUserId), inline: false },
+        { name: "🆔 Discord User ID", value: formatDiscordUser(discordUserId), inline: false },
+        { name: "🆔 Mi a Discord neved?", value: limitField(data.discord2), inline: false },       
         { name: "🎂 Hány éves vagy?", value: limitField(data.eletkor), inline: false },
         { name: "⏱️ Mennyi ideje játszol az internalGamingen?", value: limitField(data.jatszottIdo), inline: false },
         { name: "📅 Honnan találtál rá a szerverre?", value: limitField(data.internalTalalat), inline: false }
@@ -160,10 +171,10 @@ function buildAdminSegedEmbeds(data) {
       .setDescription("━━━━━━━━━━ **I. ÁLTALÁNOS KÉRDÉSEK** ━━━━━━━━━━")
       .setColor(0x2ecc71)
       .addFields(
-        { name: "📌 Jelentkezés típusa", value: "Adminsegéd", inline: true },
-        { name: "🆔 Discord User ID", value: limitField(discordUserId), inline: false },
+        { name: "🆔 Discord User ID", value: formatDiscordUser(discordUserId), inline: false },
+        { name: "🆔 Discord neved", value: limitField(data.discord1), inline: false },
         { name: "🎂 Életkorod", value: limitField(data.eletkor), inline: false },
-        { name: "⏱ Heti szinten mennyi időt tudnál az adminsegéd feladatokra fordítani?", value: limitField(data.hetiIdo), inline: false },
+        { name: "⏱ Heti szinten mennyi időt tudnál az adminsegédi feladatokra fordítani?", value: limitField(data.hetiIdo), inline: false },
         { name: "👤 Önmagad rövid bemutatása", value: limitField(data.bemutatkozas), inline: false },
         { name: "🛡 Voltál-e már adminisztrátor vagy adminsegéd tag más szerveren? Ha igen, hol és milyen pozícióban?", value: limitField(data.voltStaff), inline: false }
       ),
@@ -226,7 +237,8 @@ app.post("/application", async (req, res) => {
     }
 
     const data = req.body || {};
-    const applicationType = data.applicationType === "adminseged" ? "adminseged" : "adminisztrator";
+    const applicationType =
+      data.applicationType === "adminseged" ? "adminseged" : "adminisztrator";
 
     console.log("📥 Jelentkezés érkezett:", applicationType, Object.keys(data));
 
@@ -306,8 +318,13 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    const isAdminSeged = interaction.customId === "accept_adminseged" || interaction.customId === "reject_adminseged";
-    const isAdmin = interaction.customId === "accept_admin" || interaction.customId === "reject_admin";
+    const isAdminSeged =
+      interaction.customId === "accept_adminseged" ||
+      interaction.customId === "reject_adminseged";
+
+    const isAdmin =
+      interaction.customId === "accept_admin" ||
+      interaction.customId === "reject_admin";
 
     if (!isAdminSeged && !isAdmin) {
       await interaction.reply({
@@ -335,7 +352,11 @@ client.on("interactionCreate", async (interaction) => {
       (field) => field.name === "🆔 Discord User ID"
     );
 
-    const discordUserId = applicantField?.value?.trim();
+    let discordUserId = "";
+    if (applicantField?.value) {
+      const idMatch = applicantField.value.match(/\b\d{16,20}\b/);
+      discordUserId = idMatch ? idMatch[0] : "";
+    }
 
     const dmText = accepted
       ? applicationType === "adminseged"
@@ -344,6 +365,51 @@ client.on("interactionCreate", async (interaction) => {
       : applicationType === "adminseged"
         ? "Szia! Értesítünk, hogy az adminsegéd jelentkezésed **elutasításra került**. Köszönjük a jelentkezésedet és az idődet."
         : "Szia! Értesítünk, hogy az admin jelentkezésed **elutasításra került**. Köszönjük a jelentkezésedet és az idődet.";
+
+    let applicantStatus = "❌ Érvénytelen vagy hiányzó Discord User ID";
+    let dmStatus = "⛔ DM nem lett megkísérelve";
+
+    if (discordUserId && /^\d+$/.test(discordUserId)) {
+      try {
+        const user = await client.users.fetch(discordUserId);
+        applicantStatus = `✅ Jelentkező lekérve: <@${discordUserId}>`;
+
+        try {
+          await user.send({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(
+                  applicationType === "adminseged"
+                    ? "📨 Adminsegéd jelentkezés elbírálása"
+                    : "📨 Admin jelentkezés elbírálása"
+                )
+                .setColor(accepted ? 0x2ecc71 : 0xe74c3c)
+                .setDescription(dmText)
+                .addFields(
+                  {
+                    name: "Szerver",
+                    value: safeValue(interaction.guild?.name || "internalGaming"),
+                    inline: true,
+                  },
+                  {
+                    name: "Elbírálta",
+                    value: safeValue(interaction.user.tag),
+                    inline: true,
+                  }
+                )
+                .setTimestamp()
+            ],
+          });
+
+          dmStatus = "✅ DM sikeresen elküldve";
+        } catch (dmError) {
+          dmStatus = `❌ DM küldése sikertelen: ${limitField(dmError.message || "ismeretlen hiba")}`;
+        }
+      } catch (fetchError) {
+        applicantStatus = `❌ A felhasználó nem kérhető le ebből az ID-ból: \`${discordUserId}\``;
+        dmStatus = "⛔ DM kihagyva, mert a felhasználó lekérése sikertelen";
+      }
+    }
 
     const reviewEmbed = new EmbedBuilder()
       .setTitle(
@@ -364,9 +430,14 @@ client.on("interactionCreate", async (interaction) => {
           inline: true
         },
         {
-          name: "Jelentkezés típusa",
-          value: applicationType === "adminseged" ? "Adminsegéd" : "Adminisztrátor",
-          inline: true
+          name: "Jelentkező státusza",
+          value: applicantStatus,
+          inline: false
+        },
+        {
+          name: "DM állapot",
+          value: limitField(dmStatus),
+          inline: false
         }
       )
       .setTimestamp();
@@ -377,42 +448,6 @@ client.on("interactionCreate", async (interaction) => {
       embeds: [...originalEmbeds, reviewEmbed],
       components: [disabledRow],
     });
-
-    if (discordUserId && /^\d+$/.test(discordUserId)) {
-      try {
-        const user = await client.users.fetch(discordUserId);
-
-        await user.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(
-                applicationType === "adminseged"
-                  ? "📨 Adminsegéd jelentkezés elbírálása"
-                  : "📨 Admin jelentkezés elbírálása"
-              )
-              .setColor(accepted ? 0x2ecc71 : 0xe74c3c)
-              .setDescription(dmText)
-              .addFields(
-                {
-                  name: "Szerver",
-                  value: safeValue(interaction.guild?.name || "internalGaming"),
-                  inline: true,
-                },
-                {
-                  name: "Elbírálta",
-                  value: safeValue(interaction.user.tag),
-                  inline: true,
-                }
-              )
-              .setTimestamp()
-          ],
-        });
-      } catch (dmError) {
-        console.error("⚠️ Nem sikerült DM-et küldeni:", dmError.message);
-      }
-    } else {
-      console.log("⚠️ Érvénytelen vagy hiányzó Discord User ID, DM kihagyva.");
-    }
   } catch (error) {
     console.error("❌ Hiba interactionCreate közben:", error);
 
@@ -434,7 +469,13 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 console.log("DISCORD_TOKEN megvan:", !!process.env.DISCORD_TOKEN);
-console.log("DISCORD_TOKEN hossza:", process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.length : 0);
-console.log("DISCORD_TOKEN eleje:", process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.slice(0, 10) : "nincs");
+console.log(
+  "DISCORD_TOKEN hossza:",
+  process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.length : 0
+);
+console.log(
+  "DISCORD_TOKEN eleje:",
+  process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.slice(0, 10) : "nincs"
+);
 
 client.login(process.env.DISCORD_TOKEN);

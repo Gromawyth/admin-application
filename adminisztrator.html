@@ -621,6 +621,29 @@ button.submit-btn:hover::before{
   color:#ffd35a;
   font-weight:900;
 }
+
+.error-message{
+  max-height:0;
+  opacity:0;
+  overflow:hidden;
+  transform:translateY(-4px);
+  transition:
+    max-height .35s ease,
+    opacity .35s ease,
+    transform .35s ease,
+    margin-top .35s ease;
+  color:#ffd76a;
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:.15px;
+}
+
+.error-message.show{
+  max-height:32px;
+  opacity:1;
+  transform:translateY(0);
+  margin-top:8px;
+}
 /* ===== MODERN VALIDÁCIÓ ===== */
 
 .form-group{

@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>internalGaming - Jelentkezés választó</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --white:#ffffff;
+  --green:#1f8f4e;
+  --glass: rgba(12, 12, 15, 0.58);
+  --border: rgba(255,255,255,0.10);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+
+body{
+  font-family:'Poppins',sans-serif;
+  color:var(--white);
+  overflow:hidden;
+  background:#000;
+}
+
+/* BACKGROUND */
+#bgVideo{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:100vh;
+  object-fit:cover;
+  z-index:-3;
+  filter:blur(10px) brightness(0.68) saturate(1.03);
+  transform:scale(1.06);
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(800px 420px at 20% 10%, rgba(31,143,78,0.12), transparent 60%),
+    radial-gradient(700px 420px at 85% 20%, rgba(255,255,255,0.05), transparent 60%),
+    radial-gradient(900px 700px at 50% 90%, rgba(0,0,0,0.60), rgba(0,0,0,0.78)),
+    linear-gradient(180deg, rgba(0,0,0,0.48), rgba(0,0,0,0.66));
+}
+
+/* ÚJ: háttér zöld pöttyök a videó fölött */
+.bg-particles{
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  overflow:hidden;
+  z-index:-1;
+}
+
+.bg-particles span{
+  position:absolute;
+  width:5px;
+  height:5px;
+  border-radius:50%;
+  background:rgba(31,143,78,0.85);
+  box-shadow:
+    0 0 8px rgba(31,143,78,0.5),
+    0 0 18px rgba(31,143,78,0.25);
+  opacity:0;
+  animation:bgFloat linear infinite;
+}
+
+@keyframes bgFloat{
+  0%{
+    transform:translateY(120px) scale(.6);
+    opacity:0;
+  }
+  10%{
+    opacity:.9;
+  }
+  70%{
+    opacity:.4;
+  }
+  100%{
+    transform:translateY(-500px) scale(1.2);
+    opacity:0;
+  }
+}
+
+/* INTRO */
+#intro{
+  position:fixed;
+  inset:0;
+  background:#000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  z-index:9999;
+}
+
+#glowCanvas{
+  position:absolute;
+  inset:0;
+}
+
+#introLogo{
+  width:140px;
+  opacity:0;
+  filter:blur(20px);
+  transform:scale(0.8);
+  transition:all 2.2s cubic-bezier(.77,0,.18,1);
+  position:relative;
+  z-index:2;
+}
+
+/* CHOICE MODAL */
+#choiceModal{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,0.44);
+  backdrop-filter:blur(8px);
+  z-index:9998;
+  opacity:0;
+  transition:opacity .5s ease;
+}
+
+#choiceModal.show{
+  display:flex;
+  opacity:1;
+}
+
+.choice-box{
+  width:min(760px, 92vw);
+  padding:34px;
+  border-radius:24px;
+  background:var(--glass);
+  border:1px solid var(--border);
+  box-shadow:0 25px 70px rgba(0,0,0,0.45);
+  backdrop-filter:blur(14px);
+  text-align:center;
+  animation:modalPop .6s cubic-bezier(.22,1,.36,1);
+  position:relative;
+  overflow:visible;
+  isolation:isolate;
+}
+
+.choice-box::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  border-radius:26px;
+  padding:2px;
+  background:linear-gradient(135deg,
+    rgba(31,143,78,0.34),
+    rgba(255,255,255,0.07),
+    rgba(31,143,78,0.14),
+    rgba(255,255,255,0.06)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  pointer-events:none;
+  opacity:0.45;
+}
+
+.panel-border-glow{
+  position:absolute;
+  inset:-10px;
+  border-radius:30px;
+  pointer-events:none;
+  z-index:-1;
+  box-shadow:
+    0 0 0 1px rgba(31,143,78,0.12),
+    0 0 18px rgba(31,143,78,0.10),
+    0 0 34px rgba(31,143,78,0.08),
+    0 0 60px rgba(31,143,78,0.06);
+  filter: blur(2px);
+}
+
+.choice-logo{
+  width:95px;
+  margin:0 auto 14px;
+  display:block;
+  filter:drop-shadow(0 10px 25px rgba(0,0,0,0.45));
+}
+
+.logo-title{
+  font-size:48px;
+  font-weight:800;
+  display:flex;
+  justify-content:center;
+  gap:0;
+  margin-bottom:10px;
+  line-height:1;
+}
+
+.glow-white{
+  color:#ffffff;
+  text-shadow:0 0 2px rgba(255,255,255,0.7), 0 0 5px rgba(255,255,255,0.3);
+  animation:glowWhite 3.2s ease-in-out infinite;
+}
+
+.glow-green{
+  color:#1f8f4e;
+  text-shadow:0 0 3px rgba(31,143,78,0.8), 0 0 10px rgba(31,143,78,0.22);
+  animation:glowGreen 3.2s ease-in-out infinite;
+}
+
+.choice-subtitle{
+  text-align:center;
+  font-size:12px;
+  letter-spacing:3px;
+  color:rgba(31,143,78,0.95);
+  margin-top:2px;
+  margin-bottom:10px;
+}
+
+.choice-box h2{
+  font-size:26px;
+  margin-bottom:8px;
+  color:#ffffff;
+}
+
+.choice-box p{
+  font-size:14px;
+  color:rgba(255,255,255,0.72);
+  margin-bottom:24px;
+}
+
+.choice-grid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:18px;
+}
+
+.choice-card{
+  position:relative;
+  padding:30px 22px;
+  border-radius:18px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(31,143,78,0.24);
+  cursor:pointer;
+  transition:transform .28s ease, box-shadow .28s ease, border-color .28s ease, background .28s ease;
+  overflow:hidden;
+}
+
+.choice-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(120deg, transparent, rgba(255,255,255,0.07), transparent);
+  transform:translateX(-120%);
+  transition:transform .55s ease;
+}
+
+.choice-card:hover{
+  transform:scale(1.04) translateY(-4px);
+  box-shadow:0 18px 35px rgba(31,143,78,0.14);
+  border-color:rgba(31,143,78,0.52);
+  background:rgba(31,143,78,0.07);
+}
+
+.choice-card:hover::before{
+  transform:translateX(120%);
+}
+
+.choice-card h3{
+  font-size:20px;
+  color:#ffffff;
+  margin-bottom:8px;
+}
+
+.choice-card span{
+  font-size:13px;
+  color:rgba(255,255,255,0.65);
+}
+
+@keyframes modalPop{
+  0%{opacity:0;transform:scale(.92) translateY(18px);}
+  100%{opacity:1;transform:scale(1) translateY(0);}
+}
+
+@keyframes glowWhite{
+  0%,100%{ text-shadow:0 0 2px rgba(255,255,255,0.6), 0 0 5px rgba(255,255,255,0.28); }
+  50%{ text-shadow:0 0 3px rgba(255,255,255,0.85), 0 0 7px rgba(255,255,255,0.35); }
+}
+@keyframes glowGreen{
+  0%,100%{ text-shadow:0 0 3px rgba(31,143,78,0.70), 0 0 10px rgba(31,143,78,0.20); }
+  50%{ text-shadow:0 0 4px rgba(31,143,78,0.90), 0 0 13px rgba(31,143,78,0.26); }
+}
+
+.choice-exit{
+  animation:chooserExit .45s ease forwards;
+}
+
+@keyframes chooserExit{
+  from{ opacity:1; transform:scale(1); }
+  to{ opacity:0; transform:scale(.97); }
+}
+
+@media (max-width:700px){
+  .choice-grid{grid-template-columns:1fr;}
+  .logo-title{font-size:40px;}
+  .choice-box{padding:24px;}
+}
+</style>
+</head>
+<body>
+
+<video autoplay muted loop playsinline id="bgVideo">
+  <source src="video.mp4" type="video/mp4">
+</video>
+
+<div class="bg-particles"></div>
+
+<div id="intro">
+  <canvas id="glowCanvas"></canvas>
+  <img id="introLogo" src="logo.png" alt="logo">
+</div>
+
+<div id="choiceModal">
+  <div class="choice-box" id="choiceBox">
+    <div class="panel-border-glow"></div>
+
+    <img src="logo.png" alt="logo" class="choice-logo">
+
+    <h1 class="logo-title">
+      <span class="glow-white">internal</span><span class="glow-green">Gaming</span>
+    </h1>
+
+    <div class="choice-subtitle">JELENTKEZÉSI LAP VÁLASZTÓ</div>
+
+    <h2>Válassz jelentkezést</h2>
+    <p>Melyik jelentkezési lapot szeretnéd megnyitni?</p>
+
+    <div class="choice-grid">
+      <div class="choice-card" onclick="goToForm('adminseged.html')">
+        <h3>Adminsegéd jelentkezés</h3>
+        <span>Kattints a megnyitáshoz</span>
+      </div>
+
+      <div class="choice-card" onclick="goToForm('adminisztrator.html')">
+        <h3>Adminisztrátor jelentkezés</h3>
+        <span>Kattints a megnyitáshoz</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const introLogo = document.getElementById("introLogo");
+const intro = document.getElementById("intro");
+const choiceModal = document.getElementById("choiceModal");
+const choiceBox = document.getElementById("choiceBox");
+const canvas = document.getElementById("glowCanvas");
+const ctx = canvas.getContext("2d");
+
+function createBgParticles(){
+  const container = document.querySelector(".bg-particles");
+
+  for(let i=0;i<80;i++){
+    const dot=document.createElement("span");
+    dot.style.left=Math.random()*100+"%";
+    dot.style.top=(50+Math.random()*50)+"%";
+    dot.style.animationDuration=(10+Math.random()*10)+"s";
+    dot.style.animationDelay=(Math.random()*8)+"s";
+    dot.style.width=dot.style.height=(3+Math.random()*4)+"px";
+    container.appendChild(dot);
+  }
+}
+
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+let angle = 0;
+
+function animateGlow(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const gradient = ctx.createRadialGradient(
+    canvas.width/2,
+    canvas.height/2,
+    80,
+    canvas.width/2 + Math.sin(angle)*110,
+    canvas.height/2 + Math.cos(angle)*110,
+    650
+  );
+  gradient.addColorStop(0,"rgba(31,143,78,0.22)");
+  gradient.addColorStop(1,"transparent");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  angle += 0.01;
+  requestAnimationFrame(animateGlow);
+}
+animateGlow();
+
+function showChoiceModal(){
+  document.body.style.overflow = "hidden";
+  choiceModal.style.display = "flex";
+  requestAnimationFrame(() => {
+    choiceModal.classList.add("show");
+  });
+}
+
+function runIntro(){
+  setTimeout(()=>{
+    introLogo.style.opacity = "1";
+    introLogo.style.filter = "blur(0)";
+    introLogo.style.transform = "scale(2)";
+  },300);
+
+  setTimeout(()=>{
+    introLogo.style.transform = "scale(1.2)";
+  },2000);
+
+  setTimeout(()=>{
+    intro.style.transition = "opacity 1.8s cubic-bezier(.77,0,.18,1)";
+    intro.style.opacity = "0";
+
+    setTimeout(()=>{
+      intro.style.display = "none";
+      showChoiceModal();
+    },1500);
+  },3200);
+}
+
+function skipIntroAndShowChooser(){
+  intro.style.display = "none";
+  showChoiceModal();
+}
+
+function goToForm(url){
+  sessionStorage.setItem("skipIntro", "true");
+  choiceBox.classList.add("choice-exit");
+  setTimeout(() => {
+    window.location.href = url;
+  }, 420);
+}
+
+createBgParticles();
+
+if(sessionStorage.getItem("skipIntro") === "true"){
+  skipIntroAndShowChooser();
+} else {
+  runIntro();
+}
+</script>
+
+</body>
+</html>

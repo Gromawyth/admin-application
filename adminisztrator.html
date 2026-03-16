@@ -597,109 +597,7 @@ button.submit-btn:hover::before{
     0 0 0 4px rgba(255, 196, 64, 0.10),
     0 0 18px rgba(255, 196, 64, 0.18),
     0 10px 24px rgba(0,0,0,0.22) !important;
-}
-
-.input-valid{
-  border:1px solid rgba(31,143,78,0.8) !important;
-  box-shadow:
-    0 0 0 4px rgba(31,143,78,0.08),
-    0 0 16px rgba(31,143,78,0.14) !important;
-}
-
-.error-message{
-  max-height:0;
-  opacity:0;
-  overflow:hidden;
-  transform:translateY(-4px);
-  transition:
-    max-height .35s ease,
-    opacity .25s ease,
-    transform .25s ease,
-    margin-top .25s ease;
-  color:#ffd76a;
-  font-size:12px;
-  font-weight:600;
-  letter-spacing:.15px;
-  margin-top:0;
-  padding-left:2px;
-  text-shadow:0 0 10px rgba(255,215,106,0.10);
-}
-
-.error-message.show{
-  max-height:32px;
-  opacity:1;
-  transform:translateY(0);
-  margin-top:8px;
-}
-
-.form-group.error-label label{
-  color:#ffe08a;
-  text-shadow:0 0 12px rgba(255,215,106,0.08);
-}
-
-@keyframes smoothShake{
-  0%{ transform:translateX(0); }
-  20%{ transform:translateX(-5px); }
-  40%{ transform:translateX(4px); }
-  60%{ transform:translateX(-3px); }
-  80%{ transform:translateX(2px); }
-  100%{ transform:translateX(0); }
-}
-
-.shake-field{
-  animation:smoothShake .34s ease;
-}
-
-.validation-summary{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin:0 0 18px;
-  padding:12px 14px;
-  border-radius:12px;
-  border:1px solid rgba(255, 196, 64, 0.28);
-  background:rgba(255, 196, 64, 0.08);
-  color:#ffe08a;
-  font-size:13px;
-  font-weight:700;
-  box-shadow:0 12px 30px rgba(0,0,0,0.18);
-  backdrop-filter:blur(8px);
-  opacity:0;
-  transform:translateY(-8px);
-  pointer-events:none;
-  transition:opacity .28s ease, transform .28s ease;
-}
-
-.validation-summary.show{
-  opacity:1;
-  transform:translateY(0);
-  pointer-events:auto;
-}
-
-.validation-summary-icon{
-  width:22px;
-  height:22px;
-  border-radius:50%;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  background:rgba(255, 196, 64, 0.18);
-  color:#ffd35a;
-  font-weight:900;
-  flex:0 0 auto;
-}
-.input-error{
-  border:1px solid rgba(255, 196, 64, 0.95) !important;
-  background:rgba(255, 196, 64, 0.08) !important;
-  box-shadow:
-    0 0 0 4px rgba(255, 196, 64, 0.10),
-    0 0 18px rgba(255, 196, 64, 0.18),
-    0 10px 24px rgba(0,0,0,0.22) !important;
-  transition:
-    border-color .5s ease,
-    background .5s ease,
-    box-shadow .5s ease,
-    opacity .4s ease;
+  transition:border-color .55s ease, background .55s ease, box-shadow .55s ease;
 }
 
 .input-error.fade-out{
@@ -716,11 +614,8 @@ button.submit-btn:hover::before{
   opacity:0;
   overflow:hidden;
   transform:translateY(-4px);
-  transition:
-    max-height .35s ease,
-    opacity .35s ease,
-    transform .35s ease,
-    margin-top .35s ease;
+  margin-top:0;
+  transition:max-height .35s ease, opacity .35s ease, transform .35s ease, margin-top .35s ease;
 }
 
 .error-message.show{
@@ -798,8 +693,8 @@ button.submit-btn:hover::before{
       <div class="section-title fade-in"><span class="badge">01.</span> Alapadatok</div>
       <div class="form-group fade-in">
         <label>Mi a karaktered neve?</label>
-        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
         <input type="text" name="karakterNev" placeholder="- Válaszod -" required>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
@@ -1070,6 +965,7 @@ const faders = document.querySelectorAll(".fade-in");
 
 function createBgParticles() {
   const container = document.querySelector(".bg-particles");
+  if (!container) return;
 
   for (let i = 0; i < 80; i++) {
     const dot = document.createElement("span");
@@ -1091,7 +987,12 @@ function goBackToChooser() {
 }
 
 function startLogoFollow() {
-  let targetX = 0, targetY = 0, logoX = 0, logoY = 0;
+  if (!mainLogo) return;
+
+  let targetX = 0;
+  let targetY = 0;
+  let logoX = 0;
+  let logoY = 0;
   const easing = 0.05;
 
   document.addEventListener("mousemove", (e) => {
@@ -1110,79 +1011,14 @@ function startLogoFollow() {
 }
 
 function checkFade() {
-  const trigger = window.innerHeight;
+  const trigger = window.innerHeight * 1;
+
   faders.forEach((el) => {
     const top = el.getBoundingClientRect().top;
     if (top < trigger) el.classList.add("visible");
   });
 }
 
-window.addEventListener("scroll", checkFade);
-
-window.addEventListener("load", () => {
-  createBgParticles();
-
-  requestAnimationFrame(() => {
-    content.style.opacity = "1";
-    content.style.filter = "blur(0)";
-    content.style.transform = "translateY(0)";
-  });
-
-  startLogoFollow();
-  checkFade();
-});
-
-document.getElementById("adminForm").addEventListener("submit", async function (e) {
-  e.preventDefault();
-
-  const btn = this.querySelector(".submit-btn");
-  const label = btn.querySelector(".btn-label");
-  const check = btn.querySelector(".btn-check");
-  const bar = btn.querySelector(".progress-bar");
-
-  const setLabelSmooth = (text) => {
-    label.style.opacity = "0";
-    label.style.transform = "translateY(6px)";
-    setTimeout(() => {
-      label.textContent = text;
-      label.style.opacity = "1";
-      label.style.transform = "translateY(0)";
-    }, 180);
-  };
-
-  btn.disabled = true;
-  btn.classList.remove("success", "error", "resetting");
-  check.style.opacity = "0";
-  check.style.transform = "scale(.4) rotate(-25deg)";
-  bar.style.width = "0%";
-
-  void btn.offsetWidth;
-
- //remegés sárga
-const inputs = form.querySelectorAll("input, textarea");
-
-let valid = true;
-
-inputs.forEach(input => {
-
-  input.classList.remove("input-error","shake");
-
-  if (input.hasAttribute("required") && !input.value.trim()) {
-
-    valid = false;
-
-    input.classList.add("input-error");
-
-    setTimeout(() => {
-      input.classList.add("shake");
-    }, 50);
-
-  }
-
-});
-
-if(!valid) return;
-//remegés sárga vége
 function setupModernValidation(formId) {
   const form = document.getElementById(formId);
   if (!form) return;
@@ -1190,70 +1026,67 @@ function setupModernValidation(formId) {
   const summary = form.querySelector(".validation-summary");
   const fields = form.querySelectorAll("input, textarea");
 
-function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
-  const group = field.closest(".form-group");
-  if (!group) return;
+  function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
+    const group = field.closest(".form-group");
+    if (!group) return;
 
-  const error = group.querySelector(".error-message");
+    const error = group.querySelector(".error-message");
 
-  field.classList.remove("fade-out");
-  group.classList.remove("fade-out");
-  if (error) error.classList.remove("fade-out");
+    clearTimeout(field._errorTimeout);
+    clearTimeout(field._fadeTimeout);
 
-  field.classList.add("input-error");
+    field.classList.remove("fade-out", "input-valid");
+    group.classList.remove("fade-out");
+    if (error) error.classList.remove("fade-out");
 
-  field.classList.remove("shake-field");
-  void field.offsetWidth;
-  field.classList.add("shake-field");
+    field.classList.add("input-error");
 
-  group.classList.add("error-label");
+    field.classList.remove("shake-field");
+    void field.offsetWidth;
+    field.classList.add("shake-field");
 
-  if (error) {
-    error.textContent = message;
-    error.classList.add("show");
+    group.classList.add("error-label");
+
+    if (error) {
+      error.textContent = message;
+      error.classList.add("show");
+    }
+
+    field._errorTimeout = setTimeout(() => {
+      field.classList.add("fade-out");
+      group.classList.add("fade-out");
+      if (error) error.classList.add("fade-out");
+
+      field._fadeTimeout = setTimeout(() => {
+        field.classList.remove("input-error", "shake-field", "fade-out");
+        group.classList.remove("error-label", "fade-out");
+        if (error) error.classList.remove("show", "fade-out");
+      }, 550);
+    }, 6000);
   }
-
-  clearTimeout(field._errorTimeout);
-  clearTimeout(field._fadeTimeout);
-
-  field._errorTimeout = setTimeout(() => {
-    field.classList.add("fade-out");
-    group.classList.add("fade-out");
-    if (error) error.classList.add("fade-out");
-
-    field._fadeTimeout = setTimeout(() => {
-      field.classList.remove("input-error", "shake-field", "fade-out");
-      group.classList.remove("error-label", "fade-out");
-      if (error) {
-        error.classList.remove("show", "fade-out");
-      }
-    }, 500);
-  }, 6000);
-}
-
 
   function clearFieldError(field) {
-  const group = field.closest(".form-group");
-  if (!group) return;
+    const group = field.closest(".form-group");
+    if (!group) return;
 
-  const error = group.querySelector(".error-message");
+    const error = group.querySelector(".error-message");
 
-  clearTimeout(field._errorTimeout);
-  clearTimeout(field._fadeTimeout);
+    clearTimeout(field._errorTimeout);
+    clearTimeout(field._fadeTimeout);
 
-  field.classList.remove("input-error", "shake-field", "fade-out");
-  group.classList.remove("error-label", "fade-out");
+    field.classList.remove("input-error", "shake-field", "fade-out");
+    group.classList.remove("error-label", "fade-out");
 
-  if (field.value.trim()) {
-    field.classList.add("input-valid");
-  } else {
-    field.classList.remove("input-valid");
+    if (field.value.trim()) {
+      field.classList.add("input-valid");
+    } else {
+      field.classList.remove("input-valid");
+    }
+
+    if (error) {
+      error.classList.remove("show", "fade-out");
+    }
   }
-
-  if (error) {
-    error.classList.remove("show", "fade-out");
-  }
-}
 
   function validateField(field) {
     const value = field.value.trim();
@@ -1275,16 +1108,16 @@ function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
     return true;
   }
 
-  fields.forEach(field => {
+  fields.forEach((field) => {
     field.addEventListener("input", () => validateField(field));
     field.addEventListener("blur", () => validateField(field));
   });
 
-  form.addEventListener("submit", function(e) {
+  form.addEventListener("submit", function (e) {
     let isValid = true;
     let firstInvalid = null;
 
-    fields.forEach(field => {
+    fields.forEach((field) => {
       const ok = validateField(field);
       if (!ok && !firstInvalid) firstInvalid = field;
       if (!ok) isValid = false;
@@ -1306,23 +1139,77 @@ function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
 
         setTimeout(() => firstInvalid.focus(), 250);
       }
-
-      return false;
     }
   });
 }
 
-setupModernValidation("adminForm");
-  
+window.addEventListener("scroll", checkFade);
+
+window.addEventListener("load", () => {
+  createBgParticles();
+
+  requestAnimationFrame(() => {
+    if (content) {
+      content.style.opacity = "1";
+      content.style.filter = "blur(0)";
+      content.style.transform = "translateY(0)";
+    }
+  });
+
+  startLogoFollow();
+  checkFade();
+});
+
+setupModernValidation("adminSegedForm");
+
+document.getElementById("adminSegedForm").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const fields = this.querySelectorAll("input, textarea");
+  const firstInvalid = [...fields].find((field) => {
+    if (field.hasAttribute("required") && !field.value.trim()) return true;
+    if (field.type === "number" && field.value.trim() && Number(field.value) <= 0) return true;
+    return false;
+  });
+
+  if (firstInvalid) return;
+
+  const btn = this.querySelector(".submit-btn");
+  const label = btn.querySelector(".btn-label");
+  const check = btn.querySelector(".btn-check");
+  const bar = btn.querySelector(".progress-bar");
+
+  const setLabelSmooth = (text) => {
+    label.style.opacity = "0";
+    label.style.transform = "translateY(6px)";
+    setTimeout(() => {
+      label.textContent = text;
+      label.style.opacity = "1";
+      label.style.transform = "translateY(0)";
+    }, 180);
+  };
+
+  btn.disabled = true;
+  btn.classList.remove("success", "error", "resetting");
+  if (check) {
+    check.style.opacity = "0";
+    check.style.transform = "scale(.4) rotate(-25deg)";
+  }
+  if (bar) {
+    bar.style.width = "0%";
+  }
+
+  void btn.offsetWidth;
+
   btn.classList.add("loading");
   setLabelSmooth("Jelentkezés elküldése");
 
   const formData = new FormData(this);
   const data = Object.fromEntries(formData.entries());
-  data.applicationType = "adminisztrator";
+  data.applicationType = "adminseged";
 
   try {
-    await new Promise(resolve => setTimeout(resolve, 4200));
+    await new Promise((resolve) => setTimeout(resolve, 4200));
 
     const response = await fetch("https://internalgaming-production.up.railway.app/application", {
       method: "POST",
@@ -1332,8 +1219,8 @@ setupModernValidation("adminForm");
       body: JSON.stringify(data)
     });
 
-    let result;
     const text = await response.text();
+    let result;
 
     try {
       result = JSON.parse(text);
@@ -1353,7 +1240,7 @@ setupModernValidation("adminForm");
 
       setTimeout(() => {
         btn.classList.add("resetting");
-        bar.style.width = "0%";
+        if (bar) bar.style.width = "0%";
       }, 250);
 
       setTimeout(() => {
@@ -1371,7 +1258,7 @@ setupModernValidation("adminForm");
 
     setTimeout(() => {
       btn.classList.add("resetting");
-      bar.style.width = "0%";
+      if (bar) bar.style.width = "0%";
     }, 250);
 
     setTimeout(() => {

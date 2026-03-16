@@ -913,21 +913,22 @@ const pageCard = document.getElementById("pageCard");
 const mainLogo = document.querySelector(".logo img");
 const faders = document.querySelectorAll(".fade-in");
 
-function createBgParticles(){
+function createBgParticles() {
   const container = document.querySelector(".bg-particles");
+  if (!container) return;
 
-  for(let i=0;i<80;i++){
-    const dot=document.createElement("span");
-    dot.style.left=Math.random()*100+"%";
-    dot.style.top=(50+Math.random()*50)+"%";
-    dot.style.animationDuration=(10+Math.random()*10)+"s";
-    dot.style.animationDelay=(Math.random()*8)+"s";
-    dot.style.width=dot.style.height=(3+Math.random()*4)+"px";
+  for (let i = 0; i < 80; i++) {
+    const dot = document.createElement("span");
+    dot.style.left = Math.random() * 100 + "%";
+    dot.style.top = (50 + Math.random() * 50) + "%";
+    dot.style.animationDuration = (10 + Math.random() * 10) + "s";
+    dot.style.animationDelay = Math.random() * 8 + "s";
+    dot.style.width = dot.style.height = (3 + Math.random() * 4) + "px";
     container.appendChild(dot);
   }
 }
 
-function goBackToChooser(){
+function goBackToChooser() {
   sessionStorage.setItem("skipIntro", "true");
   pageCard.classList.add("page-exit");
   setTimeout(() => {
@@ -935,8 +936,13 @@ function goBackToChooser(){
   }, 420);
 }
 
-function startLogoFollow(){
-  let targetX = 0, targetY = 0, logoX = 0, logoY = 0;
+function startLogoFollow() {
+  if (!mainLogo) return;
+
+  let targetX = 0;
+  let targetY = 0;
+  let logoX = 0;
+  let logoY = 0;
   const easing = 0.05;
 
   document.addEventListener("mousemove", (e) => {
@@ -944,115 +950,93 @@ function startLogoFollow(){
     targetY = (e.clientY - window.innerHeight / 2) * 0.02;
   });
 
-  function followCursor(){
+  function followCursor() {
     logoX += (targetX - logoX) * easing;
     logoY += (targetY - logoY) * easing;
     mainLogo.style.transform = `translate(${logoX}px, ${logoY}px)`;
     requestAnimationFrame(followCursor);
   }
+
   followCursor();
 }
 
 function checkFade() {
   const trigger = window.innerHeight * 1;
-  faders.forEach(el => {
+
+  faders.forEach((el) => {
     const top = el.getBoundingClientRect().top;
     if (top < trigger) el.classList.add("visible");
   });
 }
 
-window.addEventListener("scroll", checkFade);
-window.addEventListener("load", () => {
-  createBgParticles();
-  requestAnimationFrame(() => {
-    content.style.opacity = "1";
-    content.style.filter = "blur(0)";
-    content.style.transform = "translateY(0)";
-  });
-  startLogoFollow();
-  checkFade();
-});
+function setupModernValidation(formId) {
+  const form = document.getElementById(formId);
+  if (!form) return;
 
-document.getElementById("adminSegedForm").addEventListener("submit", async function (e) {
-  e.preventDefault();
+  const summary = form.querySelector(".validation-summary");
+  const fields = form.querySelectorAll("input, textarea");
 
-  const btn = this.querySelector(".submit-btn");
-  const label = btn.querySelector(".btn-label");
-  const check = btn.querySelector(".btn-check");
-  const bar = btn.querySelector(".progress-bar");
+  function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
+    const group = field.closest(".form-group");
+    if (!group) return;
 
-  const setLabelSmooth = (text) => {
-    label.style.opacity = "0";
-    label.style.transform = "translateY(6px)";
-    setTimeout(() => {
-      label.textContent = text;
-      label.style.opacity = "1";
-      label.style.transform = "translateY(0)";
-    }, 180);
-  };
-//remegés-sárga
-function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
-  const group = field.closest(".form-group");
-  if (!group) return;
+    const error = group.querySelector(".error-message");
 
-  const error = group.querySelector(".error-message");
+    clearTimeout(field._errorTimeout);
+    clearTimeout(field._fadeTimeout);
 
-  field.classList.remove("fade-out");
-  group.classList.remove("fade-out");
-  if (error) error.classList.remove("fade-out");
+    field.classList.remove("fade-out", "input-valid");
+    group.classList.remove("fade-out");
+    if (error) error.classList.remove("fade-out");
 
-  field.classList.add("input-error");
+    field.classList.add("input-error");
 
-  field.classList.remove("shake-field");
-  void field.offsetWidth;
-  field.classList.add("shake-field");
+    field.classList.remove("shake-field");
+    void field.offsetWidth;
+    field.classList.add("shake-field");
 
-  group.classList.add("error-label");
+    group.classList.add("error-label");
 
-  if (error) {
-    error.textContent = message;
-    error.classList.add("show");
+    if (error) {
+      error.textContent = message;
+      error.classList.add("show");
+    }
+
+    field._errorTimeout = setTimeout(() => {
+      field.classList.add("fade-out");
+      group.classList.add("fade-out");
+      if (error) error.classList.add("fade-out");
+
+      field._fadeTimeout = setTimeout(() => {
+        field.classList.remove("input-error", "shake-field", "fade-out");
+        group.classList.remove("error-label", "fade-out");
+        if (error) error.classList.remove("show", "fade-out");
+      }, 550);
+    }, 6000);
   }
-
-  clearTimeout(field._errorTimeout);
-  clearTimeout(field._fadeTimeout);
-
-  field._errorTimeout = setTimeout(() => {
-    field.classList.add("fade-out");
-    group.classList.add("fade-out");
-    if (error) error.classList.add("fade-out");
-
-    field._fadeTimeout = setTimeout(() => {
-      field.classList.remove("input-error", "shake-field", "fade-out");
-      group.classList.remove("error-label", "fade-out");
-      if (error) {
-        error.classList.remove("show", "fade-out");
-      }
-    }, 500);
-  }, 6000);
 
   function clearFieldError(field) {
-  const group = field.closest(".form-group");
-  if (!group) return;
+    const group = field.closest(".form-group");
+    if (!group) return;
 
-  const error = group.querySelector(".error-message");
+    const error = group.querySelector(".error-message");
 
-  clearTimeout(field._errorTimeout);
-  clearTimeout(field._fadeTimeout);
+    clearTimeout(field._errorTimeout);
+    clearTimeout(field._fadeTimeout);
 
-  field.classList.remove("input-error", "shake-field", "fade-out");
-  group.classList.remove("error-label", "fade-out");
+    field.classList.remove("input-error", "shake-field", "fade-out");
+    group.classList.remove("error-label", "fade-out");
 
-  if (field.value.trim()) {
-    field.classList.add("input-valid");
-  } else {
-    field.classList.remove("input-valid");
+    if (field.value.trim()) {
+      field.classList.add("input-valid");
+    } else {
+      field.classList.remove("input-valid");
+    }
+
+    if (error) {
+      error.classList.remove("show", "fade-out");
+    }
   }
-
-  if (error) {
-    error.classList.remove("show", "fade-out");
-  }
-}
 
   function validateField(field) {
     const value = field.value.trim();
@@ -1074,16 +1058,16 @@ function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
     return true;
   }
 
-  fields.forEach(field => {
+  fields.forEach((field) => {
     field.addEventListener("input", () => validateField(field));
     field.addEventListener("blur", () => validateField(field));
   });
 
-  form.addEventListener("submit", function(e) {
+  form.addEventListener("submit", function (e) {
     let isValid = true;
     let firstInvalid = null;
 
-    fields.forEach(field => {
+    fields.forEach((field) => {
       const ok = validateField(field);
       if (!ok && !firstInvalid) firstInvalid = field;
       if (!ok) isValid = false;
@@ -1105,27 +1089,65 @@ function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
 
         setTimeout(() => firstInvalid.focus(), 250);
       }
-
-      return false;
     }
   });
 }
 
-setupModernValidation("adminSegedForm");
-//vége
-inputs.forEach(input => {
+window.addEventListener("scroll", checkFade);
 
-  input.addEventListener("input", () => {
-    input.classList.remove("input-error","shake");
+window.addEventListener("load", () => {
+  createBgParticles();
+
+  requestAnimationFrame(() => {
+    if (content) {
+      content.style.opacity = "1";
+      content.style.filter = "blur(0)";
+      content.style.transform = "translateY(0)";
+    }
   });
 
+  startLogoFollow();
+  checkFade();
 });
-//
+
+setupModernValidation("adminSegedForm");
+
+document.getElementById("adminSegedForm").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const fields = this.querySelectorAll("input, textarea");
+  const firstInvalid = [...fields].find((field) => {
+    if (field.hasAttribute("required") && !field.value.trim()) return true;
+    if (field.type === "number" && field.value.trim() && Number(field.value) <= 0) return true;
+    return false;
+  });
+
+  if (firstInvalid) return;
+
+  const btn = this.querySelector(".submit-btn");
+  const label = btn.querySelector(".btn-label");
+  const check = btn.querySelector(".btn-check");
+  const bar = btn.querySelector(".progress-bar");
+
+  const setLabelSmooth = (text) => {
+    label.style.opacity = "0";
+    label.style.transform = "translateY(6px)";
+    setTimeout(() => {
+      label.textContent = text;
+      label.style.opacity = "1";
+      label.style.transform = "translateY(0)";
+    }, 180);
+  };
+
   btn.disabled = true;
   btn.classList.remove("success", "error", "resetting");
-  check.style.opacity = "0";
-  check.style.transform = "scale(.4) rotate(-25deg)";
-  bar.style.width = "0%";
+  if (check) {
+    check.style.opacity = "0";
+    check.style.transform = "scale(.4) rotate(-25deg)";
+  }
+  if (bar) {
+    bar.style.width = "0%";
+  }
 
   void btn.offsetWidth;
 
@@ -1137,7 +1159,7 @@ inputs.forEach(input => {
   data.applicationType = "adminseged";
 
   try {
-    await new Promise(resolve => setTimeout(resolve, 4200));
+    await new Promise((resolve) => setTimeout(resolve, 4200));
 
     const response = await fetch("https://internalgaming-production.up.railway.app/application", {
       method: "POST",
@@ -1147,8 +1169,8 @@ inputs.forEach(input => {
       body: JSON.stringify(data)
     });
 
-    let result;
     const text = await response.text();
+    let result;
 
     try {
       result = JSON.parse(text);
@@ -1168,7 +1190,7 @@ inputs.forEach(input => {
 
       setTimeout(() => {
         btn.classList.add("resetting");
-        bar.style.width = "0%";
+        if (bar) bar.style.width = "0%";
       }, 250);
 
       setTimeout(() => {
@@ -1186,7 +1208,7 @@ inputs.forEach(input => {
 
     setTimeout(() => {
       btn.classList.add("resetting");
-      bar.style.width = "0%";
+      if (bar) bar.style.width = "0%";
     }, 250);
 
     setTimeout(() => {

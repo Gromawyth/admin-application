@@ -929,5 +929,6 @@ app.listen(PORT, "0.0.0.0", () => {
 console.log("DISCORD_TOKEN megvan:", !!DISCORD_TOKEN);
 console.log("DISCORD_TOKEN hossza:", DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
 console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) : "nincs");
+console.log(client.user.username)
 
 client.login(DISCORD_TOKEN);

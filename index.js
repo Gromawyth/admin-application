@@ -932,21 +932,34 @@ console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) :
 
 client.login(DISCORD_TOKEN);
 //FEJLESZTÉS ALATT
-const { EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+});
 
 client.on('messageCreate', async (message) => {
-  if (message.content === '!embed') {
+  if (message.author.bot) return;
+
+  if (message.content === '!dev') {
 
     const embed = new EmbedBuilder()
+      .setColor('#e74c3c') // piros
       .setTitle('🚧 FEJLESZTÉS ALATT 🚧')
-      .setDescription('Ez a Discord csatorna jelenleg fejlesztés alatt áll,'
-       'ezért a tartalom és a működés folyamatosan változhat.' 
-       'Előfordulhatnak hibák, hiányzó funkciók vagy ideiglenes megoldások.' 
-       'Kérlek, légy türelemmel, amíg a rendszer végleges formát kap. Köszönöm a megértést!')
-      .setColor(#eb4034)
+      .setDescription(`
+Ez a Discord csatorna jelenleg fejlesztés alatt áll, ezért a tartalom és a működés folyamatosan változhat.
+
+Előfordulhatnak hibák, hiányzó funkciók vagy ideiglenes megoldások.
+
+Kérlek, légy türelemmel, amíg a rendszer végleges formát kap.
+
+Köszönöm a megértést!
+      `)
       .setFooter({ text: 'internalGaming' })
       .setTimestamp();
 
     message.channel.send({ embeds: [embed] });
   }
 });
+
+client.login('1480698178402783242');

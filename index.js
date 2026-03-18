@@ -932,27 +932,68 @@ console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) :
 
 client.login(DISCORD_TOKEN);
 //FEJLESZTÉS ALATT
-// ===== DEV EMBED PARANCS =====
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
+// =========================
+// /dev SLASH COMMAND
+// =========================
 
-  if (message.content === '!dev') {
+client.once(Events.ClientReady, async () => {
+  try {
+    const commands = [
+      new SlashCommandBuilder()
+        .setName("dev")
+        .setDescription("Fejlesztés alatt embed küldése")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    ].map(cmd => cmd.toJSON());
+
+    const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
+
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+
+    console.log("✅ /dev slash command regisztrálva");
+  } catch (error) {
+    console.error("❌ /dev slash command hiba:", error);
+  }
+});
+
+client.on("interactionCreate", async (interaction) => {
+  try {
+    if (!interaction.isChatInputCommand()) return;
+    if (interaction.commandName !== "dev") return;
+
+    if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+      await interaction.reply({
+        content: "Ehhez admin jogosultság szükséges.",
+        ephemeral: true
+      });
+      return;
+    }
 
     const embed = new EmbedBuilder()
-      .setColor('#e74c3c')
-      .setTitle('🚧 FEJLESZTÉS ALATT 🚧')
-      .setDescription(`
-Ez a Discord csatorna jelenleg fejlesztés alatt áll, ezért a tartalom és a működés folyamatosan változhat.
-
-Előfordulhatnak hibák, hiányzó funkciók vagy ideiglenes megoldások.
-
-Kérlek, légy türelemmel, amíg a rendszer végleges formát kap.
-
-Köszönöm a megértést!
-      `)
-      .setFooter({ text: 'internalGaming' })
+      .setColor(0xe74c3c)
+      .setTitle("🚧 FEJLESZTÉS ALATT 🚧")
+      .setDescription(
+        "Ez a Discord csatorna jelenleg fejlesztés alatt áll, ezért a tartalom és a működés folyamatosan változhat.\n\n" +
+        "Előfordulhatnak hibák, hiányzó funkciók vagy ideiglenes megoldások.\n\n" +
+        "Kérlek, légy türelemmel, amíg a rendszer végleges formát kap.\n\n" +
+        "Köszönöm a megértést!"
+      )
+      .setFooter({ text: "internalGaming" })
       .setTimestamp();
 
-    message.channel.send({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed] });
+  } catch (error) {
+    console.error("❌ Hiba a /dev parancs közben:", error);
+
+    if (!interaction.replied && !interaction.deferred) {
+      try {
+        await interaction.reply({
+          content: "Hiba történt a parancs végrehajtása közben.",
+          ephemeral: true
+        });
+      } catch {}
+    }
   }
 });

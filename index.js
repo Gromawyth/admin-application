@@ -961,5 +961,3 @@ Köszönöm a megértést!
     message.channel.send({ embeds: [embed] });
   }
 });
-
-client.login('1480698178402783242');

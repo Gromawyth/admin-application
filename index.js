@@ -931,3 +931,22 @@ console.log("DISCORD_TOKEN hossza:", DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
 console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) : "nincs");
 
 client.login(DISCORD_TOKEN);
+//FEJLESZTÉS ALATT
+const { EmbedBuilder } = require('discord.js');
+
+client.on('messageCreate', async (message) => {
+  if (message.content === '!embed') {
+
+    const embed = new EmbedBuilder()
+      .setTitle('🚧 FEJLESZTÉS ALATT 🚧')
+      .setDescription('Ez a Discord csatorna jelenleg fejlesztés alatt áll,'
+       'ezért a tartalom és a működés folyamatosan változhat.' 
+       'Előfordulhatnak hibák, hiányzó funkciók vagy ideiglenes megoldások.' 
+       'Kérlek, légy türelemmel, amíg a rendszer végleges formát kap. Köszönöm a megértést!')
+      .setColor(#eb4034)
+      .setFooter({ text: 'internalGaming' })
+      .setTimestamp();
+
+    message.channel.send({ embeds: [embed] });
+  }
+});

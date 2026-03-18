@@ -932,19 +932,14 @@ console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) :
 
 client.login(DISCORD_TOKEN);
 //FEJLESZTÉS ALATT
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
-});
-
+// ===== DEV EMBED PARANCS =====
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   if (message.content === '!dev') {
 
     const embed = new EmbedBuilder()
-      .setColor('#e74c3c') // piros
+      .setColor('#e74c3c')
       .setTitle('🚧 FEJLESZTÉS ALATT 🚧')
       .setDescription(`
 Ez a Discord csatorna jelenleg fejlesztés alatt áll, ezért a tartalom és a működés folyamatosan változhat.

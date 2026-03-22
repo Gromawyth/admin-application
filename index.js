@@ -54,6 +54,8 @@ const client = new Client({
   ],
   partials: [Partials.Channel],
 });
+// 🔽 ÚJ: külső fájl betöltése
+const adminFeedback = require("./adminfeedback");
 
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";
@@ -491,6 +493,16 @@ function buildTicketModal(typeKey) {
 async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
+  .setName("adminpanel")
+  .setDescription("Admin értékelő panel")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+new SlashCommandBuilder()
+  .setName("adminreset")
+  .setDescription("Értékelések nullázása")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+    new SlashCommandBuilder()
+
       .setName("sendticketpanels")
       .setDescription("Kirakja a ticket paneleket ebbe a csatornába.")
       .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
@@ -989,6 +1001,16 @@ async function handleTicketClose(interaction) {
 client.on("interactionCreate", async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === "adminpanel") {
+        await adminFeedback.sendPanel(interaction);
+        return;
+      }
+
+      if (interaction.commandName === "adminreset") {
+        await adminFeedback.resetData(interaction);
+        return;
+      }
+
       if (interaction.commandName === "sendticketpanels") {
         await handleSendTicketPanels(interaction);
         return;
@@ -996,6 +1018,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.isModalSubmit()) {
+      await adminFeedback.handleModal(interaction);
       if (interaction.customId.startsWith("ticket_modal_")) {
         await handleTicketModalSubmit(interaction);
         return;
@@ -1003,6 +1026,10 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.isButton()) {
+     // 🔘 ADMIN FEEDBACK GOMB
+if (interaction.isButton()) {
+  await adminFeedback.handleButton(interaction);
+}
       if (
         interaction.customId === "accept_adminseged" ||
         interaction.customId === "reject_adminseged" ||

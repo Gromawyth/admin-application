@@ -304,6 +304,10 @@ function sanitizeChannelName(text) {
     .slice(0, 80);
 }
 
+function generateTicketNumber() {
+  return Math.floor(1000 + Math.random() * 9000);
+}
+
 function buildTicketOpenButton(typeKey) {
   const type = TICKET_TYPES[typeKey];
 
@@ -363,17 +367,6 @@ function buildTicketModal(typeKey) {
   );
 
   return modal;
-}
-
-function parseTicketTopic(topic) {
-  const text = String(topic || "");
-  const ownerMatch = text.match(/owner:(\d{16,20})/);
-  const typeMatch = text.match(/type:([a-z0-9_-]+)/i);
-
-  return {
-    ownerId: ownerMatch ? ownerMatch[1] : null,
-    typeKey: typeMatch ? typeMatch[1] : null,
-  };
 }
 
 async function registerCommands() {
@@ -739,8 +732,7 @@ async function handleTicketModalSubmit(interaction) {
 
   const existing = guild.channels.cache.find((ch) => {
     if (ch.parentId !== TICKET_CATEGORY_ID) return false;
-    const parsed = parseTicketTopic(ch.topic);
-    return parsed.ownerId === interaction.user.id;
+    return ch.permissionOverwrites?.cache?.has(interaction.user.id);
   });
 
   if (existing) {
@@ -754,14 +746,14 @@ async function handleTicketModalSubmit(interaction) {
   const subject = interaction.fields.getTextInputValue("subject");
   const details = interaction.fields.getTextInputValue("details");
 
-  const usernamePart = sanitizeChannelName(interaction.user.username || "user");
-  const channelName = sanitizeChannelName(`${type.channelPrefix}-${usernamePart}`) || `ticket-${interaction.user.id}`;
+  const ticketNumber = generateTicketNumber();
+  const channelName = `${sanitizeChannelName(type.channelPrefix)}-${ticketNumber}`;
 
   const ticketChannel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
     parent: TICKET_CATEGORY_ID,
-    topic: `owner:${interaction.user.id} | type:${typeKey}`,
+    topic: type.label,
     permissionOverwrites: [
       {
         id: guild.roles.everyone.id,
@@ -824,11 +816,11 @@ async function handleTicketModalSubmit(interaction) {
     )
     .setTimestamp();
 
-  await ticketChannel.send({
-    content: `<@&${TICKET_STAFF_ROLE_ID}> ${interaction.user}`,
-    embeds: [ticketEmbed],
-    components: [buildTicketCloseButton()]
-  });
+await ticketChannel.send({
+  content: `<@${interaction.user.id}>`,
+  embeds: [ticketEmbed],
+  components: [buildTicketCloseButton()]
+});
 
   await interaction.reply({
     content: `✅ A ticketed létrejött: ${ticketChannel}`,
@@ -838,8 +830,7 @@ async function handleTicketModalSubmit(interaction) {
 
 async function handleTicketClose(interaction) {
   const channel = interaction.channel;
-  const parsed = parseTicketTopic(channel?.topic);
-  const isOwner = parsed.ownerId === interaction.user.id;
+  const isOwner = channel?.permissionOverwrites?.cache?.has(interaction.user.id);
   const isTicketStaff = interaction.member?.roles?.cache?.has(TICKET_STAFF_ROLE_ID);
 
   if (!isOwner && !isTicketStaff) {
@@ -931,69 +922,3 @@ console.log("DISCORD_TOKEN hossza:", DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
 console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) : "nincs");
 
 client.login(DISCORD_TOKEN);
-//FEJLESZTÉS ALATT
-// =========================
-// /dev SLASH COMMAND
-// =========================
-
-client.once(Events.ClientReady, async () => {
-  try {
-    const commands = [
-      new SlashCommandBuilder()
-        .setName("dev")
-        .setDescription("Fejlesztés alatt embed küldése")
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-    ].map(cmd => cmd.toJSON());
-
-    const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
-
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
-
-    console.log("✅ /dev slash command regisztrálva");
-  } catch (error) {
-    console.error("❌ /dev slash command hiba:", error);
-  }
-});
-
-client.on("interactionCreate", async (interaction) => {
-  try {
-    if (!interaction.isChatInputCommand()) return;
-    if (interaction.commandName !== "dev") return;
-
-    if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-      await interaction.reply({
-        content: "Ehhez admin jogosultság szükséges.",
-        ephemeral: true
-      });
-      return;
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor(0xe74c3c)
-      .setTitle("🚧 FEJLESZTÉS ALATT 🚧")
-      .setDescription(
-        "Ez a Discord csatorna jelenleg fejlesztés alatt áll, ezért a tartalom és a működés folyamatosan változhat.\n\n" +
-        "Előfordulhatnak hibák, hiányzó funkciók vagy ideiglenes megoldások.\n\n" +
-        "Kérlek, légy türelemmel, amíg a rendszer végleges formát kap.\n\n" +
-        "Köszönöm a megértést!"
-      )
-      .setFooter({ text: "internalGaming" })
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
-  } catch (error) {
-    console.error("❌ Hiba a /dev parancs közben:", error);
-
-    if (!interaction.replied && !interaction.deferred) {
-      try {
-        await interaction.reply({
-          content: "Hiba történt a parancs végrehajtása közben.",
-          ephemeral: true
-        });
-      } catch {}
-    }
-  }
-});

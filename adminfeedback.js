@@ -261,19 +261,23 @@ async function generateAiSummary(adminId) {
     return "Nincs még beérkező válasz.";
   }
 
-  const recentReviews = getRecentSummaryReviews(adminId, 20);
+  const recentReviews = getRecentSummaryReviews(adminId, 5);
 
-  const reviewsText = recentReviews.map((review, index) => {
-    const typeLabel = review.type === "pos" ? "Pozitív" : "Negatív";
-    return [
-      `${index + 1}. értékelés`,
-      `Típus: ${typeLabel}`,
-      `Szituáció: ${review.situation || "Nincs megadva"}`,
-      `Indoklás: ${review.reason || "Nincs megadva"}`,
-      `Erősségek / hibák: ${review.strengths || "Nincs megadva"}`,
-      `Extra: ${review.extra || "Nincs megadva"}`
-    ].join("\n");
-  }).join("\n\n");
+const reviewsText = recentReviews.map((review, index) => {
+  const typeLabel = review.type === "pos" ? "Pozitív" : "Negatív";
+
+  const fullText = `
+${review.situation || ""}
+${review.reason || ""}
+${review.strengths || ""}
+${review.extra || ""}
+`.trim();
+
+  return `
+${index + 1}. értékelés (${typeLabel}):
+${fullText}
+`;
+}).join("\n\n");
 
   if (!process.env.OPENAI_API_KEY) {
     return buildFallbackSummary(adminId);
@@ -285,18 +289,25 @@ async function generateAiSummary(adminId) {
       messages: [
         {
           role: "system",
-          content:
-"Egy GTA RP szerver admin értékeléseit látod." +
-"Írj egy RÖVID (max 7 mondat) összegzést." +
-"FONTOS:" +
-"- Ne fogalmazz hivatalosan" +
-"- Legyél kritikus" +
-"- Ne írj hosszú magyarázatot" +
-"- Írj konkrét véleményt az adminról" +
-"- Emeld ki a negatív dolgokat is, ha vannak" +
-"- Ha sértő viselkedés van (pl. majom-nak nevezett valakit), azt mindenképp említsd meg" +
-"- Legyen egyértelmű, hogy jó vagy rossz admin" +
-"Írj úgy, mintha egy játékos mondaná."
+          content: `
+Egy GTA RP szerver admin értékeléseit látod.
+
+Feladat:
+Írj egy rövid, tömör és konkrét véleményt az adminról maximum 4 mondatban.
+
+Fontos szabályok:
+- Ne fogalmazz hivatalosan.
+- Ne írj hosszú összefoglalót.
+- Ne általánosságban beszélj, hanem a konkrét értékelések alapján írj.
+- Az összes megadott szöveget együtt értelmezd, ne csak egy mezőt nézz.
+- Ha sértő, lekezelő vagy bunkó viselkedés szerepel bármelyik értékelésben, azt mindenképp említsd meg.
+- Ha pozitív és negatív dolog is van, mindkettőt röviden írd le.
+- A végén legyen egyértelmű a véleményed arról, hogy összességében inkább jó vagy inkább rossz admin.
+
+Stílus:
+- Úgy írj, mintha egy játékos mondaná.
+- Legyél kritikus, őszinte és egyenes.
+- Ne legyél diplomatikus, inkább kritikus!`
         },
         {
           role: "user",

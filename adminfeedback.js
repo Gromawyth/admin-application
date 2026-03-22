@@ -97,23 +97,14 @@ async function sendPanel(interaction) {
       .setTitle(`⭐ ${admin.name}`)
       .setColor(0x5865F2)
       .setDescription(
-        `**Szint:** ${admin.level}\n\n${admin.desc}`
+        `**Szint:** ${admin.level}\n${admin.desc}`
       )
       .addFields(
         {
           name: "📊 Összesítés",
-          value: `👍 Pozitív: **${stats.pos}**\n👎 Negatív: **${stats.neg}**`,
+          value: `👍 Pozitív: **${stats.pos}**\n\n👎 Negatív: **${stats.neg}**`,
           inline: false
         },
-        {
-          name: "📌 Szabályzat",
-          value:
-            "• Egy játékos havonta legfeljebb **3 értékelést** adhat ugyanarra az adminra.\n" +
-            "• Az értékelésnek valós tapasztalaton kell alapulnia.\n" +
-            "• Indoklás nélkül vagy troll célból ne küldj értékelést.\n" +
-            "• A válaszaidat a vezetőség ellenőrizheti.",
-          inline: false
-        }
       );
 
     const row = new ActionRowBuilder().addComponents(
@@ -133,6 +124,22 @@ async function sendPanel(interaction) {
       components: [row]
     });
   }
+
+// 📜 SZABÁLYZAT EMBED (LEGALUL)
+const rulesEmbed = new EmbedBuilder()
+  .setTitle("📜 Értékelési szabályzat")
+  .setColor(0xf1c40f)
+  .setDescription(
+    "⚠️ Egy játékos havonta legfeljebb **3 értékelést** adhat ugyanarra az adminra.\n" +
+    "⚠️ Az értékelésnek valós tapasztalaton kell alapulnia.\n" +
+    "⚠️ Indoklás nélkül vagy troll célból ne küldj értékelést.\n" +
+    "⚠️ A válaszaidat a vezetőség ellenőrizheti.\n\n" +
+    "⚠️ A visszaélések szankciót vonhatnak maguk után."
+  );
+
+await interaction.channel.send({
+  embeds: [rulesEmbed]
+});
 
   await interaction.reply({
     content: "✅ Az admin értékelő panelek kiküldve.",

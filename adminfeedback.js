@@ -16,10 +16,10 @@ const OpenAI = require("openai");
 // =========================
 
 const LOG_CHANNEL_ID =
-  process.env.ADMIN_FEEDBACK_LOG_CHANNEL_ID || "1485371309784563933";
+  process.env.ADMIN_FEEDBACK_LOG_CHANNEL_ID || "IDE_A_LOG_CHANNEL_ID";
 
 const SUMMARY_CHANNEL_ID =
-  process.env.ADMIN_FEEDBACK_SUMMARY_CHANNEL_ID || "1485392296714174544";
+  process.env.ADMIN_FEEDBACK_SUMMARY_CHANNEL_ID || "IDE_A_SUMMARY_CHANNEL_ID";
 
 const DATA_FILE = path.join(__dirname, "adminfeedback-data.json");
 
@@ -30,31 +30,32 @@ const openai = new OpenAI({
 // =========================
 // 👮 ADMINOK
 // =========================
+// Itt írd át az adminokat a sajátjaidra, ha kell.
 
 const admins = [
   {
     id: "1",
     name: "Gromawyth",
     level: "Lead Administrator",
-    desc: `Sziasztok! Gromawyth vagyok.
-
-A szerveren Lead Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminsegéd csapat koordinálása.
-
-Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni. Konfliktusok esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést.
-
-Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám.`
+    desc:
+      "Sziasztok! Gromawyth vagyok.\n\n" +
+      "A szerveren Lead Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminsegéd csapat koordinálása.\n\n" +
+      "Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni. Konfliktusos esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést.\n\n" +
+      "Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám."
   },
   {
     id: "2",
     name: "Gromawyth 2",
-    level: "Admin 2",
-    desc: "teszt"
+    level: "Administrator",
+    desc:
+      "Segítőkész és aktív adminisztrátor vagyok, aki igyekszik gyorsan és pontosan kezelni a felmerülő ügyeket. Fontos számomra a kulturált kommunikáció és a következetes döntéshozatal."
   },
   {
     id: "3",
-    name: "teszt3",
+    name: "Gromawyth 3",
     level: "Adminsegéd",
-    desc: "teszt432"
+    desc:
+      "Kiemelten figyelek az új játékosok támogatására és a kisebb ügyek gyors rendezésére. Fontosnak tartom, hogy mindenki korrekt bánásmódban részesüljön."
   }
 ];
 
@@ -65,6 +66,7 @@ Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos kö
 function getDefaultStore() {
   return {
     ratings: {},
+    summaryData: {},
     summaryMessages: {},
     panelMessages: {},
     rulesMessageId: null
@@ -74,16 +76,24 @@ function getDefaultStore() {
 function loadData() {
   try {
     if (!fs.existsSync(DATA_FILE)) {
+      fs.writeFileSync(
+        DATA_FILE,
+        JSON.stringify(getDefaultStore(), null, 2),
+        "utf8"
+      );
       return getDefaultStore();
     }
 
     const raw = fs.readFileSync(DATA_FILE, "utf8");
-    if (!raw.trim()) return getDefaultStore();
+    if (!raw.trim()) {
+      return getDefaultStore();
+    }
 
     const parsed = JSON.parse(raw);
 
     return {
       ratings: parsed.ratings || {},
+      summaryData: parsed.summaryData || {},
       summaryMessages: parsed.summaryMessages || {},
       panelMessages: parsed.panelMessages || {},
       rulesMessageId: parsed.rulesMessageId || null
@@ -95,7 +105,8 @@ function loadData() {
 }
 
 let loadedData = loadData();
-let data = loadedData.ratings;
+let data = loadedData.ratings; // resetelhető, élő adatok
+let summaryData = loadedData.summaryData; // tartós, AI/összesítő adatok
 let summaryMessages = loadedData.summaryMessages;
 let panelMessages = loadedData.panelMessages;
 let rulesMessageId = loadedData.rulesMessageId;
@@ -107,6 +118,7 @@ function saveData() {
       JSON.stringify(
         {
           ratings: data,
+          summaryData,
           summaryMessages,
           panelMessages,
           rulesMessageId
@@ -144,6 +156,17 @@ function getData(adminId) {
   return data[adminId];
 }
 
+function getSummaryData(adminId) {
+  if (!summaryData[adminId]) {
+    summaryData[adminId] = {
+      pos: 0,
+      neg: 0,
+      reviews: []
+    };
+  }
+  return summaryData[adminId];
+}
+
 function getUserTotalRatings(userId) {
   let total = 0;
 
@@ -169,10 +192,6 @@ function trimText(text, max = 1024) {
   return value.length > max ? value.slice(0, max - 3) + "..." : value;
 }
 
-function trimField(text, max = 1024) {
-  return trimText(text, max);
-}
-
 function getPercent(part, total) {
   if (!total) return 0;
   return Math.round((part / total) * 100);
@@ -182,9 +201,10 @@ function getRatingBar(pos, neg) {
   const total = pos + neg;
   if (total === 0) return "░░░░░░░░░░";
 
-  const positiveRatio = pos / total;
-  const filled = Math.round(positiveRatio * 10);
-  return "🟩".repeat(filled) + "🟥".repeat(10 - filled);
+  const positiveBlocks = Math.round((pos / total) * 10);
+  const negativeBlocks = 10 - positiveBlocks;
+
+  return "🟩".repeat(positiveBlocks) + "🟥".repeat(negativeBlocks);
 }
 
 async function fetchGuildChannel(guild, channelId) {
@@ -194,44 +214,54 @@ async function fetchGuildChannel(guild, channelId) {
     await guild.channels.fetch(channelId).catch(() => null);
 }
 
-function getRecentReviews(adminId, limit = 20) {
-  const stats = getData(adminId);
+function getRecentSummaryReviews(adminId, limit = 20) {
+  const stats = getSummaryData(adminId);
+
   return [...stats.reviews]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, limit);
 }
 
 function buildFallbackSummary(adminId) {
-  const stats = getData(adminId);
+  const admin = admins.find(a => a.id === adminId);
+  const stats = getSummaryData(adminId);
   const total = stats.pos + stats.neg;
 
-  if (total === 0 || !stats.reviews.length) {
+  if (!admin || total === 0 || !stats.reviews.length) {
     return "Nincs még beérkező válasz.";
   }
 
-  const positives = stats.reviews.filter(r => r.type === "pos").length;
-  const negatives = stats.reviews.filter(r => r.type === "neg").length;
+  const latest = stats.reviews[stats.reviews.length - 1];
+  const typeLabel = latest.type === "pos" ? "pozitív" : "negatív";
+  const balanceText =
+    stats.pos > stats.neg
+      ? "inkább pozitív"
+      : stats.neg > stats.pos
+        ? "inkább negatív"
+        : "vegyes";
 
   return (
-    `Az adminról eddig ${total} értékelés érkezett, ebből ${positives} pozitív és ${negatives} negatív. ` +
-    `Az összkép jelenleg ${positives >= negatives ? "inkább pozitív" : "inkább negatív"}, ` +
-    `de a pontosabb megítéléshez további részletes visszajelzések is hasznosak lehetnek.`
+    `${admin.name} adminról eddig ${total} értékelés érkezett, amelyek alapján már kialakítható egy kezdeti összkép. ` +
+    `A visszajelzések aránya jelenleg ${balanceText}, hiszen ${stats.pos} pozitív és ${stats.neg} negatív értékelés szerepel az összesítőben. ` +
+    `A legutóbbi vélemény ${typeLabel} jellegű volt, és a beküldő főként a következőket emelte ki: ${trimText(latest.strengths || "nincs megadva", 220)}. ` +
+    `A leírt szituáció alapján az admin megítélésében fontos szerepet játszik a kommunikáció, a döntéshozatal gyorsasága és az ügyek kezelésének minősége. ` +
+    `A jelenlegi összesítő minden eddig eltárolt véleményt figyelembe vesz, ezért az összkép folyamatosan pontosodik az új visszajelzésekkel.`
   );
 }
 
+// =========================
+// 🤖 AI ÖSSZEGZÉS
+// =========================
+
 async function generateAiSummary(adminId) {
   const admin = admins.find(a => a.id === adminId);
-  const stats = getData(adminId);
+  const stats = getSummaryData(adminId);
 
   if (!admin || !stats.reviews.length) {
     return "Nincs még beérkező válasz.";
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return buildFallbackSummary(adminId);
-  }
-
-  const recentReviews = getRecentReviews(adminId, 20);
+  const recentReviews = getRecentSummaryReviews(adminId, 20);
 
   const reviewsText = recentReviews.map((review, index) => {
     const typeLabel = review.type === "pos" ? "Pozitív" : "Negatív";
@@ -245,6 +275,10 @@ async function generateAiSummary(adminId) {
     ].join("\n");
   }).join("\n\n");
 
+  if (!process.env.OPENAI_API_KEY) {
+    return buildFallbackSummary(adminId);
+  }
+
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-5-mini",
@@ -252,19 +286,20 @@ async function generateAiSummary(adminId) {
         {
           role: "system",
           content:
-            "Egy Discord admin értékelő rendszer elemzője vagy. Magyar nyelven írj. " +
-            "Készíts legalább 10 mondatos, természetes hangzású, objektív összefoglalót a beérkező válaszok alapján. " +
-            "Emeld ki a visszatérő pozitívumokat, negatívumokat, kommunikációt, segítőkészséget, gyorsaságot, igazságosságot, hozzáállást és a javítandó pontokat. " +
-            "Ne listában írj, hanem összefüggő szövegben."
+            "Egy Discord admin értékelő rendszer elemzője vagy. Magyarul írj. " +
+            "Mindig alkoss összefoglaló véleményt, akkor is, ha csak 1 értékelés áll rendelkezésre. " +
+            "Írj természetes, összefüggő, informatív szöveget. " +
+            "Emeld ki a kommunikációt, segítőkészséget, gyorsaságot, korrektséget, hozzáállást és a javítandó területeket. " +
+            "Ne pontokba szedve válaszolj, hanem egy jól megfogalmazott összegzésként."
         },
         {
           role: "user",
           content:
             `Admin neve: ${admin.name}\n` +
             `Szint: ${admin.level}\n` +
-            `Pozitív értékelések: ${stats.pos}\n` +
-            `Negatív értékelések: ${stats.neg}\n\n` +
-            `Beérkező válaszok:\n${reviewsText}`
+            `Pozitív értékelések száma: ${stats.pos}\n` +
+            `Negatív értékelések száma: ${stats.neg}\n\n` +
+            `Összes eddigi beérkező válasz:\n${reviewsText}`
         }
       ]
     });
@@ -341,11 +376,13 @@ function buildAdminButtons(adminId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`feedback_pos_${adminId}`)
-      .setLabel("🟢 Pozitív értékelés")
+      .setLabel("Pozitív értékelés")
+      .setEmoji("🟢")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`feedback_neg_${adminId}`)
-      .setLabel("🔴 Negatív értékelés")
+      .setLabel("Negatív értékelés")
+      .setEmoji("🔴")
       .setStyle(ButtonStyle.Danger)
   );
 }
@@ -379,7 +416,7 @@ function buildSummaryEmbed(admin, stats, aiSummary) {
       },
       {
         name: "🤖 AI leírás",
-        value: trimField(aiSummary || "Nincs még beérkező válasz.", 1024),
+        value: trimText(aiSummary || "Nincs még beérkező válasz.", 1024),
         inline: false
       }
     )
@@ -450,7 +487,7 @@ async function createOrUpdateSummary(guild, adminId) {
   const admin = admins.find(a => a.id === adminId);
   if (!admin) return;
 
-  const stats = getData(adminId);
+  const stats = getSummaryData(adminId);
   const aiSummary = await generateAiSummary(adminId);
   const embed = buildSummaryEmbed(admin, stats, aiSummary);
 
@@ -554,11 +591,11 @@ async function handleButton(interaction) {
 
   const modal = new ModalBuilder()
     .setCustomId(`feedback_modal_${type}_${adminId}`)
-    .setTitle(`${type === "pos" ? "🟢 Pozitív" : "🔴 Negatív"} értékelés`);
+    .setTitle(`${type === "pos" ? "Pozitív" : "Negatív"} értékelés`);
 
   const input1 = new TextInputBuilder()
     .setCustomId("situation")
-    .setLabel("🧩 Milyen szituációban találkoztál vele?")
+    .setLabel("Milyen szituációban találkoztál vele?")
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(1000)
@@ -566,7 +603,7 @@ async function handleButton(interaction) {
 
   const input2 = new TextInputBuilder()
     .setCustomId("reason")
-    .setLabel("💭 Miért értékeled így az admint?")
+    .setLabel("Miért értékeled így az admint?")
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(1000)
@@ -574,7 +611,7 @@ async function handleButton(interaction) {
 
   const input3 = new TextInputBuilder()
     .setCustomId("strengths")
-    .setLabel("⭐ Milyen erősségei vagy hibái voltak?")
+    .setLabel("Milyen erősségei vagy hibái voltak?")
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(1000)
@@ -582,7 +619,7 @@ async function handleButton(interaction) {
 
   const input4 = new TextInputBuilder()
     .setCustomId("extra")
-    .setLabel("📝 Van még valami fontos, amit hozzátennél?")
+    .setLabel("Van még valami fontos, amit hozzátennél?")
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(false)
     .setMaxLength(1000)
@@ -606,6 +643,8 @@ async function handleModal(interaction) {
   if (!interaction.isModalSubmit()) return;
   if (!interaction.customId.startsWith("feedback_modal_")) return;
 
+  await interaction.deferReply({ ephemeral: true });
+
   const [, , type, adminId] = interaction.customId.split("_");
 
   const situation = interaction.fields.getTextInputValue("situation");
@@ -619,7 +658,8 @@ async function handleModal(interaction) {
     extra = "Nincs megadva";
   }
 
-  const stats = getData(adminId);
+  const stats = getData(adminId); // resetelhető élő adatok
+  const summaryStats = getSummaryData(adminId); // tartós adatok az AI-hoz
   const month = getMonthKey();
   const userId = interaction.user.id;
 
@@ -629,20 +669,25 @@ async function handleModal(interaction) {
   if (stats.userMonthly[month][userId] >= 3) {
     const totalSoFar = getUserTotalRatings(userId);
 
-    await interaction.reply({
+    await interaction.editReply({
       content:
         `❌ Ebben a hónapban már elérted a 3 értékelést erre az adminra.\n` +
-        `📌 Eddigi összes leadott értékelésed: **${totalSoFar}**`,
-      ephemeral: true
+        `📌 Eddigi összes leadott értékelésed: **${totalSoFar}**`
     });
     return;
   }
 
-  if (type === "pos") stats.pos++;
-  else stats.neg++;
+  if (type === "pos") {
+    stats.pos++;
+    summaryStats.pos++;
+  } else {
+    stats.neg++;
+    summaryStats.neg++;
+  }
 
   stats.userMonthly[month][userId]++;
-  stats.reviews.push({
+
+  const reviewEntry = {
     user: userId,
     type,
     month,
@@ -651,7 +696,10 @@ async function handleModal(interaction) {
     strengths,
     extra,
     createdAt: new Date().toISOString()
-  });
+  };
+
+  stats.reviews.push(reviewEntry);
+  summaryStats.reviews.push(reviewEntry);
 
   saveData();
 
@@ -673,19 +721,18 @@ async function handleModal(interaction) {
       totalSoFar
     });
 
-    await logChannel.send({ embeds: [logEmbed] });
+    await logChannel.send({ embeds: [logEmbed] }).catch(console.error);
   }
 
-  await createOrUpdateSummary(interaction.guild, adminId);
-  await refreshPublicPanel(interaction.guild, adminId);
-
-  await interaction.reply({
+  await interaction.editReply({
     content:
       `✅ Értékelés elküldve.\n` +
       `📌 Ennél az adminnál ebben a hónapban: **${stats.userMonthly[month][userId]}/3**\n` +
-      `📌 Eddigi összes leadott értékelésed: **${totalSoFar}**`,
-    ephemeral: true
+      `📌 Eddigi összes leadott értékelésed: **${totalSoFar}**`
   });
+
+  createOrUpdateSummary(interaction.guild, adminId).catch(console.error);
+  refreshPublicPanel(interaction.guild, adminId).catch(console.error);
 }
 
 // =========================
@@ -719,12 +766,20 @@ async function refreshPublicPanel(guild, adminId) {
 // =========================
 // 🔄 RESET
 // =========================
+// Kért működés:
+// - admin-ertekeles csatorna nullázódjon
+// - admin-ertekeles-log törlődjön
+// - admin-osszesito maradjon
+// - AI maradjon, summaryData maradjon
 
 async function resetData(interaction) {
   data = {};
-  saveData();
 
-  await rebuildAllSummaries(interaction.guild);
+  for (const admin of admins) {
+    getData(admin.id);
+  }
+
+  saveData();
 
   for (const admin of admins) {
     await refreshPublicPanel(interaction.guild, admin.id);
@@ -733,11 +788,21 @@ async function resetData(interaction) {
   const logChannel = await fetchGuildChannel(interaction.guild, LOG_CHANNEL_ID);
 
   if (logChannel) {
-    await logChannel.bulkDelete(100).catch(() => {});
+    let fetched;
+
+    do {
+      fetched = await logChannel.messages.fetch({ limit: 100 }).catch(() => null);
+
+      if (fetched && fetched.size > 0) {
+        await logChannel.bulkDelete(fetched, true).catch(() => {});
+      }
+    } while (fetched && fetched.size >= 2);
   }
 
   await interaction.reply({
-    content: "🔄 Minden értékelés nullázva, az összesítő és a publikus panelek frissítve.",
+    content:
+      "🔄 Az admin értékelések és a logok törölve lettek. " +
+      "Az admin összesítő és az AI adatok megmaradtak.",
     ephemeral: true
   });
 }
@@ -749,4 +814,4 @@ module.exports = {
   handleModal,
   rebuildAllSummaries,
   refreshPublicPanel
-}
+};

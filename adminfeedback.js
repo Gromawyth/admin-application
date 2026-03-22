@@ -288,8 +288,8 @@ async function generateAiSummary(adminId) {
           content:
             "Egy Discord admin értékelő rendszer elemzője vagy. Magyarul írj. " +
             "Mindig alkoss összefoglaló véleményt, akkor is, ha csak 1 értékelés áll rendelkezésre. " +
-            "Írj természetes, összefüggő, informatív szöveget. " +
-            "Emeld ki a kommunikációt, segítőkészséget, gyorsaságot, korrektséget, hozzáállást és a javítandó területeket. " +
+            "Írj természetes, összefüggő, informatív szöveget, viszont ne legyen túl hosszú " +
+            "Emeld ki a javítandó területeket HA VAN! " +
             "Ne pontokba szedve válaszolj, hanem egy jól megfogalmazott összegzésként."
         },
         {
@@ -773,6 +773,9 @@ async function refreshPublicPanel(guild, adminId) {
 // - AI maradjon, summaryData maradjon
 
 async function resetData(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  // 1) Élő, resetelhető értékelések nullázása
   data = {};
 
   for (const admin of admins) {
@@ -781,29 +784,47 @@ async function resetData(interaction) {
 
   saveData();
 
+  // 2) Publikus panelek frissítése 0 értékre
   for (const admin of admins) {
     await refreshPublicPanel(interaction.guild, admin.id);
   }
 
+  // 3) Log csatorna teljes ürítése biztonságosan
   const logChannel = await fetchGuildChannel(interaction.guild, LOG_CHANNEL_ID);
 
   if (logChannel) {
-    let fetched;
+    while (true) {
+      const fetched = await logChannel.messages.fetch({ limit: 100 }).catch(() => null);
+      if (!fetched || fetched.size === 0) break;
 
-    do {
-      fetched = await logChannel.messages.fetch({ limit: 100 }).catch(() => null);
+      const youngerThan14Days = fetched.filter(
+        msg => Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
+      );
 
-      if (fetched && fetched.size > 0) {
-        await logChannel.bulkDelete(fetched, true).catch(() => {});
+      const olderThan14Days = fetched.filter(
+        msg => Date.now() - msg.createdTimestamp >= 14 * 24 * 60 * 60 * 1000
+      );
+
+      if (youngerThan14Days.size > 0) {
+        await logChannel.bulkDelete(youngerThan14Days, true).catch(() => {});
       }
-    } while (fetched && fetched.size >= 2);
+
+      for (const msg of olderThan14Days.values()) {
+        await msg.delete().catch(() => {});
+      }
+
+      // Ha ebben a körben semmit nem tudtunk törölni, kilépünk
+      if (youngerThan14Days.size === 0 && olderThan14Days.size === 0) {
+        break;
+      }
+    }
   }
 
-  await interaction.reply({
+  // 4) Az admin összesítő és AI adatok NEM változnak
+  await interaction.editReply({
     content:
       "🔄 Az admin értékelések és a logok törölve lettek. " +
-      "Az admin összesítő és az AI adatok megmaradtak.",
-    ephemeral: true
+      "Az admin összesítő és az AI adatok megmaradtak."
   });
 }
 

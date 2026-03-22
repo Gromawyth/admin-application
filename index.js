@@ -1025,36 +1025,38 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    if (interaction.isButton()) {
-     // 🔘 ADMIN FEEDBACK GOMB
 if (interaction.isButton()) {
-  await adminFeedback.handleButton(interaction);
+  if (interaction.customId.startsWith("feedback_")) {
+    await adminFeedback.handleButton(interaction);
+    return;
+  }
+
+  if (
+    interaction.customId === "accept_adminseged" ||
+    interaction.customId === "reject_adminseged" ||
+    interaction.customId === "accept_admin" ||
+    interaction.customId === "reject_admin"
+  ) {
+    await handleApplicationDecision(interaction);
+    return;
+  }
+
+  if (interaction.customId.startsWith("ticket_open_")) {
+    await handleTicketOpenButton(interaction);
+    return;
+  }
+
+  if (interaction.customId === "ticket_close") {
+    await handleTicketClose(interaction);
+    return;
+  }
+
+  await interaction.reply({
+    content: "Ismeretlen gomb.",
+    ephemeral: true
+  });
+  return;
 }
-      if (
-        interaction.customId === "accept_adminseged" ||
-        interaction.customId === "reject_adminseged" ||
-        interaction.customId === "accept_admin" ||
-        interaction.customId === "reject_admin"
-      ) {
-        await handleApplicationDecision(interaction);
-        return;
-      }
-
-      if (interaction.customId.startsWith("ticket_open_")) {
-        await handleTicketOpenButton(interaction);
-        return;
-      }
-
-      if (interaction.customId === "ticket_close") {
-        await handleTicketClose(interaction);
-        return;
-      }
-
-      await interaction.reply({
-        content: "Ismeretlen gomb.",
-        ephemeral: true
-      });
-    }
   } catch (error) {
     console.error("❌ Hiba interactionCreate közben:", error);
 

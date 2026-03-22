@@ -947,10 +947,24 @@ async function handleTicketModalSubmit(interaction) {
 
 async function handleTicketClose(interaction) {
   const channel = interaction.channel;
-  const isOwner = channel?.permissionOverwrites?.cache?.has(interaction.user.id);
-  const isTicketStaff = interaction.member?.roles?.cache?.has(TICKET_STAFF_ROLE_ID);
+  const member = interaction.member;
+  const guild = interaction.guild;
 
-  if (!isOwner && !isTicketStaff) {
+  const isOwner = channel?.permissionOverwrites?.cache?.has(interaction.user.id);
+
+  let hasRequiredRoleOrHigher = false;
+
+  if (member && guild && TICKET_STAFF_ROLE_ID) {
+    const minimumRole =
+      guild.roles.cache.get(TICKET_STAFF_ROLE_ID) ||
+      await guild.roles.fetch(TICKET_STAFF_ROLE_ID).catch(() => null);
+
+    if (minimumRole) {
+      hasRequiredRoleOrHigher = member.roles.highest.position >= minimumRole.position;
+    }
+  }
+
+  if (!isOwner && !hasRequiredRoleOrHigher) {
     await interaction.reply({
       content: "Nincs jogosultságod a ticket lezárásához.",
       ephemeral: true

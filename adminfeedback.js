@@ -113,21 +113,21 @@ let rulesMessageId = loadedData.rulesMessageId;
 
 function saveData() {
   try {
-    fs.writeFileSync(
-      DATA_FILE,
-      JSON.stringify(
-        {
-          ratings: data,
-          summaryData,
-          summaryMessages,
-          panelMessages,
-          rulesMessageId
-        },
-        null,
-        2
-      ),
-      "utf8"
-    );
+    const payload = {
+      ratings: data,
+      summaryData,
+      summaryMessages,
+      panelMessages,
+      rulesMessageId
+    };
+
+    console.log("💾 Mentés indul...");
+    console.log("📁 DATA_FILE:", DATA_FILE);
+    console.log("🧾 Mentett adat:", JSON.stringify(payload, null, 2));
+
+    fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2), "utf8");
+
+    console.log("✅ JSON mentve");
   } catch (error) {
     console.error("❌ Hiba a JSON mentésekor:", error);
   }
@@ -534,7 +534,8 @@ async function rebuildAllSummaries(guild) {
 // =========================
 // 📤 PANEL KÜLDÉS
 // =========================
-
+console.log("📤 /adminpanel elindult");
+console.log("📁 Mentési útvonal:", DATA_FILE);
 async function sendPanel(interaction) {
   for (const admin of admins) {
     const stats = getData(admin.id);

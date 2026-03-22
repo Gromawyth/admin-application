@@ -231,20 +231,22 @@ const TICKET_TYPES = {
   vezetoseg: {
     label: "Vezetőségi ügyek",
     channelPrefix: "vezetosegi",
-    description: "Unban kérelem, fórumos ügy, egyéni összegű PP vásárlás, magánbirtok, egyedi jármű, fejlesztési ötlet, elveszett tárgyak.",
+    description: "Fórumos probléma, egyéni összegű PP vásárlás, magánbirtok, egyedi jármű, elveszett tárgyak.",
     buttonStyle: ButtonStyle.Primary,
     modalTitle: "Vezetőségi ticket",
-    question1: "Pontosan miben szeretnél segítséget?",
-    question2: "Írd le részletesen az ügyedet"
+    question1: "Mi a karaktered neve?",
+    question2: "Milyen ügyben szeretnél segítséget kérni?",
+    question3: "Kérlek, írd le részletesen a problémát vagy kérésedet."
   },
   frakcio: {
     label: "Frakció ügyek",
     channelPrefix: "frakcio",
-    description: "Frakcióval kapcsolatos kérdés, probléma, jelentkezés vagy vezetőségi egyeztetés.",
+    description: "Frakcióval kapcsolatos kérdés, probléma, vagy vezetőségi egyeztetés.",
     buttonStyle: ButtonStyle.Primary,
     modalTitle: "Frakció ügyek",
-    question1: "Melyik frakcióról van szó?",
-    question2: "Írd le részletesen az ügyedet"
+    question1: "Mi a karaktered neve?",
+    question2: "Melyik frakcióról van szó?",
+    question3: "Kérlek, írd le részletesen a problémát vagy kérésedet."
   },
   jatekosreport: {
     label: "Játékos report",
@@ -252,8 +254,9 @@ const TICKET_TYPES = {
     description: "Ha egy játékost szeretnél jelenteni szabályszegés, visszaélés vagy egyéb probléma miatt.",
     buttonStyle: ButtonStyle.Danger,
     modalTitle: "Játékos report",
-    question1: "Kit reportolnál?",
-    question2: "Mi történt pontosan?"
+    question1: "Mi a karaktered neve?",
+    question2: "Kit szeretnél jelenteni? (karakternév vagy Discord ID)",
+    question3: "Kérlek, írd le részletesen az esetet, és ha van, csatolj bizonyítékot is."
   },
   adminreport: {
     label: "Admin report",
@@ -261,8 +264,9 @@ const TICKET_TYPES = {
     description: "Ha egy adminisztrátorral kapcsolatban szeretnél panaszt vagy észrevételt tenni.",
     buttonStyle: ButtonStyle.Danger,
     modalTitle: "Admin report",
-    question1: "Melyik adminról van szó?",
-    question2: "Írd le részletesen a problémát"
+    question1: "Mi a karaktered neve?", 
+    question2: "Az érintett adminisztrátor neve:",
+    question3: "Kérlek, írd le részletesen, mi történt."
   },
   segitseg: {
     label: "Segítségkérés",
@@ -270,26 +274,29 @@ const TICKET_TYPES = {
     description: "Általános segítségkérés, elakadás, információkérés vagy technikai probléma.",
     buttonStyle: ButtonStyle.Success,
     modalTitle: "Segítségkérés",
-    question1: "Miben kérsz segítséget?",
-    question2: "Írd le részletesen a problémát"
+    question1: "Mi a karaktered neve?",    
+    question2: "Miben kérsz segítséget?",
+    question3: "Kérlek, írd le részletesen a problémát vagy kérdésedet."
   },
   vasarlasi: {
     label: "Vásárlási / támogatói ügy",
     channelPrefix: "vasarlasi",
-    description: "Prémium, támogatói csomag, vásárlási probléma, jóváírás vagy fizetéssel kapcsolatos ügy.",
+    description: "Ha vásárlással, támogatással vagy fizetéssel kapcsolatban van problémád, itt tudsz segítséget kérni.",
     buttonStyle: ButtonStyle.Success,
     modalTitle: "Vásárlási / támogatói ügy",
-    question1: "Milyen vásárlási ügyed van?",
-    question2: "Írd le részletesen a problémát"
+    question1: "Mi a karaktered neve?",  
+    question2: "Miben van szükséged segítségre a vásárlással kapcsolatban?",
+    question3: "Írd le részletesen a problémát."
   },
   unban: {
     label: "Unban / enyhítési kérelem",
     channelPrefix: "unban",
-    description: "Ban, kitiltás, enyhítés, felülvizsgálat vagy döntésmódosítás kérése.",
-    buttonStyle: ButtonStyle.Secondary,
+    description: "Kitiltás, enyhítés, felülvizsgálat vagy döntésmódosítás kérése.",
+    buttonStyle: ButtonStyle.Success,
     modalTitle: "Unban / enyhítési kérelem",
-    question1: "Milyen büntetéssel kapcsolatban írsz?",
-    question2: "Miért kérsz felülvizsgálatot vagy enyhítést?"
+    question1: "Mi a karaktered neve?",    
+    question2: "Screenshot a ban panelről:",
+    question3: "Miért szeretnél enyhítést, unbant kérni?"
   }
 };
 
@@ -314,7 +321,7 @@ function buildTicketOpenButton(typeKey) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`ticket_open_${typeKey}`)
-      .setLabel("Create ticket")
+      .setLabel("Ticket létrehozása")
       .setEmoji("📩")
       .setStyle(type.buttonStyle)
   );

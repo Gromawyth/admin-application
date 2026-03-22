@@ -10,6 +10,15 @@ const {
   ButtonStyle,
   EmbedBuilder,
   Events,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  PermissionsBitField,
+  ChannelType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  Partials,
 } = require("discord.js");
 
 const app = express();
@@ -27,9 +36,26 @@ app.use(cors({
 app.options("*", cors());
 app.use(express.json());
 
+const {
+  DISCORD_TOKEN,
+  CLIENT_ID,
+  GUILD_ID,
+  ADMIN_CHANNEL_ID,
+  ADMINSEGED_CHANNEL_ID,
+  STAFF_ROLE_ID,
+  TICKET_CATEGORY_ID,
+  TICKET_STAFF_ROLE_ID
+} = process.env;
+
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages
+  ],
+  partials: [Partials.Channel],
 });
+// 🔽 ÚJ: külső fájl betöltése
+const adminFeedback = require("./adminfeedback");
 
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";
@@ -43,33 +69,48 @@ function limitField(value, max = 1024) {
   return text.slice(0, max - 3) + "...";
 }
 
-function buildActionRow(disabled = false) {
+function formatDiscordUser(value) {
+  const text = safeValue(value);
+
+  if (/^\d+$/.test(text)) {
+    return `<@${text}>\n\`${text}\``;
+  }
+
+  return limitField(text);
+}
+
+function buildActionRow(applicationType, disabled = false) {
+  const suffix = applicationType === "adminseged" ? "adminseged" : "admin";
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("accept")
+      .setCustomId(`accept_${suffix}`)
       .setLabel("Elfogadás")
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
+
     new ButtonBuilder()
-      .setCustomId("reject")
+      .setCustomId(`reject_${suffix}`)
       .setLabel("Elutasítás")
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled)
   );
 }
 
-function buildApplicationEmbeds(data) {
+function buildAdminEmbeds(data) {
   const discordUserId = safeValue(data.discordNev);
 
   return [
     new EmbedBuilder()
+      .setTitle("🟢 Új Adminisztrátori jelentkezés")
       .setDescription("━━━━━━━━━━ **01. ALAPADATOK** ━━━━━━━━━━")
       .setColor(0x1f8b4c)
       .addFields(
-        { name: "👤 Mi a karaktered neve?", value: limitField(data.karakterNev), inline: true },
-        { name: "🆔 Discord User ID", value: limitField(discordUserId), inline: true },
-        { name: "🎂 Hány éves vagy?", value: limitField(data.eletkor), inline: true },
-        { name: "⏱️ Mennyi ideje játszol az internalGamingen?", value: limitField(data.jatszottIdo), inline: true },
+        { name: "👤 Mi a karaktered neve?", value: limitField(data.karakterNev), inline: false },
+        { name: "🆔 Discord User ID", value: formatDiscordUser(discordUserId), inline: false },
+        { name: "🆔 Mi a Discord neved?", value: limitField(data.discord2), inline: false },
+        { name: "🎂 Hány éves vagy?", value: limitField(data.eletkor), inline: false },
+        { name: "⏱️ Mennyi ideje játszol az internalGamingen?", value: limitField(data.jatszottIdo), inline: false },
         { name: "📅 Honnan találtál rá a szerverre?", value: limitField(data.internalTalalat), inline: false }
       ),
 
@@ -79,7 +120,7 @@ function buildApplicationEmbeds(data) {
       .addFields(
         { name: "🕒 Mikor szoktál általában fent lenni hétköznap?", value: limitField(data.hetkoznapAktivitas), inline: false },
         { name: "🕒 Mikor szoktál általában fent lenni hétvégén?", value: limitField(data.hetvegeAktivitas), inline: false },
-        { name: "⏱️ Heti hány órát tudsz aktívan játszani?", value: limitField(data.hetiOra), inline: true },
+        { name: "⏱️ Heti hány órát tudsz aktívan játszani?", value: limitField(data.hetiOra), inline: false },
         { name: "🛠️ Mennyi időt tudnál az Admin Staff feladataira szánni?", value: limitField(data.staffIdo), inline: false },
         { name: "🔄 Változik ez az időbeosztásod gyakran?", value: limitField(data.idobeosztasValtozas), inline: false }
       ),
@@ -147,8 +188,344 @@ function buildApplicationEmbeds(data) {
   ];
 }
 
-client.once(Events.ClientReady, () => {
+function buildAdminSegedEmbeds(data) {
+  const discordUserId = safeValue(data.discordID);
+
+  return [
+    new EmbedBuilder()
+      .setTitle("🟢 Új Adminsegéd jelentkezés")
+      .setDescription("━━━━━━━━━━ **I. ÁLTALÁNOS KÉRDÉSEK** ━━━━━━━━━━")
+      .setColor(0x2ecc71)
+      .addFields(
+        { name: "👤 Mi a karaktered neve?", value: limitField(data.karaktered), inline: false },
+        { name: "🆔 Discord User ID", value: formatDiscordUser(discordUserId), inline: false },
+        { name: "🆔 Discord neved", value: limitField(data.discord1), inline: false },
+        { name: "🎂 Életkorod", value: limitField(data.eletkor), inline: false },
+        { name: "⏱ Heti szinten mennyi időt tudnál az adminsegédi feladatokra fordítani?", value: limitField(data.hetiIdo), inline: false },
+        { name: "👤 Önmagad rövid bemutatása", value: limitField(data.bemutatkozas), inline: false },
+        { name: "🛡 Voltál-e már adminisztrátor vagy adminsegéd tag más szerveren? Ha igen, hol és milyen pozícióban?", value: limitField(data.voltStaff), inline: false }
+      ),
+
+    new EmbedBuilder()
+      .setDescription("━━━━━━━━━━ **II. SZITUÁCIÓS FELADATOK** ━━━━━━━━━━")
+      .setColor(0x27ae60)
+      .addFields(
+        { name: "⚠ Egy játékos bizonyíthatóan visszaél egy rendszerhibával (bug), de népszerű tag. Hogyan jársz el?", value: limitField(data.bugVisszaeles), inline: false },
+        { name: "🚗 Elkapsz egy ütközést. Annyi RP-t látsz, hogy /do megrázkódik vagy /do kocc. Mi itt a probléma? Hogyan jársz el? Ha szankcionálsz, miként teszed azt?", value: limitField(data.utkozesHelyzet), inline: false },
+        { name: "👮 A rendvédelem valamely tagja jelez feléd, hogy direkt provokálják őket. Mit teszel?", value: limitField(data.rendvedelemProvokacio), inline: false },
+        { name: "🆕 Egy új játékos sok kérdést tesz fel, de a válaszaid lassan érkeznek, ami frusztrálja őt. Hogyan reagálsz?", value: limitField(data.ujJatekosKezeles), inline: false }
+      ),
+
+    new EmbedBuilder()
+      .setDescription("━━━━━━━━━━ **III. KOMPETENCIA ÉS HOZZÁÁLLÁS** ━━━━━━━━━━")
+      .setColor(0x1f8b4c)
+      .addFields(
+        { name: "⚖ Mit jelent számodra a pártatlan eljárás egy adminügy kapcsán?", value: limitField(data.partatlansag), inline: false },
+        { name: "⭐ Szerinted jó adminisztrátor válna belőled? Indokold!", value: limitField(data.joAdminLennek), inline: false },
+        { name: "🔄 Te miként definiálnád a rugalmasság fogalmát?", value: limitField(data.rugalmassag), inline: false }
+      )
+      .setFooter({ text: "Adminsegéd jelentkezési rendszer" })
+      .setTimestamp()
+  ];
+}
+
+const TICKET_TYPES = {
+  vezetoseg: {
+    label: "Vezetőségi ügyek",
+    channelPrefix: "vezetosegi",
+    description: "Fórumos probléma, egyéni összegű PP vásárlás, magánbirtok, egyedi jármű, elveszett tárgyak.",
+    buttonStyle: ButtonStyle.Primary,
+    modalTitle: "Vezetőségi ticket",
+    questions: [
+      {
+        label: "Mi a karaktered neve?",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Milyen ügyben szeretnél segítséget kérni?",
+        embedName: "Milyen ügyben szeretnél segítséget kérni?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Írd le részletesen a problémát vagy kérésedet",
+        embedName: "Írd le részletesen a problémát vagy kérésedet",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
+  },
+  frakcio: {
+    label: "Frakció ügyek",
+    channelPrefix: "frakcio",
+    description: "Frakcióval kapcsolatos kérdés, probléma vagy vezetőségi egyeztetés.",
+    buttonStyle: ButtonStyle.Primary,
+    modalTitle: "Frakció ügyek",
+    questions: [
+      {
+        label: "Mi a karaktered neve?",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Melyik frakcióról van szó?",
+        embedName: "Melyik frakcióról van szó?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Részletezd a problémát vagy kérésedet",
+        embedName: "Részletezd a problémát vagy kérésedet",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
+  },
+  jatekosreport: {
+    label: "Játékos report",
+    channelPrefix: "jatekos-report",
+    description: "Ha egy játékost szeretnél jelenteni szabályszegés, visszaélés vagy egyéb probléma miatt.",
+    buttonStyle: ButtonStyle.Danger,
+    modalTitle: "Játékos report",
+    questions: [
+      {
+        label: "Mi a karaktered neve?",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Kit szeretnél jelenteni? (karakternév)",
+        embedName: "Kit szeretnél jelenteni? (karakternév)",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Kérlek, írd le részletesen, mi történt",
+        embedName: "Kérlek, írd le részletesen, mi történt",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
+  },
+  adminreport: {
+    label: "Admin report",
+    channelPrefix: "admin-report",
+    description: "Ha egy adminisztrátorral kapcsolatban szeretnél panaszt vagy észrevételt tenni.",
+    buttonStyle: ButtonStyle.Danger,
+    modalTitle: "Admin report",
+    questions: [
+      {
+        label: "Mi a karaktered neve?",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Az érintett adminisztrátor neve",
+        embedName: "Az érintett adminisztrátor neve",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Kérlek, írd le részletesen, mi történt",
+        embedName: "Kérlek, írd le részletesen, mi történt",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
+  },
+  segitseg: {
+    label: "Segítségkérés",
+    channelPrefix: "segitseg",
+    description: "Általános segítségkérés, elakadás, információkérés vagy technikai probléma.",
+    buttonStyle: ButtonStyle.Success,
+    modalTitle: "Segítségkérés",
+    questions: [
+      {
+        label: "Mi a karaktered neve?",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Miben kérsz segítséget?",
+        embedName: "Miben kérsz segítséget?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Részletezd a problémát vagy kérdésedet.",
+        embedName: "Részletezd a problémát vagy kérdésedet.",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
+  },
+  vasarlasi: {
+    label: "Vásárlási / támogatói ügy",
+    channelPrefix: "vasarlasi",
+    description: "Ha vásárlással, támogatással vagy fizetéssel kapcsolatban van problémád, itt tudsz segítséget kérni.",
+    buttonStyle: ButtonStyle.Success,
+    modalTitle: "Vásárlási / támogatói ügy",
+    questions: [
+      {
+        label: "Mi a karaktered neve?",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Miben van szükséged segítségre?",
+        embedName: "Miben van szükséged segítségre?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Írd le részletesen a problémát",
+        embedName: "Írd le részletesen a problémát",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
+  },
+  unban: {
+    label: "Unban / enyhítési kérelem",
+    channelPrefix: "unban",
+    description: "Kitiltás, enyhítés, felülvizsgálat vagy döntésmódosítás kérése.",
+    buttonStyle: ButtonStyle.Success,
+    modalTitle: "Unban / enyhítési kérelem",
+    questions: [
+      {
+        label: "Mi a karaktered neve?",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Screenshot a ban panelről:",
+        embedName: "Screenshot a ban panelről:",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Miért szeretnél enyhítést vagy unbant kérni?",
+        embedName: "Miért szeretnél enyhítést vagy unbant kérni?",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
+  }
+};
+
+function sanitizeChannelName(text) {
+  return String(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
+function generateTicketNumber() {
+  return Math.floor(1000 + Math.random() * 9000);
+}
+
+function buildTicketOpenButton(typeKey) {
+  const type = TICKET_TYPES[typeKey];
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ticket_open_${typeKey}`)
+      .setLabel("Ticket létrehozása")
+      .setEmoji("📩")
+      .setStyle(type.buttonStyle)
+  );
+}
+
+function buildTicketCloseButton() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("ticket_close")
+      .setLabel("Lezárás")
+      .setEmoji("🔒")
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+function buildTicketPanelEmbed(typeKey) {
+  const type = TICKET_TYPES[typeKey];
+
+  return new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setTitle(type.label)
+    .setDescription(type.description)
+    .setFooter({ text: "internalGaming ticket rendszer" });
+}
+
+function buildTicketModal(typeKey) {
+  const type = TICKET_TYPES[typeKey];
+
+  const modal = new ModalBuilder()
+    .setCustomId(`ticket_modal_${typeKey}`)
+    .setTitle(type.modalTitle);
+
+  const rows = type.questions.map((question, index) => {
+    const input = new TextInputBuilder()
+      .setCustomId(`q${index + 1}`)
+      .setLabel(question.label)
+      .setStyle(question.style)
+      .setRequired(true)
+      .setMaxLength(question.maxLength);
+
+    return new ActionRowBuilder().addComponents(input);
+  });
+
+  modal.addComponents(...rows);
+  return modal;
+}
+
+async function registerCommands() {
+  const commands = [
+    new SlashCommandBuilder()
+  .setName("adminpanel")
+  .setDescription("Admin értékelő panel")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+new SlashCommandBuilder()
+  .setName("adminreset")
+  .setDescription("Értékelések nullázása")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+    new SlashCommandBuilder()
+
+      .setName("sendticketpanels")
+      .setDescription("Kirakja a ticket paneleket ebbe a csatornába.")
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+  ].map(cmd => cmd.toJSON());
+
+  const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
+
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+
+  console.log("✅ Slash commandok regisztrálva");
+}
+
+client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot online: ${client.user.tag}`);
+
+  try {
+    await registerCommands();
+  } catch (error) {
+    console.error("❌ Slash command regisztrációs hiba:", error);
+  }
 });
 
 app.get("/", (req, res) => {
@@ -159,8 +536,11 @@ app.get("/health", (req, res) => {
   res.status(200).json({
     success: true,
     botReady: client.isReady(),
-    hasChannelId: !!process.env.CHANNEL_ID,
-    hasStaffRoleId: !!process.env.STAFF_ROLE_ID
+    hasAdminChannelId: !!ADMIN_CHANNEL_ID,
+    hasAdminSegedChannelId: !!ADMINSEGED_CHANNEL_ID,
+    hasStaffRoleId: !!STAFF_ROLE_ID,
+    hasTicketCategoryId: !!TICKET_CATEGORY_ID,
+    hasTicketStaffRoleId: !!TICKET_STAFF_ROLE_ID
   });
 });
 
@@ -181,9 +561,24 @@ app.post("/application", async (req, res) => {
     }
 
     const data = req.body || {};
-    console.log("📥 Jelentkezés érkezett:", Object.keys(data));
+    const applicationType =
+      data.applicationType === "adminseged" ? "adminseged" : "adminisztrator";
 
-    const channel = await client.channels.fetch(process.env.CHANNEL_ID).catch((err) => {
+    console.log("📥 Jelentkezés érkezett:", applicationType, Object.keys(data));
+
+    const channelId =
+      applicationType === "adminseged"
+        ? ADMINSEGED_CHANNEL_ID
+        : ADMIN_CHANNEL_ID;
+
+    if (!channelId) {
+      return res.status(500).json({
+        success: false,
+        error: "Hiányzik a megfelelő csatornaazonosító az ENV-ből."
+      });
+    }
+
+    const channel = await client.channels.fetch(channelId).catch((err) => {
       console.error("❌ Channel fetch hiba:", err);
       return null;
     });
@@ -191,22 +586,29 @@ app.post("/application", async (req, res) => {
     if (!channel) {
       return res.status(404).json({
         success: false,
-        error: "Nem találom a csatornát."
+        error: "Nem találom a célcsatornát."
       });
     }
 
     if (typeof channel.send !== "function") {
       return res.status(400).json({
         success: false,
-        error: "A CHANNEL_ID nem szöveges csatornára mutat."
+        error: "A megadott csatorna nem szöveges csatorna."
       });
     }
 
-    const embeds = buildApplicationEmbeds(data);
-    const row = buildActionRow(false);
+    const embeds =
+      applicationType === "adminseged"
+        ? buildAdminSegedEmbeds(data)
+        : buildAdminEmbeds(data);
+
+    const row = buildActionRow(applicationType, false);
 
     const message = await channel.send({
-      content: "📩 **Új admin jelentkezés érkezett!**",
+      content:
+        applicationType === "adminseged"
+          ? "🟢 **Új adminsegéd jelentkezés érkezett!**"
+          : "📩 **Új admin jelentkezés érkezett!**",
       embeds,
       components: [row],
     });
@@ -226,92 +628,87 @@ app.post("/application", async (req, res) => {
   }
 });
 
-client.on("interactionCreate", async (interaction) => {
-  try {
-    if (!interaction.isButton()) return;
+async function handleApplicationDecision(interaction) {
+  const member = interaction.member;
 
-    const member = interaction.member;
-
-    if (!member || !member.roles?.cache?.has(process.env.STAFF_ROLE_ID)) {
-      await interaction.reply({
-        content: "Nincs jogosultságod a lap elbírálására.",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const originalEmbeds = interaction.message.embeds || [];
-    const firstEmbed = originalEmbeds[0];
-
-    if (!firstEmbed) {
-      await interaction.reply({
-        content: "Nem találom az eredeti embedet.",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const applicantField = firstEmbed.fields?.find(
-      (field) => field.name === "🆔 Discord User ID"
-    );
-
-    const discordUserId = applicantField?.value?.trim();
-
-    let dmText = "";
-
-    if (interaction.customId === "accept") {
-      dmText =
-        "Szia! Örömmel értesítünk, hogy az admin jelentkezésed **elfogadásra került**. Kérlek keresd fel a vezető adminisztrátort privát üzenetben.";
-    } else if (interaction.customId === "reject") {
-      dmText =
-        "Szia! Értesítünk, hogy az admin jelentkezésed **elutasításra került**. Köszönjük a jelentkezésedet és az idődet.";
-    } else {
-      await interaction.reply({
-        content: "Ismeretlen gomb.",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const reviewEmbed = new EmbedBuilder()
-      .setTitle("📋 Jelentkezés elbírálva")
-      .setColor(interaction.customId === "accept" ? 0x2ecc71 : 0xe74c3c)
-      .addFields(
-        {
-          name: "Eredmény",
-          value: interaction.customId === "accept"
-            ? "✅ **ELFOGADVA**"
-            : "❌ **ELUTASÍTVA**",
-          inline: true
-        },
-        {
-          name: "Elbírálta",
-          value: `<@${interaction.user.id}>`,
-          inline: true
-        }
-      )
-      .setTimestamp();
-
-    const disabledRow = buildActionRow(true);
-
-    await interaction.update({
-      embeds: [...originalEmbeds, reviewEmbed],
-      components: [disabledRow],
+  if (!member || !member.roles?.cache?.has(STAFF_ROLE_ID)) {
+    await interaction.reply({
+      content: "Nincs jogosultságod a lap elbírálására.",
+      ephemeral: true,
     });
+    return;
+  }
 
-    if (discordUserId && /^\d+$/.test(discordUserId)) {
+  const isAdminSeged =
+    interaction.customId === "accept_adminseged" ||
+    interaction.customId === "reject_adminseged";
+
+  const isAdmin =
+    interaction.customId === "accept_admin" ||
+    interaction.customId === "reject_admin";
+
+  if (!isAdminSeged && !isAdmin) {
+    await interaction.reply({
+      content: "Ismeretlen gomb.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const accepted = interaction.customId.startsWith("accept_");
+  const applicationType = isAdminSeged ? "adminseged" : "adminisztrator";
+
+  const originalEmbeds = interaction.message.embeds || [];
+  const firstEmbed = originalEmbeds[0];
+
+  if (!firstEmbed) {
+    await interaction.reply({
+      content: "Nem találom az eredeti embedet.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const applicantField = firstEmbed.fields?.find(
+    (field) => field.name === "🆔 Discord User ID"
+  );
+
+  let discordUserId = "";
+  if (applicantField?.value) {
+    const idMatch = applicantField.value.match(/\b\d{16,20}\b/);
+    discordUserId = idMatch ? idMatch[0] : "";
+  }
+
+  const dmText = accepted
+    ? applicationType === "adminseged"
+      ? "Szia! Örömmel értesítünk, hogy az adminsegéd jelentkezésed elfogadásra került. Kérlek keresd fel a vezetőséget privát üzenetben a további részletekért."
+      : "Szia! Örömmel értesítünk, hogy az admin jelentkezésed elfogadásra került. Kérlek keresd fel a vezető adminisztrátort privát üzenetben."
+    : applicationType === "adminseged"
+      ? "Szia! Értesítünk, hogy az adminsegéd jelentkezésed elutasításra került. Köszönjük a jelentkezésedet és az idődet."
+      : "Szia! Értesítünk, hogy az admin jelentkezésed elutasításra került. Köszönjük a jelentkezésedet és az idődet.";
+
+  let applicantStatus = "❌ Érvénytelen vagy hiányzó Discord User ID";
+  let dmStatus = "⛔ DM nem lett megkísérelve";
+
+  if (discordUserId && /^\d+$/.test(discordUserId)) {
+    try {
+      const user = await client.users.fetch(discordUserId);
+      applicantStatus = `✅ Jelentkező lekérve: <@${discordUserId}>`;
+
       try {
-        const user = await client.users.fetch(discordUserId);
-
         await user.send({
           embeds: [
             new EmbedBuilder()
-              .setTitle("📨 Admin jelentkezés elbírálása")
-              .setColor(interaction.customId === "accept" ? 0x2ecc71 : 0xe74c3c)
+              .setTitle(
+                applicationType === "adminseged"
+                  ? "📨 Adminsegéd jelentkezés elbírálása"
+                  : "📨 Admin jelentkezés elbírálása"
+              )
+              .setColor(accepted ? 0x2ecc71 : 0xe74c3c)
               .setDescription(dmText)
               .addFields(
                 {
-                  name: "Szerver:",
+                  name: "Szerver",
                   value: safeValue(interaction.guild?.name || "internalGaming"),
                   inline: true,
                 },
@@ -324,11 +721,339 @@ client.on("interactionCreate", async (interaction) => {
               .setTimestamp()
           ],
         });
+
+        dmStatus = "✅ DM sikeresen elküldve";
       } catch (dmError) {
-        console.error("⚠️ Nem sikerült DM-et küldeni:", dmError.message);
+        dmStatus = `❌ DM küldése sikertelen: ${limitField(dmError.message || "ismeretlen hiba")}`;
       }
-    } else {
-      console.log("⚠️ Érvénytelen vagy hiányzó Discord User ID, DM kihagyva.");
+    } catch (fetchError) {
+      applicantStatus = `❌ A felhasználó nem kérhető le ebből az ID-ból: \`${discordUserId}\``;
+      dmStatus = "⛔ DM kihagyva, mert a felhasználó lekérése sikertelen";
+    }
+  }
+
+  const reviewEmbed = new EmbedBuilder()
+    .setTitle(
+      applicationType === "adminseged"
+        ? "📋 Adminsegéd jelentkezés elbírálva"
+        : "📋 Admin jelentkezés elbírálva"
+    )
+    .setColor(accepted ? 0x2ecc71 : 0xe74c3c)
+    .addFields(
+      {
+        name: "Eredmény",
+        value: accepted ? "✅ **ELFOGADVA**" : "❌ **ELUTASÍTVA**",
+        inline: true
+      },
+      {
+        name: "Elbírálta",
+        value: `<@${interaction.user.id}>`,
+        inline: true
+      },
+      {
+        name: "Jelentkező státusza",
+        value: applicantStatus,
+        inline: false
+      },
+      {
+        name: "DM állapot",
+        value: limitField(dmStatus),
+        inline: false
+      }
+    )
+    .setTimestamp();
+
+  const disabledRow = buildActionRow(applicationType, true);
+
+  await interaction.update({
+    embeds: [...originalEmbeds, reviewEmbed],
+    components: [disabledRow],
+  });
+}
+
+async function handleSendTicketPanels(interaction) {
+  if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+    await interaction.reply({
+      content: "Ehhez admin jogosultság kell.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const order = [
+    "vezetoseg",
+    "frakcio",
+    "jatekosreport",
+    "adminreport",
+    "segitseg",
+    "vasarlasi",
+    "unban"
+  ];
+
+  for (const key of order) {
+    const embed = buildTicketPanelEmbed(key);
+    const row = buildTicketOpenButton(key);
+
+    await interaction.channel.send({
+      embeds: [embed],
+      components: [row]
+    });
+  }
+
+  await interaction.reply({
+    content: "✅ A ticket panelek ki lettek küldve ebbe a csatornába.",
+    ephemeral: true
+  });
+}
+
+async function handleTicketOpenButton(interaction) {
+  const typeKey = interaction.customId.replace("ticket_open_", "");
+  const type = TICKET_TYPES[typeKey];
+
+  if (!type) {
+    await interaction.reply({
+      content: "Ismeretlen ticket típus.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  await interaction.showModal(buildTicketModal(typeKey));
+}
+
+async function handleTicketModalSubmit(interaction) {
+  const typeKey = interaction.customId.replace("ticket_modal_", "");
+  const type = TICKET_TYPES[typeKey];
+
+  if (!type) {
+    await interaction.reply({
+      content: "Ismeretlen ticket típus.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (!TICKET_CATEGORY_ID || !TICKET_STAFF_ROLE_ID) {
+    await interaction.reply({
+      content: "Hiányzik a ticket rendszer valamelyik ENV változója.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.reply({
+      content: "Ez csak szerveren használható.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const category = guild.channels.cache.get(TICKET_CATEGORY_ID)
+    || await guild.channels.fetch(TICKET_CATEGORY_ID).catch(() => null);
+
+  if (!category) {
+    await interaction.reply({
+      content: "A ticket kategória nem található.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const existing = guild.channels.cache.find((ch) => {
+    if (ch.parentId !== TICKET_CATEGORY_ID) return false;
+    return ch.permissionOverwrites?.cache?.has(interaction.user.id);
+  });
+
+  if (existing) {
+    await interaction.reply({
+      content: `Már van nyitott ticketed: ${existing}`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  const answers = type.questions.map((_, index) =>
+    interaction.fields.getTextInputValue(`q${index + 1}`)
+  );
+
+  const ticketNumber = generateTicketNumber();
+  const channelName = `${sanitizeChannelName(type.channelPrefix)}-${ticketNumber}`;
+
+  const ticketChannel = await guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: TICKET_CATEGORY_ID,
+    topic: type.label,
+    permissionOverwrites: [
+      {
+        id: guild.roles.everyone.id,
+        deny: [PermissionsBitField.Flags.ViewChannel],
+      },
+      {
+        id: interaction.user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.AttachFiles,
+          PermissionsBitField.Flags.EmbedLinks,
+        ],
+      },
+      {
+        id: TICKET_STAFF_ROLE_ID,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.AttachFiles,
+          PermissionsBitField.Flags.EmbedLinks,
+        ],
+      },
+      {
+        id: client.user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.ManageChannels,
+          PermissionsBitField.Flags.AttachFiles,
+          PermissionsBitField.Flags.EmbedLinks,
+        ],
+      },
+    ],
+  });
+
+  const dynamicFields = type.questions.map((question, index) => ({
+    name: question.embedName || question.label,
+    value: limitField(answers[index]),
+    inline: false
+  }));
+
+  const ticketEmbed = new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setTitle(`🎫 ${type.label}`)
+    .setDescription("Új ticket érkezett.")
+    .addFields(
+      {
+        name: "Létrehozó",
+        value: `${interaction.user} (\`${interaction.user.id}\`)`,
+        inline: false
+      },
+      ...dynamicFields
+    )
+    .setTimestamp();
+
+  await ticketChannel.send({
+    content: `<@${interaction.user.id}>`,
+    embeds: [ticketEmbed],
+    components: [buildTicketCloseButton()]
+  });
+
+  await interaction.reply({
+    content: `✅ A ticketed létrejött: ${ticketChannel}`,
+    ephemeral: true
+  });
+}
+
+async function handleTicketClose(interaction) {
+  const channel = interaction.channel;
+  const member = interaction.member;
+  const guild = interaction.guild;
+
+  const isOwner = channel?.permissionOverwrites?.cache?.has(interaction.user.id);
+
+  let hasRequiredRoleOrHigher = false;
+
+  if (member && guild && TICKET_STAFF_ROLE_ID) {
+    const minimumRole =
+      guild.roles.cache.get(TICKET_STAFF_ROLE_ID) ||
+      await guild.roles.fetch(TICKET_STAFF_ROLE_ID).catch(() => null);
+
+    if (minimumRole) {
+      hasRequiredRoleOrHigher = member.roles.highest.position >= minimumRole.position;
+    }
+  }
+
+  if (!isOwner && !hasRequiredRoleOrHigher) {
+    await interaction.reply({
+      content: "Nincs jogosultságod a ticket lezárásához.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  await interaction.reply({
+    content: "🔒 A ticket lezárásra került. A csatorna törlődik...",
+    ephemeral: true
+  });
+
+  setTimeout(async () => {
+    try {
+      await channel.delete("Ticket lezárva");
+    } catch (error) {
+      console.error("❌ Ticket törlési hiba:", error);
+    }
+  }, 1500);
+}
+
+client.on("interactionCreate", async (interaction) => {
+  try {
+    if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === "adminpanel") {
+        await adminFeedback.sendPanel(interaction);
+        return;
+      }
+
+      if (interaction.commandName === "adminreset") {
+        await adminFeedback.resetData(interaction);
+        return;
+      }
+
+      if (interaction.commandName === "sendticketpanels") {
+        await handleSendTicketPanels(interaction);
+        return;
+      }
+    }
+
+    if (interaction.isModalSubmit()) {
+      await adminFeedback.handleModal(interaction);
+      if (interaction.customId.startsWith("ticket_modal_")) {
+        await handleTicketModalSubmit(interaction);
+        return;
+      }
+    }
+
+    if (interaction.isButton()) {
+     // 🔘 ADMIN FEEDBACK GOMB
+if (interaction.isButton()) {
+  await adminFeedback.handleButton(interaction);
+}
+      if (
+        interaction.customId === "accept_adminseged" ||
+        interaction.customId === "reject_adminseged" ||
+        interaction.customId === "accept_admin" ||
+        interaction.customId === "reject_admin"
+      ) {
+        await handleApplicationDecision(interaction);
+        return;
+      }
+
+      if (interaction.customId.startsWith("ticket_open_")) {
+        await handleTicketOpenButton(interaction);
+        return;
+      }
+
+      if (interaction.customId === "ticket_close") {
+        await handleTicketClose(interaction);
+        return;
+      }
+
+      await interaction.reply({
+        content: "Ismeretlen gomb.",
+        ephemeral: true
+      });
     }
   } catch (error) {
     console.error("❌ Hiba interactionCreate közben:", error);
@@ -336,7 +1061,7 @@ client.on("interactionCreate", async (interaction) => {
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
-          content: "Hiba történt a gomb feldolgozása közben.",
+          content: "Hiba történt a művelet feldolgozása közben.",
           ephemeral: true,
         });
       } catch {}
@@ -350,4 +1075,8 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
 });
 
-client.login(process.env.DISCORD_TOKEN);
+console.log("DISCORD_TOKEN megvan:", !!DISCORD_TOKEN);
+console.log("DISCORD_TOKEN hossza:", DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
+console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) : "nincs");
+
+client.login(DISCORD_TOKEN);

@@ -440,6 +440,268 @@ button.submit-btn:hover::before{
   .logo-title{font-size:40px;}
   .rules{padding:18px;}
 }
+.submit-btn{
+  margin-top:26px;
+  width:100%;
+  min-height:56px;
+  padding:15px 18px;
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:14px;
+  background:linear-gradient(180deg, rgba(31,143,78,1), rgba(23,107,58,1));
+  color:#06120a;
+  font-weight:800;
+  letter-spacing:.2px;
+  cursor:pointer;
+  box-shadow:
+    0 18px 40px rgba(31,143,78,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+  transition:
+    transform .25s ease,
+    filter .25s ease,
+    box-shadow .25s ease,
+    background .35s ease;
+}
+
+.submit-btn:hover{
+  transform:translateY(-1px);
+  filter:brightness(1.04);
+  box-shadow:
+    0 22px 60px rgba(31,143,78,0.24),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.submit-btn:disabled{
+  cursor:not-allowed;
+  opacity:1;
+}
+
+.progress-bar{
+  position:absolute;
+  inset:0 auto 0 0;
+  width:0%;
+  height:100%;
+  border-radius:14px;
+  background:linear-gradient(
+    90deg,
+    rgba(255,255,255,0.10) 0%,
+    rgba(255,255,255,0.18) 20%,
+    rgba(255,255,255,0.28) 50%,
+    rgba(255,255,255,0.18) 80%,
+    rgba(255,255,255,0.10) 100%
+  );
+  transition:width 4.2s cubic-bezier(.22,.61,.36,1);
+  z-index:1;
+}
+
+.progress-shine{
+  position:absolute;
+  top:0;
+  left:-30%;
+  width:28%;
+  height:100%;
+  opacity:0;
+  z-index:2;
+  background:linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,0.28),
+    rgba(255,255,255,0.46),
+    rgba(255,255,255,0.28),
+    transparent
+  );
+  transform:skewX(-20deg);
+  filter:blur(2px);
+}
+
+.btn-content{
+  position:relative;
+  z-index:3;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  min-height:24px;
+}
+
+.btn-label{
+  transition:
+    opacity .35s ease,
+    transform .35s ease,
+    letter-spacing .35s ease;
+}
+
+.btn-check{
+  position:absolute;
+  opacity:0;
+  transform:scale(.4) rotate(-25deg);
+  transition:
+    opacity .35s ease,
+    transform .45s cubic-bezier(.2,.8,.2,1.2);
+  font-size:20px;
+  line-height:1;
+}
+
+.submit-btn.loading .progress-bar{
+  width:100%;
+}
+
+.submit-btn.loading .progress-shine{
+  opacity:1;
+  animation:shineSweep 1.15s linear infinite;
+}
+
+.submit-btn.loading .btn-label{
+  letter-spacing:.3px;
+}
+
+.submit-btn.success{
+  background:linear-gradient(180deg, #2bbf6a, #1f9d57);
+  box-shadow:
+    0 20px 55px rgba(43,191,106,0.28),
+    0 0 22px rgba(43,191,106,0.20);
+}
+
+.submit-btn.success .btn-check{
+  opacity:1;
+  transform:scale(1) rotate(0deg);
+}
+
+.submit-btn.error{
+  background:linear-gradient(180deg, #d9534f, #b63f3b);
+  color:#fff;
+  box-shadow:
+    0 18px 45px rgba(217,83,79,0.24),
+    0 0 18px rgba(217,83,79,0.14);
+}
+
+.submit-btn.resetting .progress-bar{
+  transition:width .45s ease;
+}
+
+@keyframes shineSweep{
+  0%{ left:-30%; }
+  100%{ left:115%; }
+}
+.validation-summary{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:0 0 18px;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid rgba(255, 196, 64, 0.28);
+  background:rgba(255, 196, 64, 0.08);
+  color:#ffe08a;
+  font-size:13px;
+  font-weight:700;
+  box-shadow:0 12px 30px rgba(0,0,0,0.18);
+  backdrop-filter:blur(8px);
+  opacity:0;
+  transform:translateY(-8px);
+  pointer-events:none;
+  transition:opacity .28s ease, transform .28s ease;
+}
+
+.validation-summary.show{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+
+.validation-summary-icon{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255, 196, 64, 0.18);
+  color:#ffd35a;
+  font-weight:900;
+}
+
+.error-message{
+  max-height:0;
+  opacity:0;
+  overflow:hidden;
+  transform:translateY(-4px);
+  transition:
+    max-height .35s ease,
+    opacity .35s ease,
+    transform .35s ease,
+    margin-top .35s ease;
+  color:#ffd76a;
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:.15px;
+}
+
+.error-message.show{
+  max-height:32px;
+  opacity:1;
+  transform:translateY(0);
+  margin-top:8px;
+}
+/* ===== MODERN VALIDÁCIÓ ===== */
+
+.form-group{
+  position:relative;
+}
+
+.input-error{
+  border:1px solid rgba(255, 196, 64, 0.95) !important;
+  background:rgba(255, 196, 64, 0.08) !important;
+  box-shadow:
+    0 0 0 4px rgba(255, 196, 64, 0.10),
+    0 0 18px rgba(255, 196, 64, 0.18),
+    0 10px 24px rgba(0,0,0,0.22) !important;
+  transition:border-color .55s ease, background .55s ease, box-shadow .55s ease;
+}
+
+.input-error.fade-out{
+  border-color:rgba(255, 196, 64, 0) !important;
+  background:rgba(255, 196, 64, 0) !important;
+  box-shadow:
+    0 0 0 0 rgba(255, 196, 64, 0),
+    0 0 0 rgba(255, 196, 64, 0),
+    0 10px 24px rgba(0,0,0,0) !important;
+}
+
+.error-message{
+  max-height:0;
+  opacity:0;
+  overflow:hidden;
+  transform:translateY(-4px);
+  margin-top:0;
+  transition:max-height .35s ease, opacity .35s ease, transform .35s ease, margin-top .35s ease;
+}
+
+.error-message.show{
+  max-height:32px;
+  opacity:1;
+  transform:translateY(0);
+  margin-top:8px;
+}
+
+.error-message.fade-out{
+  opacity:0;
+  transform:translateY(-4px);
+  max-height:0;
+  margin-top:0;
+}
+
+.form-group.error-label label{
+  color:#ffe08a;
+  text-shadow:0 0 12px rgba(255,215,106,0.08);
+  transition:color .45s ease, text-shadow .45s ease;
+}
+
+.form-group.error-label.fade-out label{
+  color:rgba(255,255,255,0.92);
+  text-shadow:none;
+}
 </style>
 </head>
 <body>
@@ -483,59 +745,78 @@ button.submit-btn:hover::before{
       </ul>
     </div>
 
-    <form id="adminForm">
+    <form id="adminForm" novalidate>
+      <div class="validation-summary" id="validationSummary">
+  <span class="validation-summary-icon">!</span>
+  <span>Kérlek töltsd ki a kiemelt mezőket.</span>
+</div>
       <div class="section-title fade-in"><span class="badge">01.</span> Alapadatok</div>
-
       <div class="form-group fade-in">
         <label>Mi a karaktered neve?</label>
         <input type="text" name="karakterNev" placeholder="- Válaszod -" required>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi a Discord User ID-d?</label>
         <input type="text" name="discordNev" placeholder="- Hol találom? > Beállítás > Fejlett > Fejlesztői mód > Jobb klikk a profilra > Azonosító másolása -" required>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
+      </div>
+
+      <div class="form-group fade-in">
+        <label>Mi a Discord neved?</label>
+        <input type="text" name="discord2" placeholder="- Válaszod -" required>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Hány éves vagy?</label>
-        <input type="text" name="eletkor" placeholder="- Válaszod -" required>
+        <input type="number" name="eletkor" placeholder="- Válaszod -" required>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mennyi ideje játszol az internalGamingen?</label>
-        <input type="text" name="jatszottIdo" placeholder="- Válaszod -" required>
+        <textarea name="jatszottIdo" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Honnan találtál rá a szerverre?</label>
-        <input type="text" name="internalTalalat" placeholder="- Válaszod -" required>
+        <textarea name="internalTalalat" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">02.</span> Időbeosztás</div>
 
       <div class="form-group fade-in">
         <label>Mikor szoktál általában fent lenni hétköznap?</label>
-        <input type="text" name="hetkoznapAktivitas" placeholder="- Válaszod -" required>
+        <textarea name="hetkoznapAktivitas" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mikor szoktál általában fent lenni hétvégén?</label>
-        <input type="text" name="hetvegeAktivitas" placeholder="- Válaszod -" required>
+        <textarea name="hetvegeAktivitas" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Heti hány órát tudsz aktívan játszani?</label>
-        <input type="text" name="hetiOra" placeholder="- Válaszod -" required>
+        <textarea name="hetiOra" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mennyi időt tudnál az Admin Staff feladataira szánni?</label>
-        <input type="text" name="staffIdo" placeholder="- Válaszod -" required>
+        <textarea name="staffIdo" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Változik ez az időbeosztásod gyakran?</label>
         <textarea name="idobeosztasValtozas" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">03.</span> Motiváció</div>
@@ -543,26 +824,31 @@ button.submit-btn:hover::before{
       <div class="form-group fade-in">
         <label>Miért szeretnél az Admin Staff tagja lenni?</label>
         <textarea name="motivacio" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi az, ami megfogott az internalGamingben?</label>
         <textarea name="miFogottMeg" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mit gondolsz, miben tudnál segíteni a szervernek?</label>
         <textarea name="segiteni" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Van olyan dolog, amit változtatnál, ha lehetne?</label>
         <textarea name="valtoztatna" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi a véleményed a jelenlegi Admin Staffról?</label>
         <textarea name="staffVelemeny" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">04.</span> Tapasztalat</div>
@@ -570,26 +856,31 @@ button.submit-btn:hover::before{
       <div class="form-group fade-in">
         <label>Voltál-e már admin vagy adminsegéd más szerveren?</label>
         <textarea name="voltAdmin" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Ha igen, hol és mennyi ideig?</label>
         <textarea name="holAdmin" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Miért hagytad ott, vagy miért maradtál?</label>
         <textarea name="miertHagytad" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Van olyan életbeli tapasztalatod, ami hasznos lehet itt?</label>
         <textarea name="eletTapasztalat" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Hogyan kezeled a stresszt és a nyomást?</label>
         <textarea name="stressz" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">05.</span> Szituációk</div>
@@ -597,36 +888,43 @@ button.submit-btn:hover::before{
       <div class="form-group fade-in">
         <label>Mit tennél, ha látnád, hogy valaki metagamingel?</label>
         <textarea name="metagaming" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Hogyan kezelnéd, ha két játékos összekülönbözne OOC-ben?</label>
         <textarea name="oocVita" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Egy új játékos folyton megszegi a szabályokat. Mi a teendő?</label>
         <textarea name="szabalySzeges" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Ha egy barátod szabálytalankodna, ugyanúgy kezelnéd?</label>
         <textarea name="baratSzabaly" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Valaki szerint tévedtél egy döntésben. Hogyan reagálnál?</label>
         <textarea name="tevdes" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Látod, hogy egy másik staff tag hibázik. Szólnál?</label>
         <textarea name="staffHiba" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Egy játékos provokál és személyeskedik veled. Mit teszel?</label>
         <textarea name="provokal" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">06.</span> Rólad mélyebben</div>
@@ -634,36 +932,43 @@ button.submit-btn:hover::before{
       <div class="form-group fade-in">
         <label>Milyen vagy konfliktushelyzetben?</label>
         <textarea name="konfliktus" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Tudsz-e kritikát elfogadni?</label>
         <textarea name="kritika" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi az, amiben biztosan számíthatnak rád?</label>
         <textarea name="mibenSzamithatunk" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi az, amit nem tudsz vállalni?</label>
         <textarea name="nemVallal" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Milyen staff tag szeretnél lenni - aktív, látható vagy inkább háttérben dolgozó?</label>
         <textarea name="staffTipus" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi az, ami ki tud hozni a sodrodból?</label>
         <textarea name="sodor" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Hogyan reagálsz, ha unatkozol a játéktól?</label>
         <textarea name="unatkozik" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="section-title fade-in"><span class="badge">07.</span> Egyéb</div>
@@ -671,29 +976,42 @@ button.submit-btn:hover::before{
       <div class="form-group fade-in">
         <label>Van-e olyan, amit még el szeretnél mondani?</label>
         <textarea name="egyeb" placeholder="- Válaszod -"></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Kérdeznél bármit a vezetőségtől?</label>
         <textarea name="kerdes" placeholder="- Válaszod -"></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mennyire vagy türelmes az új játékosokkal?</label>
         <textarea name="turelmes" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Szoktál-e figyelmeztetés előtt büntetni, vagy szigorú vagy?</label>
         <textarea name="buntetes" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
       <div class="form-group fade-in">
         <label>Mi a véleményed a jelenlegi szabályzatról?</label>
         <textarea name="szabalyzat" placeholder="- Válaszod -" required></textarea>
+        <div class="error-message">Kérlek töltsd ki ezt a mezőt.</div>
       </div>
 
-      <button type="submit" class="submit-btn fade-in">Jelentkezés véglegesítése</button>
+<button type="submit" class="submit-btn fade-in">
+  <span class="progress-bar"></span>
+  <span class="progress-shine"></span>
+
+  <span class="btn-content">
+    <span class="btn-label">Jelentkezés véglegesítése</span>
+    <span class="btn-check">✓</span>
+  </span>
+</button>
     </form>
 
   </div>
@@ -707,6 +1025,7 @@ const faders = document.querySelectorAll(".fade-in");
 
 function createBgParticles() {
   const container = document.querySelector(".bg-particles");
+  if (!container) return;
 
   for (let i = 0; i < 80; i++) {
     const dot = document.createElement("span");
@@ -728,7 +1047,12 @@ function goBackToChooser() {
 }
 
 function startLogoFollow() {
-  let targetX = 0, targetY = 0, logoX = 0, logoY = 0;
+  if (!mainLogo) return;
+
+  let targetX = 0;
+  let targetY = 0;
+  let logoX = 0;
+  let logoY = 0;
   const easing = 0.05;
 
   document.addEventListener("mousemove", (e) => {
@@ -747,10 +1071,135 @@ function startLogoFollow() {
 }
 
 function checkFade() {
-  const trigger = window.innerHeight;
+  const trigger = window.innerHeight * 1;
+
   faders.forEach((el) => {
     const top = el.getBoundingClientRect().top;
     if (top < trigger) el.classList.add("visible");
+  });
+}
+
+function setupModernValidation(formId) {
+  const form = document.getElementById(formId);
+  if (!form) return;
+
+  const summary = form.querySelector(".validation-summary");
+  const fields = form.querySelectorAll("input, textarea");
+
+  function showFieldError(field, message = "Kérlek töltsd ki ezt a mezőt.") {
+    const group = field.closest(".form-group");
+    if (!group) return;
+
+    const error = group.querySelector(".error-message");
+
+    clearTimeout(field._errorTimeout);
+    clearTimeout(field._fadeTimeout);
+
+    field.classList.remove("fade-out", "input-valid");
+    group.classList.remove("fade-out");
+    if (error) error.classList.remove("fade-out");
+
+    field.classList.add("input-error");
+
+    field.classList.remove("shake-field");
+    void field.offsetWidth;
+    field.classList.add("shake-field");
+
+    group.classList.add("error-label");
+
+    if (error) {
+      error.textContent = message;
+      error.classList.add("show");
+    }
+
+    field._errorTimeout = setTimeout(() => {
+      field.classList.add("fade-out");
+      group.classList.add("fade-out");
+      if (error) error.classList.add("fade-out");
+
+      field._fadeTimeout = setTimeout(() => {
+        field.classList.remove("input-error", "shake-field", "fade-out");
+        group.classList.remove("error-label", "fade-out");
+        if (error) error.classList.remove("show", "fade-out");
+      }, 550);
+    }, 6000);
+  }
+
+  function clearFieldError(field) {
+    const group = field.closest(".form-group");
+    if (!group) return;
+
+    const error = group.querySelector(".error-message");
+
+    clearTimeout(field._errorTimeout);
+    clearTimeout(field._fadeTimeout);
+
+    field.classList.remove("input-error", "shake-field", "fade-out");
+    group.classList.remove("error-label", "fade-out");
+
+    if (field.value.trim()) {
+      field.classList.add("input-valid");
+    } else {
+      field.classList.remove("input-valid");
+    }
+
+    if (error) {
+      error.classList.remove("show", "fade-out");
+    }
+  }
+
+  function validateField(field) {
+    const value = field.value.trim();
+
+    if (field.hasAttribute("required") && !value) {
+      showFieldError(field);
+      return false;
+    }
+
+    if (field.type === "number" && value) {
+      const numeric = Number(value);
+      if (Number.isNaN(numeric) || numeric <= 0) {
+        showFieldError(field, "Kérlek adj meg egy érvényes számot.");
+        return false;
+      }
+    }
+
+    clearFieldError(field);
+    return true;
+  }
+
+  fields.forEach((field) => {
+    field.addEventListener("input", () => validateField(field));
+    field.addEventListener("blur", () => validateField(field));
+  });
+
+  form.addEventListener("submit", function (e) {
+    let isValid = true;
+    let firstInvalid = null;
+
+    fields.forEach((field) => {
+      const ok = validateField(field);
+      if (!ok && !firstInvalid) firstInvalid = field;
+      if (!ok) isValid = false;
+    });
+
+    if (!isValid) {
+      e.preventDefault();
+
+      if (summary) {
+        summary.classList.add("show");
+        setTimeout(() => summary.classList.remove("show"), 2800);
+      }
+
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+
+        setTimeout(() => firstInvalid.focus(), 250);
+      }
+    }
   });
 }
 
@@ -760,28 +1209,68 @@ window.addEventListener("load", () => {
   createBgParticles();
 
   requestAnimationFrame(() => {
-    content.style.opacity = "1";
-    content.style.filter = "blur(0)";
-    content.style.transform = "translateY(0)";
+    if (content) {
+      content.style.opacity = "1";
+      content.style.filter = "blur(0)";
+      content.style.transform = "translateY(0)";
+    }
   });
 
   startLogoFollow();
   checkFade();
 });
 
+setupModernValidation("adminForm");
+
 document.getElementById("adminForm").addEventListener("submit", async function (e) {
   e.preventDefault();
 
-  const submitButton = this.querySelector('button[type="submit"]');
-  const originalButtonText = submitButton.textContent;
+  const fields = this.querySelectorAll("input, textarea");
+  const firstInvalid = [...fields].find((field) => {
+    if (field.hasAttribute("required") && !field.value.trim()) return true;
+    if (field.type === "number" && field.value.trim() && Number(field.value) <= 0) return true;
+    return false;
+  });
 
-  submitButton.disabled = true;
-  submitButton.textContent = "Küldés folyamatban...";
+  if (firstInvalid) return;
+
+  const btn = this.querySelector(".submit-btn");
+  const label = btn.querySelector(".btn-label");
+  const check = btn.querySelector(".btn-check");
+  const bar = btn.querySelector(".progress-bar");
+
+  const setLabelSmooth = (text) => {
+    label.style.opacity = "0";
+    label.style.transform = "translateY(6px)";
+    setTimeout(() => {
+      label.textContent = text;
+      label.style.opacity = "1";
+      label.style.transform = "translateY(0)";
+    }, 180);
+  };
+
+  btn.disabled = true;
+  btn.classList.remove("success", "error", "resetting");
+  if (check) {
+    check.style.opacity = "0";
+    check.style.transform = "scale(.4) rotate(-25deg)";
+  }
+  if (bar) {
+    bar.style.width = "0%";
+  }
+
+  void btn.offsetWidth;
+
+  btn.classList.add("loading");
+  setLabelSmooth("Jelentkezés elküldése");
 
   const formData = new FormData(this);
   const data = Object.fromEntries(formData.entries());
+  data.applicationType = "adminisztrator";
 
   try {
+    await new Promise((resolve) => setTimeout(resolve, 4200));
+
     const response = await fetch("https://internalgaming-production.up.railway.app/application", {
       method: "POST",
       headers: {
@@ -796,24 +1285,47 @@ document.getElementById("adminForm").addEventListener("submit", async function (
     try {
       result = JSON.parse(text);
     } catch {
-      result = { raw: text };
+      result = { success: false };
     }
 
-    console.log("HTTP státusz:", response.status);
-    console.log("Szerver válasz:", result);
+    btn.classList.remove("loading");
 
     if (response.ok && result.success) {
-      alert("Sikeresen elküldve!");
+      btn.classList.add("success");
+      setLabelSmooth("Jelentkezés elküldve");
       this.reset();
     } else {
-      alert(`Hiba történt: ${result.error || "ismeretlen hiba"}`);
+      btn.classList.add("error");
+      setLabelSmooth("Hiba történt");
+
+      setTimeout(() => {
+        btn.classList.add("resetting");
+        if (bar) bar.style.width = "0%";
+      }, 250);
+
+      setTimeout(() => {
+        btn.classList.remove("error", "resetting");
+        btn.disabled = false;
+        setLabelSmooth("Jelentkezés véglegesítése");
+      }, 1200);
     }
   } catch (error) {
     console.error("Kapcsolódási hiba:", error);
-    alert("Nem sikerült kapcsolódni a szerverhez. Nézd meg az F12 konzolt.");
-  } finally {
-    submitButton.disabled = false;
-    submitButton.textContent = originalButtonText;
+
+    btn.classList.remove("loading");
+    btn.classList.add("error");
+    setLabelSmooth("Kapcsolódási hiba");
+
+    setTimeout(() => {
+      btn.classList.add("resetting");
+      if (bar) bar.style.width = "0%";
+    }, 250);
+
+    setTimeout(() => {
+      btn.classList.remove("error", "resetting");
+      btn.disabled = false;
+      setLabelSmooth("Jelentkezés véglegesítése");
+    }, 1200);
   }
 });
 </script>

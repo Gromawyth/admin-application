@@ -97,13 +97,14 @@ async function sendPanel(interaction) {
       .setTitle(`⭐ ${admin.name}`)
       .setColor(0x5865F2)
       .setDescription(
-        `**Szint:** ${admin.level}\n${admin.desc}`
+        `**Szint:** ${admin.level}\n
+        **Bemutatkozás:**${admin.desc}\n`
       )
       .addFields(
         {
           name: "📊 Összesítés",
-          value: `👍 Pozitív: **${stats.pos}**\n\n👎 Negatív: **${stats.neg}**`,
-          inline: false
+          value: `👍 **${stats.pos}** ┃ 👎 **${stats.neg}**`,
+          inline: true
         },
       );
 
@@ -133,7 +134,7 @@ const rulesEmbed = new EmbedBuilder()
     "⚠️ Egy játékos havonta legfeljebb **3 értékelést** adhat ugyanarra az adminra.\n" +
     "⚠️ Az értékelésnek valós tapasztalaton kell alapulnia.\n" +
     "⚠️ Indoklás nélkül vagy troll célból ne küldj értékelést.\n" +
-    "⚠️ A válaszaidat a vezetőség ellenőrizheti.\n\n" +
+    "⚠️ A válaszaidat a vezetőség ellenőrizheti.\n" +
     "⚠️ A visszaélések szankciót vonhatnak maguk után."
   );
 

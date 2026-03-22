@@ -234,19 +234,53 @@ const TICKET_TYPES = {
     description: "Fórumos probléma, egyéni összegű PP vásárlás, magánbirtok, egyedi jármű, elveszett tárgyak.",
     buttonStyle: ButtonStyle.Primary,
     modalTitle: "Vezetőségi ticket",
-    question1: "Mi a karaktered neve?",
-    question2: "Milyen ügyben szeretnél segítséget kérni?",
-    question3: "Kérlek, írd le részletesen a problémát vagy kérésedet."
+    questions: [
+      {
+        label: "Karaktered neve",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Milyen ügyben kérsz segítséget?",
+        embedName: "Milyen ügyben szeretnél segítséget kérni?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Részletes leírás",
+        embedName: "Kérlek, írd le részletesen a problémát vagy kérésedet.",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
   },
   frakcio: {
     label: "Frakció ügyek",
     channelPrefix: "frakcio",
-    description: "Frakcióval kapcsolatos kérdés, probléma, vagy vezetőségi egyeztetés.",
+    description: "Frakcióval kapcsolatos kérdés, probléma vagy vezetőségi egyeztetés.",
     buttonStyle: ButtonStyle.Primary,
     modalTitle: "Frakció ügyek",
-    question1: "Mi a karaktered neve?",
-    question2: "Melyik frakcióról van szó?",
-    question3: "Kérlek, írd le részletesen a problémát vagy kérésedet."
+    questions: [
+      {
+        label: "Karaktered neve",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Melyik frakcióról van szó?",
+        embedName: "Melyik frakcióról van szó?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Részletes leírás",
+        embedName: "Kérlek, írd le részletesen a problémát vagy kérésedet.",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
   },
   jatekosreport: {
     label: "Játékos report",
@@ -254,9 +288,26 @@ const TICKET_TYPES = {
     description: "Ha egy játékost szeretnél jelenteni szabályszegés, visszaélés vagy egyéb probléma miatt.",
     buttonStyle: ButtonStyle.Danger,
     modalTitle: "Játékos report",
-    question1: "Mi a karaktered neve?",
-    question2: "Kit szeretnél jelenteni? (karakternév vagy Discord ID)",
-    question3: "Kérlek, írd le részletesen az esetet, és ha van, csatolj bizonyítékot is."
+    questions: [
+      {
+        label: "Karaktered neve",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Kit szeretnél jelenteni?",
+        embedName: "Kit szeretnél jelenteni? (karakternév vagy Discord ID)",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Mi történt pontosan?",
+        embedName: "Kérlek, írd le részletesen az esetet, és ha van, csatolj bizonyítékot is.",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
   },
   adminreport: {
     label: "Admin report",
@@ -264,9 +315,26 @@ const TICKET_TYPES = {
     description: "Ha egy adminisztrátorral kapcsolatban szeretnél panaszt vagy észrevételt tenni.",
     buttonStyle: ButtonStyle.Danger,
     modalTitle: "Admin report",
-    question1: "Mi a karaktered neve?", 
-    question2: "Az érintett adminisztrátor neve:",
-    question3: "Kérlek, írd le részletesen, mi történt."
+    questions: [
+      {
+        label: "Karaktered neve",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Érintett admin neve",
+        embedName: "Az érintett adminisztrátor neve:",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Mi történt pontosan?",
+        embedName: "Kérlek, írd le részletesen, mi történt.",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
   },
   segitseg: {
     label: "Segítségkérés",
@@ -274,9 +342,26 @@ const TICKET_TYPES = {
     description: "Általános segítségkérés, elakadás, információkérés vagy technikai probléma.",
     buttonStyle: ButtonStyle.Success,
     modalTitle: "Segítségkérés",
-    question1: "Mi a karaktered neve?",    
-    question2: "Miben kérsz segítséget?",
-    question3: "Kérlek, írd le részletesen a problémát vagy kérdésedet."
+    questions: [
+      {
+        label: "Karaktered neve",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Miben kérsz segítséget?",
+        embedName: "Miben kérsz segítséget?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Részletes leírás",
+        embedName: "Kérlek, írd le részletesen a problémát vagy kérdésedet.",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
   },
   vasarlasi: {
     label: "Vásárlási / támogatói ügy",
@@ -284,9 +369,26 @@ const TICKET_TYPES = {
     description: "Ha vásárlással, támogatással vagy fizetéssel kapcsolatban van problémád, itt tudsz segítséget kérni.",
     buttonStyle: ButtonStyle.Success,
     modalTitle: "Vásárlási / támogatói ügy",
-    question1: "Mi a karaktered neve?",  
-    question2: "Miben van szükséged segítségre a vásárlással kapcsolatban?",
-    question3: "Írd le részletesen a problémát."
+    questions: [
+      {
+        label: "Karaktered neve",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Milyen vásárlási ügyed van?",
+        embedName: "Miben van szükséged segítségre a vásárlással kapcsolatban?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Részletes leírás",
+        embedName: "Írd le részletesen a problémát.",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
   },
   unban: {
     label: "Unban / enyhítési kérelem",
@@ -294,9 +396,26 @@ const TICKET_TYPES = {
     description: "Kitiltás, enyhítés, felülvizsgálat vagy döntésmódosítás kérése.",
     buttonStyle: ButtonStyle.Success,
     modalTitle: "Unban / enyhítési kérelem",
-    question1: "Mi a karaktered neve?",    
-    question2: "Screenshot a ban panelről:",
-    question3: "Miért szeretnél enyhítést, unbant kérni?"
+    questions: [
+      {
+        label: "Karaktered neve",
+        embedName: "Mi a karaktered neve?",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Ban panel screenshot linkje",
+        embedName: "Screenshot a ban panelről:",
+        style: TextInputStyle.Short,
+        maxLength: 4000
+      },
+      {
+        label: "Indoklás",
+        embedName: "Miért szeretnél enyhítést vagy unbant kérni?",
+        style: TextInputStyle.Paragraph,
+        maxLength: 4000
+      }
+    ]
   }
 };
 
@@ -354,25 +473,18 @@ function buildTicketModal(typeKey) {
     .setCustomId(`ticket_modal_${typeKey}`)
     .setTitle(type.modalTitle);
 
-  const input1 = new TextInputBuilder()
-    .setCustomId("subject")
-    .setLabel(type.question1)
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setMaxLength(100);
+  const rows = type.questions.map((question, index) => {
+    const input = new TextInputBuilder()
+      .setCustomId(`q${index + 1}`)
+      .setLabel(question.label)
+      .setStyle(question.style)
+      .setRequired(true)
+      .setMaxLength(question.maxLength);
 
-  const input2 = new TextInputBuilder()
-    .setCustomId("details")
-    .setLabel(type.question2)
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setMaxLength(1000);
+    return new ActionRowBuilder().addComponents(input);
+  });
 
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(input1),
-    new ActionRowBuilder().addComponents(input2)
-  );
-
+  modal.addComponents(...rows);
   return modal;
 }
 
@@ -750,8 +862,9 @@ async function handleTicketModalSubmit(interaction) {
     return;
   }
 
-  const subject = interaction.fields.getTextInputValue("subject");
-  const details = interaction.fields.getTextInputValue("details");
+  const answers = type.questions.map((_, index) =>
+    interaction.fields.getTextInputValue(`q${index + 1}`)
+  );
 
   const ticketNumber = generateTicketNumber();
   const channelName = `${sanitizeChannelName(type.channelPrefix)}-${ticketNumber}`;
@@ -800,6 +913,12 @@ async function handleTicketModalSubmit(interaction) {
     ],
   });
 
+  const dynamicFields = type.questions.map((question, index) => ({
+    name: question.embedName || question.label,
+    value: limitField(answers[index]),
+    inline: false
+  }));
+
   const ticketEmbed = new EmbedBuilder()
     .setColor(0x2ecc71)
     .setTitle(`🎫 ${type.label}`)
@@ -810,24 +929,15 @@ async function handleTicketModalSubmit(interaction) {
         value: `${interaction.user} (\`${interaction.user.id}\`)`,
         inline: false
       },
-      {
-        name: "Téma",
-        value: limitField(subject),
-        inline: false
-      },
-      {
-        name: "Leírás",
-        value: limitField(details),
-        inline: false
-      }
+      ...dynamicFields
     )
     .setTimestamp();
 
-await ticketChannel.send({
-  content: `<@${interaction.user.id}>`,
-  embeds: [ticketEmbed],
-  components: [buildTicketCloseButton()]
-});
+  await ticketChannel.send({
+    content: `<@${interaction.user.id}>`,
+    embeds: [ticketEmbed],
+    components: [buildTicketCloseButton()]
+  });
 
   await interaction.reply({
     content: `✅ A ticketed létrejött: ${ticketChannel}`,

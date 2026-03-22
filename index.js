@@ -248,8 +248,8 @@ const TICKET_TYPES = {
         maxLength: 4000
       },
       {
-        label: "Kérlek, írd le részletesen a problémát vagy kérésedet.",
-        embedName: "Kérlek, írd le részletesen a problémát vagy kérésedet.",
+        label: "Írd le részletesen a problémát vagy kérésedet",
+        embedName: "Írd le részletesen a problémát vagy kérésedet",
         style: TextInputStyle.Paragraph,
         maxLength: 4000
       }
@@ -275,8 +275,8 @@ const TICKET_TYPES = {
         maxLength: 4000
       },
       {
-        label: "Kérlek, írd le részletesen a problémát vagy kérésedet.",
-        embedName: "Kérlek, írd le részletesen a problémát vagy kérésedet.",
+        label: "Részletezd a problémát vagy kérésedet",
+        embedName: "Részletezd a problémát vagy kérésedet",
         style: TextInputStyle.Paragraph,
         maxLength: 4000
       }
@@ -296,14 +296,14 @@ const TICKET_TYPES = {
         maxLength: 4000
       },
       {
-        label: "Kit szeretnél jelenteni? (karakternév vagy Discord ID)",
-        embedName: "Kit szeretnél jelenteni? (karakternév vagy Discord ID)",
+        label: "Kit szeretnél jelenteni? (karakternév)",
+        embedName: "Kit szeretnél jelenteni? (karakternév)",
         style: TextInputStyle.Short,
         maxLength: 4000
       },
       {
-        label: "Kérlek, írd le részletesen az esetet, és ha van, csatolj bizonyítékot is.",
-        embedName: "Kérlek, írd le részletesen az esetet, és ha van, csatolj bizonyítékot is.",
+        label: "Kérlek, írd le részletesen, mi történt",
+        embedName: "Kérlek, írd le részletesen, mi történt",
         style: TextInputStyle.Paragraph,
         maxLength: 4000
       }
@@ -323,14 +323,14 @@ const TICKET_TYPES = {
         maxLength: 4000
       },
       {
-        label: "Az érintett adminisztrátor neve:",
-        embedName: "Az érintett adminisztrátor neve:",
+        label: "Az érintett adminisztrátor neve",
+        embedName: "Az érintett adminisztrátor neve",
         style: TextInputStyle.Short,
         maxLength: 4000
       },
       {
-        label: "Kérlek, írd le részletesen, mi történt.",
-        embedName: "Kérlek, írd le részletesen, mi történt.",
+        label: "Kérlek, írd le részletesen, mi történt",
+        embedName: "Kérlek, írd le részletesen, mi történt",
         style: TextInputStyle.Paragraph,
         maxLength: 4000
       }
@@ -356,8 +356,8 @@ const TICKET_TYPES = {
         maxLength: 4000
       },
       {
-        label: "Kérlek, írd le részletesen a problémát vagy kérdésedet.",
-        embedName: "Kérlek, írd le részletesen a problémát vagy kérdésedet.",
+        label: "Részletezd a problémát vagy kérdésedet.",
+        embedName: "Részletezd a problémát vagy kérdésedet.",
         style: TextInputStyle.Paragraph,
         maxLength: 4000
       }
@@ -377,14 +377,14 @@ const TICKET_TYPES = {
         maxLength: 4000
       },
       {
-        label: "Miben van szükséged segítségre a vásárlással kapcsolatban?",
-        embedName: "Miben van szükséged segítségre a vásárlással kapcsolatban?",
+        label: "Miben van szükséged segítségre?",
+        embedName: "Miben van szükséged segítségre?",
         style: TextInputStyle.Short,
         maxLength: 4000
       },
       {
-        label: "Írd le részletesen a problémát.",
-        embedName: "Írd le részletesen a problémát.",
+        label: "Írd le részletesen a problémát",
+        embedName: "Írd le részletesen a problémát",
         style: TextInputStyle.Paragraph,
         maxLength: 4000
       }

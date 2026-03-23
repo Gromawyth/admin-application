@@ -302,7 +302,7 @@ Fontos szabályok:
 - Az összes megadott szöveget együtt értelmezd, ne csak egy mezőt nézz.
 - Ha sértő, lekezelő vagy bunkó viselkedés szerepel bármelyik értékelésben, azt mindenképp említsd meg.
 - Ha pozitív és negatív dolog is van, mindkettőt röviden írd le.
-- A végén legyen egyértelmű a véleményed arról, hogy összességében inkább jó vagy inkább rossz admin.
+- A végén legyen egyértelmű a véleményed róla.
 
 Stílus:
 - Úgy írj, mintha egy játékos mondaná.

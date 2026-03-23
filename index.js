@@ -66,11 +66,10 @@ const client = new Client({
     Partials.GuildMember
   ],
 });
-registerLogs(client);
 // 🔽 ÚJ: külső fájl betöltése
 const adminFeedback = require("./adminfeedback");
 const registerLogs = require("./logs");
-
+registerLogs(client);
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";
   const text = String(value).trim();

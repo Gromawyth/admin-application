@@ -1020,9 +1020,27 @@ async function handleTicketClose(interaction) {
 
 client.on("interactionCreate", async (interaction) => {
   try {
-  if (interaction.customId.startsWith("bug_")) {
-    return;
-  }
+if (
+  interaction.isButton() &&
+  (
+    interaction.customId.startsWith("bug_") ||
+    interaction.customId.startsWith("bug:")
+  )
+) {
+  return;
+}
+
+// BUGREPORT modalok → szintén ne kezelje itt
+if (
+  interaction.isModalSubmit() &&
+  interaction.customId.startsWith("bugmodal:")
+) {
+  return;
+}
+
+if (interaction.isModalSubmit() && interaction.customId.startsWith("bugmodal:")) {
+  return;
+}
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "adminpanel") {
         await adminFeedback.sendPanel(interaction);

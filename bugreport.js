@@ -4,6 +4,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
 } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
@@ -16,38 +17,29 @@ const CONFIG = {
   BUG_FORUM_CHANNEL_ID: "1461015207315767428",
   BUG_SUMMARY_CHANNEL_ID: "1485746594333589657",
 
-  // OpenAI kulcs közvetlenül a JS-ben
-OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  // Modell
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   OPENAI_MODEL: "gpt-5-mini",
 
-  // Ha az AI legalább ekkora bizonyossággal mondja, hogy egyezés van, összevonjuk
   AI_MATCH_CONFIDENCE: 0.72,
-
-  // 24 óra
-  DELETE_AFTER_MS: 24 * 60 * 60 * 1000,
-
-  // Ha az AI nem elérhető vagy hibázik, ezzel a helyi hasonlósággal próbálkozunk
   FALLBACK_SIMILARITY_THRESHOLD: 0.58,
 
-  // Max ennyi nyitott bugot adunk át az AI-nak összehasonlításhoz
   MAX_OPEN_BUGS_FOR_AI: 25,
-
-  // Max ennyi korábbi tanítási példát kapjon meg az AI
   MAX_TRAINING_EXAMPLES: 30,
+
+  DELETE_AFTER_MS: 24 * 60 * 60 * 1000, // csak Megoldás / Elutasítás esetén
 };
 
 const DATA_FILE = path.join(__dirname, "bugreport-data.json");
 
 const openai =
-  CONFIG.OPENAI_API_KEY && !CONFIG.OPENAI_API_KEY.includes("IDE_IRD")
+  CONFIG.OPENAI_API_KEY && !String(CONFIG.OPENAI_API_KEY).includes("IDE_IRD")
     ? new OpenAI({ apiKey: CONFIG.OPENAI_API_KEY })
     : null;
 
 const deleteTimers = new Map();
 
 // =========================
-// JSON KEZELÉS
+// JSON
 // =========================
 function createDefaultData() {
   return {
@@ -87,6 +79,17 @@ function loadData() {
       };
     }
 
+    for (const bug of Object.values(parsed.bugs)) {
+      if (!Array.isArray(bug.threads)) bug.threads = [];
+      if (!bug.status) bug.status = "Nyitott";
+      if (!bug.createdAt) bug.createdAt = Date.now();
+      if (!bug.updatedAt) bug.updatedAt = Date.now();
+      if (typeof bug.aiSummary !== "string") bug.aiSummary = bug.description || "";
+      if (typeof bug.aiDecisionReason !== "string") bug.aiDecisionReason = "";
+      if (!bug.lastForumFeedbackAt) bug.lastForumFeedbackAt = null;
+      if (!bug.lastForumFeedbackType) bug.lastForumFeedbackType = null;
+    }
+
     return parsed;
   } catch (error) {
     console.error("[BUGREPORT] Hibás JSON, újra létrehozom:", error);
@@ -107,7 +110,7 @@ function makeBugId() {
 }
 
 // =========================
-// SEGÉD FÜGGVÉNYEK
+// SEGÉDEK
 // =========================
 function normalizeText(text = "") {
   return String(text)
@@ -121,6 +124,33 @@ function normalizeText(text = "") {
 
 function limitText(text = "", max = 1000) {
   const value = String(text || "").trim();
+  if (!value) return "-";
+  if (value.length <= max) return value;
+  return value.slice(0, max - 3) + "...";
+}
+
+function compactText(text = "") {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanupShortText(text = "", max = 140) {
+  let value = compactText(text);
+
+  value = value
+    .replace(/Szükséges reprodukciós lépések és környezeti adatok a hiba izolálásához\.?/gi, "Érdemes még pár részletet írni róla.")
+    .replace(/nem minősül valós hibának, vagy a leírt jelenség nem reprodukálható hibaként\.?/gi, "nem tudtuk hibaként elfogadni.")
+    .replace(/reprodukálható/gi, "előjön")
+    .replace(/nem reprodukálható/gi, "nem tudtuk előhozni")
+    .replace(/izolálásához/gi, "pontosításához")
+    .replace(/környezeti adatok/gi, "plusz információk")
+    .replace(/fejlesztőbarát/gi, "rövid")
+    .replace(/folyamatosan/gi, "többször")
+    .replace(/mappból/gi, "pályáról");
+
+  value = compactText(value);
+
   if (!value) return "-";
   if (value.length <= max) return value;
   return value.slice(0, max - 3) + "...";
@@ -150,35 +180,54 @@ function getThreadMentions(threadIds = []) {
   return shown.join("\n") + extra;
 }
 
-function createButtons(bugId) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`bug_accept_${bugId}`)
-      .setLabel("Megoldva")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`bug_reject_${bugId}`)
-      .setLabel("Elutasítva")
-      .setStyle(ButtonStyle.Danger)
-  );
-}
-
 function getStatusStyle(status) {
-  if (status === "Megoldva") {
+  if (status === "Megoldás") {
     return { color: 0x2ecc71, emoji: "✅" };
   }
 
-  if (status === "Elutasítva") {
+  if (status === "Elutasítás") {
     return { color: 0xe74c3c, emoji: "❌" };
+  }
+
+  if (status === "Dolgozunk rajta") {
+    return { color: 0x3498db, emoji: "🛠️" };
   }
 
   return { color: 0xf1c40f, emoji: "⏳" };
 }
 
+function createButtons(bugId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`bug_solved_${bugId}`)
+      .setLabel("Megoldás")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId(`bug_rejected_${bugId}`)
+      .setLabel("Elutasítás")
+      .setStyle(ButtonStyle.Danger),
+
+    new ButtonBuilder()
+      .setCustomId(`bug_working_${bugId}`)
+      .setLabel("Dolgozunk rajta")
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
 function buildBugEmbed(bug) {
   const style = getStatusStyle(bug.status);
 
-  const summaryText = bug.aiSummary || bug.description || "Nincs összefoglaló.";
+  const summaryText = cleanupShortText(
+    bug.aiSummary || bug.description || "Nincs összefoglaló.",
+    220
+  );
+
+  const aiShort = cleanupShortText(
+    bug.aiDecisionReason || bug.aiSummary || "Nincs rövid leírás.",
+    120
+  );
+
   const decisionText =
     bug.status === "Nyitott"
       ? "-"
@@ -187,7 +236,7 @@ function buildBugEmbed(bug) {
         }`;
 
   const deleteText =
-    bug.deleteAt && bug.status !== "Nyitott"
+    bug.deleteAt && (bug.status === "Megoldás" || bug.status === "Elutasítás")
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "-";
 
@@ -212,7 +261,7 @@ function buildBugEmbed(bug) {
       },
       {
         name: "🧠 AI rövid leírás",
-        value: limitText(bug.aiDecisionReason || bug.aiSummary || "-", 1000),
+        value: aiShort,
         inline: false,
       },
       {
@@ -243,51 +292,51 @@ function buildBugEmbed(bug) {
     .setTimestamp(new Date(bug.updatedAt || Date.now()));
 }
 
-function makeDecisionMessage({ accepted, reason, handlerTag }) {
-  if (accepted) {
+function makeForumFeedbackMessage({ status, reason, handlerTag }) {
+  const shortReason = cleanupShortText(reason, 140);
+
+  if (status === "Megoldás") {
     return [
-      "✅ **Elfogadva**",
+      "✅ **Megoldás**",
       "",
-      "Köszönjük a visszajelzést!",
-      "A hibajelentést elfogadtuk, és a problémát javítottuk.",
-      "",
-      `**Rövid leírás:** ${reason}`,
+      "Átnéztük a hibát, és javítva lett.",
+      `**Röviden:** ${shortReason}`,
       `**Kezelte:** ${handlerTag}`,
+    ].join("\n");
+  }
+
+  if (status === "Elutasítás") {
+    return [
+      "❌ **Elutasítás**",
       "",
-      "Köszönjük, hogy segítetted a fejlesztést! 🙏",
+      "Átnéztük a jelentést, de ezt most nem fogadtuk el hibának.",
+      `**Röviden:** ${shortReason}`,
+      `**Kezelte:** ${handlerTag}`,
     ].join("\n");
   }
 
   return [
-    "❌ **Elutasítva**",
+    "🛠️ **Dolgozunk rajta**",
     "",
-    "Köszönjük a visszajelzést!",
-    "A jelentést átnéztük, de ez jelenleg nem minősül valós hibának, vagy a leírt jelenség nem reprodukálható hibaként.",
-    "",
-    `**Rövid leírás:** ${reason}`,
-    `**Kezelte:** ${handlerTag}`,
-    "",
-    "Köszönjük, hogy jelezted felénk! 🙏",
+    "Láttuk a jelentést, és dolgozunk a hiba megoldásán.",
+    `**Röviden:** ${shortReason}`,
+    `**Kezeli:** ${handlerTag}`,
   ].join("\n");
 }
 
 // =========================
 // TANULÁSI PÉLDÁK
 // =========================
-function addTrainingExample(data, bug, accepted) {
+function addTrainingExample(data, bug, status) {
   if (!Array.isArray(data.trainingExamples)) {
     data.trainingExamples = [];
   }
 
   const example = {
     title: bug.canonicalTitle || bug.title || "Ismeretlen bug",
-    summary: bug.aiSummary || bug.description || "",
-    status: accepted ? "Megoldva" : "Elutasítva",
-    decisionReason:
-      bug.aiDecisionReason ||
-      (accepted
-        ? "A hibajelentést elfogadtuk, és a probléma javításra került."
-        : "A jelentést átnéztük, de ez nem minősül valós hibának."),
+    summary: cleanupShortText(bug.aiSummary || bug.description || "", 220),
+    status,
+    decisionReason: cleanupShortText(bug.aiDecisionReason || "", 140),
     createdAt: Date.now(),
   };
 
@@ -325,29 +374,31 @@ async function aiGroupBug({ title, description, openBugs, trainingExamples }) {
     .map((bug) => ({
       id: bug.id,
       title: bug.canonicalTitle || bug.title,
-      summary: bug.aiSummary || bug.description || "",
+      summary: cleanupShortText(bug.aiSummary || bug.description || "", 220),
       reports: (bug.threads || []).length,
     }));
 
   const examples = trainingExamples.slice(-CONFIG.MAX_TRAINING_EXAMPLES);
 
   const prompt = `
-Te egy Discord bugrendszer segéd-AI vagy.
+Te egy Discord bugrendszer segédje vagy.
 
 Feladat:
-- állapítsd meg, hogy az új bugjelentés ugyanahhoz a bugtémához tartozik-e, mint valamelyik meglévő NYITOTT bug
+- döntsd el, hogy az új hibajelentés ugyanahhoz a meglévő NYITOTT bughoz tartozik-e
 - ha igen, add vissza a meglévő bug id-ját
-- ha nem, akkor a matchBugId legyen null
-- írj egy rövid, fejlesztőbarát magyar összefoglalót 1-3 mondatban
-- írj egy rövid, természetes magyar decisionReason szöveget is
-- a canonicalTitle legyen rövid, tiszta bugtéma név
+- ha nem, a matchBugId legyen null
+- a summary legyen nagyon rövid, egyszerű magyar szöveg
+- a decisionReason legyen rövid, hétköznapi, könnyen érthető magyar szöveg
+- a canonicalTitle legyen rövid és tiszta
 
 Fontos:
-- csak akkor vond össze ugyanabba a bugtémába, ha valóban ugyanarról a problémáról van szó
-- szigorú legyél, ne vonj össze eltérő hibákat
-- a korábbi példákból tanulj stílust és mintát
+- ne használj bonyolult vagy technikai szavakat
+- ne írj okoskodó stílusban
+- ne használd azt, hogy reprodukálható / nem reprodukálható
+- maximum 1 rövid mondat summary
+- maximum 1 rövid mondat decisionReason
 
-Korábbi döntési példák:
+Korábbi példák:
 ${JSON.stringify(examples, null, 2)}
 
 Új bug:
@@ -357,13 +408,13 @@ Leírás: ${description}
 Meglévő nyitott bugok:
 ${JSON.stringify(candidates, null, 2)}
 
-Kizárólag JSON választ adj ebben a formában:
+Csak JSON-t adj vissza:
 {
   "matchBugId": "bug_xxx" vagy null,
   "confidence": 0 és 1 közötti szám,
   "canonicalTitle": "rövid bugcím",
-  "summary": "rövid összefoglaló",
-  "decisionReason": "rövid természetes leírás"
+  "summary": "rövid egyszerű összefoglaló",
+  "decisionReason": "rövid egyszerű leírás"
 }
 `;
 
@@ -381,17 +432,16 @@ Kizárólag JSON választ adj ebben a formában:
     const lastBrace = text.lastIndexOf("}");
     if (firstBrace === -1 || lastBrace === -1) return null;
 
-    const jsonText = text.slice(firstBrace, lastBrace + 1);
-    const parsed = JSON.parse(jsonText);
+    const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
 
     return {
       matchBugId: parsed.matchBugId || null,
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
       canonicalTitle: limitText(parsed.canonicalTitle || title, 180),
-      summary: limitText(parsed.summary || description || title, 900),
-      decisionReason: limitText(
-        parsed.decisionReason || "A hibajelentés feldolgozásra került.",
-        300
+      summary: cleanupShortText(parsed.summary || description || title, 220),
+      decisionReason: cleanupShortText(
+        parsed.decisionReason || "A hibajelentés feldolgozva.",
+        140
       ),
     };
   } catch (error) {
@@ -400,11 +450,15 @@ Kizárólag JSON választ adj ebben a formában:
   }
 }
 
-async function aiDecisionReason({ bug, accepted, trainingExamples }) {
+async function aiStatusReason({ bug, status, trainingExamples }) {
+  const fallbackMap = {
+    "Megoldás": "A hibát javítottuk.",
+    "Elutasítás": "Ezt most nem fogadtuk el hibának.",
+    "Dolgozunk rajta": "A hibát átnéztük, és dolgozunk rajta.",
+  };
+
   if (!openai) {
-    return accepted
-      ? "A hibajelentést elfogadtuk, és a probléma javításra került."
-      : "A jelentést átnéztük, de ez nem minősül valós hibának vagy nem reprodukálható hibaként.";
+    return fallbackMap[status] || "A hibajelentést átnéztük.";
   }
 
   const examples = trainingExamples.slice(-15);
@@ -413,16 +467,19 @@ async function aiDecisionReason({ bug, accepted, trainingExamples }) {
 Te egy Discord bugkezelő rendszer rövid magyar válaszgenerátora vagy.
 
 Feladat:
-- adj vissza kizárólag 1 rövid magyar mondatot
-- legyen természetes, udvarias és tömör
+- kizárólag 1 rövid magyar mondatot írj
+- legyen egyszerű, hétköznapi, könnyen érthető
+- ne legyen túl hivatalos
+- ne használj bonyolult szavakat
+- ne használd azt, hogy reprodukálható / nem reprodukálható
 - ne legyen köszönés
 - ne legyen emoji
-- igazodj a korábbi példák stílusához
+- maximum 12 szó legyen
 
 Korábbi példák:
 ${JSON.stringify(examples, null, 2)}
 
-Állapot: ${accepted ? "Megoldva" : "Elutasítva"}
+Állapot: ${status}
 Bug címe: ${bug.canonicalTitle || bug.title}
 Bug összefoglaló: ${bug.aiSummary || bug.description || ""}
 `;
@@ -434,25 +491,16 @@ Bug összefoglaló: ${bug.aiSummary || bug.description || ""}
       reasoning: { effort: "low" },
     });
 
-    const text = (response.output_text || "").trim();
-
-    return limitText(
-      text ||
-        (accepted
-          ? "A hibajelentést elfogadtuk, és a probléma javításra került."
-          : "A jelentést átnéztük, de ez nem minősül valós hibának."),
-      220
-    );
+    const text = cleanupShortText(response.output_text || fallbackMap[status], 140);
+    return text || fallbackMap[status];
   } catch (error) {
-    console.error("[BUGREPORT] AI decision hiba:", error?.message || error);
-    return accepted
-      ? "A hibajelentést elfogadtuk, és a probléma javításra került."
-      : "A jelentést átnéztük, de ez nem minősül valós hibának vagy nem reprodukálható hibaként.";
+    console.error("[BUGREPORT] AI status reason hiba:", error?.message || error);
+    return fallbackMap[status] || "A hibajelentést átnéztük.";
   }
 }
 
 // =========================
-// BUG KERESÉS / DÖNTÉS
+// BUG KERESÉS
 // =========================
 function fallbackFindMatch(data, title, description) {
   const newText = `${title} ${description}`.trim();
@@ -461,9 +509,10 @@ function fallbackFindMatch(data, title, description) {
   let bestScore = 0;
 
   for (const bug of Object.values(data.bugs)) {
-    if (bug.status !== "Nyitott") continue;
+    if (!["Nyitott", "Dolgozunk rajta"].includes(bug.status)) continue;
 
-    const existingText = `${bug.canonicalTitle || bug.title} ${bug.aiSummary || bug.description || ""}`.trim();
+    const existingText =
+      `${bug.canonicalTitle || bug.title} ${bug.aiSummary || bug.description || ""}`.trim();
 
     const score = Math.max(
       fallbackSimilarity(title, bug.canonicalTitle || bug.title),
@@ -485,15 +534,14 @@ function fallbackFindMatch(data, title, description) {
 
 async function classifyBug(data, title, description) {
   const openBugs = Object.values(data.bugs)
-    .filter((bug) => bug.status === "Nyitott")
+    .filter((bug) => ["Nyitott", "Dolgozunk rajta"].includes(bug.status))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-  const trainingExamples = getRecentTrainingExamples(data);
   const aiResult = await aiGroupBug({
     title,
     description,
     openBugs,
-    trainingExamples,
+    trainingExamples: getRecentTrainingExamples(data),
   });
 
   if (
@@ -501,7 +549,7 @@ async function classifyBug(data, title, description) {
     aiResult.matchBugId &&
     aiResult.confidence >= CONFIG.AI_MATCH_CONFIDENCE &&
     data.bugs[aiResult.matchBugId] &&
-    data.bugs[aiResult.matchBugId].status === "Nyitott"
+    ["Nyitott", "Dolgozunk rajta"].includes(data.bugs[aiResult.matchBugId].status)
   ) {
     return {
       type: "match",
@@ -520,8 +568,8 @@ async function classifyBug(data, title, description) {
       type: "match",
       bugId: fallback.bugId,
       canonicalTitle: title,
-      summary: description || title,
-      decisionReason: "A hibajelentés hasonló egy meglévő bugtémához, ezért ahhoz lett csoportosítva.",
+      summary: cleanupShortText(description || title, 220),
+      decisionReason: "Hasonlít egy meglévő hibára.",
       confidence: fallback.confidence,
       source: "fallback",
     };
@@ -531,16 +579,18 @@ async function classifyBug(data, title, description) {
     type: "new",
     bugId: null,
     canonicalTitle: aiResult?.canonicalTitle || title,
-    summary: aiResult?.summary || description || title,
-    decisionReason:
-      aiResult?.decisionReason || "Új hibatémaként került létrehozásra.",
+    summary: cleanupShortText(aiResult?.summary || description || title, 220),
+    decisionReason: cleanupShortText(
+      aiResult?.decisionReason || "Új hibaként lett felvéve.",
+      140
+    ),
     confidence: aiResult?.confidence || 0,
     source: aiResult ? "ai_no_match" : "fallback_new",
   };
 }
 
 // =========================
-// TÖRLÉS ÜTEMEZÉS
+// TÖRLÉS
 // =========================
 async function deleteBugAndThreads(client, bugId) {
   const data = loadData();
@@ -570,7 +620,6 @@ async function deleteBugAndThreads(client, bugId) {
   }
 
   const latest = loadData();
-
   if (latest.bugs[bugId]) {
     delete latest.bugs[bugId];
     saveData(latest);
@@ -603,22 +652,25 @@ function restoreDeletionSchedules(client) {
   const data = loadData();
 
   for (const bug of Object.values(data.bugs)) {
-    if (bug.deleteAt) {
+    if (bug.deleteAt && (bug.status === "Megoldás" || bug.status === "Elutasítás")) {
       scheduleDeletion(client, bug.id, bug.deleteAt);
     }
   }
 }
 
 // =========================
-// DISCORD MŰVELETEK
+// DISCORD
 // =========================
 async function updateSummaryMessage(client, bug) {
-  const summaryChannel = await client.channels.fetch(CONFIG.BUG_SUMMARY_CHANNEL_ID);
+  const summaryChannel = await client.channels.fetch(CONFIG.BUG_SUMMARY_CHANNEL_ID).catch(() => null);
   if (!summaryChannel) return null;
 
   const payload = {
     embeds: [buildBugEmbed(bug)],
-    components: bug.status === "Nyitott" ? [createButtons(bug.id)] : [],
+    components:
+      bug.status === "Megoldás" || bug.status === "Elutasítás"
+        ? []
+        : [createButtons(bug.id)],
   };
 
   if (bug.messageId) {
@@ -628,8 +680,21 @@ async function updateSummaryMessage(client, bug) {
     }
   }
 
-  const newMsg = await summaryChannel.send(payload);
-  return newMsg;
+  return await summaryChannel.send(payload);
+}
+
+async function sendFeedbackToAllThreads(client, bug, feedbackText, lockAfter = false) {
+  for (const threadId of bug.threads || []) {
+    const thread = await client.channels.fetch(threadId).catch(() => null);
+    if (!thread) continue;
+
+    await thread.send({ content: feedbackText }).catch(() => null);
+
+    if (lockAfter) {
+      await thread.setLocked(true).catch(() => null);
+      await thread.setArchived(true).catch(() => null);
+    }
+  }
 }
 
 async function processNewForumThread(client, thread) {
@@ -675,6 +740,17 @@ async function processNewForumThread(client, thread) {
     }
 
     saveData(data);
+
+    if (bug.status === "Dolgozunk rajta") {
+      const text = makeForumFeedbackMessage({
+        status: "Dolgozunk rajta",
+        reason: bug.aiDecisionReason || "A hibával foglalkozunk.",
+        handlerTag: bug.handler || "Staff",
+      });
+
+      await thread.send({ content: text }).catch(() => null);
+    }
+
     return;
   }
 
@@ -685,9 +761,11 @@ async function processNewForumThread(client, thread) {
     title,
     canonicalTitle: result.canonicalTitle || title,
     description,
-    aiSummary: result.summary || description,
-    aiDecisionReason:
-      result.decisionReason || "Új hibatémaként került létrehozásra.",
+    aiSummary: cleanupShortText(result.summary || description, 220),
+    aiDecisionReason: cleanupShortText(
+      result.decisionReason || "Új hibaként lett felvéve.",
+      140
+    ),
     threads: [thread.id],
     status: "Nyitott",
     handler: null,
@@ -696,6 +774,8 @@ async function processNewForumThread(client, thread) {
     updatedAt: Date.now(),
     decidedAt: null,
     deleteAt: null,
+    lastForumFeedbackAt: null,
+    lastForumFeedbackType: null,
   };
 
   data.bugs[bugId] = bug;
@@ -708,42 +788,44 @@ async function processNewForumThread(client, thread) {
   saveData(data);
 }
 
-async function handleDecision(client, interaction, bugId, accepted) {
+async function handleStatusChange(client, interaction, bugId, status) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
   const data = loadData();
   const bug = data.bugs[bugId];
 
   if (!bug) {
-    return interaction.reply({
+    return interaction.editReply({
       content: "Ez a bug már nem található.",
-      ephemeral: true,
     });
   }
 
-  if (bug.status !== "Nyitott") {
-    return interaction.reply({
+  if (["Megoldás", "Elutasítás"].includes(bug.status)) {
+    return interaction.editReply({
       content: `Ez a bug már le lett zárva: **${bug.status}**`,
-      ephemeral: true,
     });
   }
 
-  const reason =
-    (await aiDecisionReason({
-      bug,
-      accepted,
-      trainingExamples: getRecentTrainingExamples(data),
-    })) ||
-    (accepted
-      ? "A hibajelentést elfogadtuk, és a probléma javításra került."
-      : "A jelentést átnéztük, de ez nem minősül valós hibának.");
+  const reason = await aiStatusReason({
+    bug,
+    status,
+    trainingExamples: getRecentTrainingExamples(data),
+  });
 
-  bug.status = accepted ? "Megoldva" : "Elutasítva";
+  bug.status = status;
   bug.handler = interaction.user.tag;
-  bug.aiDecisionReason = reason;
+  bug.aiDecisionReason = cleanupShortText(reason, 140);
   bug.decidedAt = Date.now();
-  bug.deleteAt = Date.now() + CONFIG.DELETE_AFTER_MS;
   bug.updatedAt = Date.now();
+  bug.lastForumFeedbackAt = Date.now();
+  bug.lastForumFeedbackType = status;
 
-  addTrainingExample(data, bug, accepted);
+  if (status === "Megoldás" || status === "Elutasítás") {
+    bug.deleteAt = Date.now() + CONFIG.DELETE_AFTER_MS;
+    addTrainingExample(data, bug, status);
+  } else {
+    bug.deleteAt = null;
+  }
 
   const msg = await updateSummaryMessage(client, bug);
   if (msg) {
@@ -752,28 +834,37 @@ async function handleDecision(client, interaction, bugId, accepted) {
 
   saveData(data);
 
-  for (const threadId of bug.threads || []) {
-    const thread = await client.channels.fetch(threadId).catch(() => null);
-    if (!thread) continue;
+  const forumText = makeForumFeedbackMessage({
+    status,
+    reason: bug.aiDecisionReason,
+    handlerTag: interaction.user.tag,
+  });
 
-    const decisionMessage = makeDecisionMessage({
-      accepted,
-      reason,
-      handlerTag: interaction.user.tag,
-    });
+  await sendFeedbackToAllThreads(
+    client,
+    bug,
+    forumText,
+    status === "Megoldás" || status === "Elutasítás"
+  );
 
-    await thread.send({ content: decisionMessage }).catch(() => null);
-    await thread.setLocked(true).catch(() => null);
-    await thread.setArchived(true).catch(() => null);
+  if (status === "Megoldás" || status === "Elutasítás") {
+    scheduleDeletion(client, bug.id, bug.deleteAt);
   }
 
-  scheduleDeletion(client, bug.id, bug.deleteAt);
+  if (status === "Megoldás") {
+    return interaction.editReply({
+      content: "A bug állapota: Megoldás. A kapcsolódó fórumok értesítve lettek.",
+    });
+  }
 
-  return interaction.reply({
-    content: accepted
-      ? "A bug megoldottnak lett jelölve. 1 nap múlva törlődik az embed és a fórumbejegyzés(ek) is."
-      : "A bug elutasítva lett. 1 nap múlva törlődik az embed és a fórumbejegyzés(ek) is.",
-    ephemeral: true,
+  if (status === "Elutasítás") {
+    return interaction.editReply({
+      content: "A bug állapota: Elutasítás. A kapcsolódó fórumok értesítve lettek.",
+    });
+  }
+
+  return interaction.editReply({
+    content: "A bug állapota: Dolgozunk rajta. A kapcsolódó fórumok értesítve lettek.",
   });
 }
 
@@ -800,29 +891,49 @@ function registerBugReport(client) {
       if (!interaction.customId.startsWith("bug_")) return;
 
       const [, action, bugId] = interaction.customId.split("_");
+
       if (!bugId) {
+        if (interaction.deferred || interaction.replied) {
+          return interaction.editReply({ content: "Hibás gombazonosító." });
+        }
+
         return interaction.reply({
           content: "Hibás gombazonosító.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
-      if (action === "accept") {
-        return await handleDecision(client, interaction, bugId, true);
+      if (action === "solved") {
+        return await handleStatusChange(client, interaction, bugId, "Megoldás");
       }
 
-      if (action === "reject") {
-        return await handleDecision(client, interaction, bugId, false);
+      if (action === "rejected") {
+        return await handleStatusChange(client, interaction, bugId, "Elutasítás");
       }
+
+      if (action === "working") {
+        return await handleStatusChange(client, interaction, bugId, "Dolgozunk rajta");
+      }
+
+      return interaction.reply({
+        content: "Ismeretlen bug gomb.",
+        flags: MessageFlags.Ephemeral,
+      });
     } catch (error) {
       console.error("[BUGREPORT] interactionCreate hiba:", error);
 
-      if (!interaction.replied && !interaction.deferred) {
-        return interaction.reply({
-          content: "Hiba történt a művelet közben.",
-          ephemeral: true,
-        });
-      }
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({
+            content: "Hiba történt a művelet közben.",
+          });
+        } else {
+          await interaction.reply({
+            content: "Hiba történt a művelet közben.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+      } catch {}
     }
   });
 }

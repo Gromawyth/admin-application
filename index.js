@@ -1020,6 +1020,9 @@ async function handleTicketClose(interaction) {
 
 client.on("interactionCreate", async (interaction) => {
   try {
+  if (interaction.customId.startsWith("bug_")) {
+    return;
+  }
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "adminpanel") {
         await adminFeedback.sendPanel(interaction);

@@ -69,6 +69,8 @@ const client = new Client({
 // 🔽 ÚJ: külső fájl betöltése
 const adminFeedback = require("./adminfeedback");
 const registerLogs = require("./logs");
+const bugReport = require("./bugreport");
+bugReport.registerBugReport(client);
 registerLogs(client);
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";

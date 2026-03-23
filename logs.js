@@ -165,8 +165,8 @@ function levag(szoveg, max = CONFIG.MAX_MEZO_HOSSZ) {
 }
 
 function spoilerSzoveg(szoveg, max = CONFIG.MAX_MEZO_HOSSZ) {
-  const text = levag(szoveg, max - 4);
-  return `||${text}||`;
+  const text = levag(szoveg, max - 4).replace(/`/g, "ˋ");
+  return `\`${text}\``;
 }
 
 function igenNem(ertek) {

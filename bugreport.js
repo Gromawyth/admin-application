@@ -81,11 +81,10 @@ function ensureBugDefaults(bug) {
     bug.threadFeedbackMessages = {};
   }
   if (typeof bug.lastManualReason !== "string") bug.lastManualReason = "";
-
   if (!Array.isArray(bug.commentInsights)) bug.commentInsights = [];
   if (!bug.lastMeaningfulCommentAt) bug.lastMeaningfulCommentAt = null;
   if (typeof bug.communityStatus !== "string") bug.communityStatus = "nincs";
-  if (typeof bug.communityNotes !== "string") bug.communityNotes = "";
+  if (typeof bug.communityNotes !== "string") bug.communityNotes = "-";
 }
 
 function loadData() {
@@ -210,18 +209,9 @@ function getThreadMentions(threadIds = []) {
 }
 
 function getStatusStyle(status) {
-  if (status === "Megoldás") {
-    return { color: 0x2ecc71, emoji: "✅" };
-  }
-
-  if (status === "Elutasítás") {
-    return { color: 0xe74c3c, emoji: "❌" };
-  }
-
-  if (status === "Dolgozunk rajta") {
-    return { color: 0x3498db, emoji: "🛠️" };
-  }
-
+  if (status === "Megoldás") return { color: 0x2ecc71, emoji: "✅" };
+  if (status === "Elutasítás") return { color: 0xe74c3c, emoji: "❌" };
+  if (status === "Dolgozunk rajta") return { color: 0x3498db, emoji: "🛠️" };
   return { color: 0xf1c40f, emoji: "⏳" };
 }
 
@@ -253,12 +243,10 @@ function createButtons(bugId, status = "Nyitott") {
         .setLabel("Elküldve - Dolgozunk rajta")
         .setStyle(ButtonStyle.Primary)
         .setDisabled(true),
-
       new ButtonBuilder()
         .setCustomId(`bug:solved:${bugId}`)
         .setLabel("Megoldás")
         .setStyle(ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId(`bug:rejected:${bugId}`)
         .setLabel("Elutasítás")
@@ -271,12 +259,10 @@ function createButtons(bugId, status = "Nyitott") {
       .setCustomId(`bug:working:${bugId}`)
       .setLabel("Dolgozunk rajta")
       .setStyle(ButtonStyle.Primary),
-
     new ButtonBuilder()
       .setCustomId(`bug:solved:${bugId}`)
       .setLabel("Megoldás")
       .setStyle(ButtonStyle.Success),
-
     new ButtonBuilder()
       .setCustomId(`bug:rejected:${bugId}`)
       .setLabel("Elutasítás")
@@ -284,12 +270,32 @@ function createButtons(bugId, status = "Nyitott") {
   );
 }
 
+function getCommentContextForAI(bug, maxItems = 6) {
+  if (!bug || !Array.isArray(bug.commentInsights) || !bug.commentInsights.length) {
+    return "Nincs érdemi fórumos visszajelzés.";
+  }
+
+  return bug.commentInsights
+    .slice(-maxItems)
+    .map((item) => {
+      const typeMap = {
+        solved_by_reporter: "bejelentő szerint megoldódott",
+        ignore: "figyelmen kívül hagyható",
+        extra_info: "plusz információ",
+        smalltalk: "egyéb",
+      };
+
+      return `- [${typeMap[item.type] || "egyéb"}] ${item.authorTag}: ${item.summary}`;
+    })
+    .join("\n");
+}
+
 function buildBugEmbed(bug) {
   const style = getStatusStyle(bug.status);
 
   const summaryText = cleanupShortText(
     bug.aiSummary || bug.description || "Nincs összefoglaló.",
-    320
+    400
   );
 
   const aiShort = cleanupShortText(
@@ -376,9 +382,7 @@ function buildBugEmbed(bug) {
       }
     )
     .setColor(style.color)
-    .setFooter({
-      text: `Bug ID: ${bug.id}`,
-    })
+    .setFooter({ text: `Bug ID: ${bug.id}` })
     .setTimestamp(new Date(bug.updatedAt || Date.now()));
 }
 
@@ -442,9 +446,7 @@ function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
         inline: false,
       }
     )
-    .setFooter({
-      text: `Bug ID: ${bug.id}`,
-    })
+    .setFooter({ text: `Bug ID: ${bug.id}` })
     .setTimestamp(new Date());
 }
 
@@ -607,7 +609,7 @@ Csak JSON-t adj vissza:
       matchBugId: parsed.matchBugId || null,
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
       canonicalTitle: limitText(parsed.canonicalTitle || title, 180),
-      summary: cleanupShortText(parsed.summary || description || title, 220),
+      summary: cleanupShortText(parsed.summary || description || title, 260),
       decisionReason: cleanupShortText(
         parsed.decisionReason || "A hibajelentés feldolgozva.",
         140
@@ -616,6 +618,75 @@ Csak JSON-t adj vissza:
   } catch (error) {
     console.error("[BUGREPORT] AI grouping hiba:", error?.message || error);
     return null;
+  }
+}
+
+async function aiRefreshBugSummaryFromComments(bug) {
+  const fallback = cleanupShortText(
+    [
+      bug.description || "",
+      bug.communityStatus && bug.communityStatus !== "nincs"
+        ? `Fórumos visszajelzés: ${bug.communityStatus}.`
+        : "",
+      bug.communityNotes && bug.communityNotes !== "-"
+        ? bug.communityNotes
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" "),
+    320
+  );
+
+  if (!openai) {
+    return fallback;
+  }
+
+  const prompt = `
+Te egy Discord bugkezelő rendszer rövid magyar összefoglaló generátora vagy.
+
+Feladat:
+- írj 2 rövid, természetes magyar mondatot
+- ez a szöveg lesz a bug embed főcím alatti leírása
+- legyen kicsit részletesebb, mint egy egymondatos kivonat
+- de ne legyen túl hosszú
+- vedd figyelembe az eredeti hibaleírást és a fórumos hozzászólások lényegét is
+- ha a kommentek szerint a bug már megoldódott, semmis, vagy plusz infó érkezett, azt természetesen építsd bele
+- ne használj listát
+- ne írj technikai vagy túl hivatalos stílusban
+- ne írj címet, csak maga a leírás legyen
+
+Bug címe:
+${bug.canonicalTitle || bug.title || "Ismeretlen bug"}
+
+Eredeti leírás:
+${bug.description || "Nincs leírás."}
+
+Jelenlegi rövid összefoglaló:
+${bug.aiSummary || "Nincs."}
+
+Fórumos érdemi hozzászólások:
+${getCommentContextForAI(bug)}
+
+Közösségi állapot:
+${bug.communityStatus || "nincs"}
+
+Csak a kész magyar szöveget add vissza.
+`;
+
+  try {
+    const response = await openai.responses.create({
+      model: CONFIG.OPENAI_MODEL,
+      input: prompt,
+      reasoning: { effort: "low" },
+    });
+
+    const text = compactText(response.output_text || "");
+    if (!text) return fallback;
+
+    return cleanupShortText(text, 400);
+  } catch (error) {
+    console.error("[BUGREPORT] aiRefreshBugSummaryFromComments hiba:", error?.message || error);
+    return fallback;
   }
 }
 
@@ -760,7 +831,7 @@ async function classifyBug(data, title, description) {
       type: "match",
       bugId: fallback.bugId,
       canonicalTitle: title,
-      summary: cleanupShortText(description || title, 220),
+      summary: cleanupShortText(description || title, 260),
       decisionReason: "Hasonlít egy meglévő hibára.",
       confidence: fallback.confidence,
       source: "fallback",
@@ -771,7 +842,7 @@ async function classifyBug(data, title, description) {
     type: "new",
     bugId: null,
     canonicalTitle: aiResult?.canonicalTitle || title,
-    summary: cleanupShortText(aiResult?.summary || description || title, 220),
+    summary: cleanupShortText(aiResult?.summary || description || title, 260),
     decisionReason: cleanupShortText(
       aiResult?.decisionReason || "Új hibaként lett felvéve.",
       140
@@ -1070,6 +1141,12 @@ async function processForumReply(client, message) {
   rebuildCommunityNotes(bug);
 
   try {
+    bug.aiSummary = await aiRefreshBugSummaryFromComments(bug);
+  } catch (error) {
+    console.error("[BUGREPORT] bug.aiSummary frissítés hiba:", error);
+  }
+
+  try {
     const msg = await updateSummaryMessage(client, bug);
     if (msg) {
       bug.messageId = msg.id;
@@ -1100,7 +1177,6 @@ async function updateSummaryMessage(client, bug) {
 
   if (bug.messageId) {
     const oldMsg = await summaryChannel.messages.fetch(bug.messageId).catch(() => null);
-
     if (oldMsg) {
       return await oldMsg.edit(payload);
     }
@@ -1187,10 +1263,14 @@ async function processNewForumThread(client, thread) {
     }
 
     bug.updatedAt = Date.now();
+    bug.description = bug.description || description;
 
     if (result.source === "ai") {
       bug.canonicalTitle = result.canonicalTitle || bug.canonicalTitle || bug.title;
-      bug.aiSummary = result.summary || bug.aiSummary || bug.description;
+      bug.aiSummary = cleanupShortText(
+        result.summary || bug.aiSummary || bug.description,
+        260
+      );
       bug.aiDecisionReason = result.decisionReason || bug.aiDecisionReason;
     }
 
@@ -1229,7 +1309,7 @@ async function processNewForumThread(client, thread) {
     title,
     canonicalTitle: result.canonicalTitle || title,
     description,
-    aiSummary: cleanupShortText(result.summary || description, 220),
+    aiSummary: cleanupShortText(result.summary || description, 260),
     aiDecisionReason: cleanupShortText(
       result.decisionReason || "Új hibaként lett felvéve.",
       140

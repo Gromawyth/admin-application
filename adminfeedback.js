@@ -16,10 +16,10 @@ const OpenAI = require("openai");
 // =========================
 
 const LOG_CHANNEL_ID =
-  process.env.ADMIN_FEEDBACK_LOG_CHANNEL_ID || "IDE_A_LOG_CHANNEL_ID";
+  process.env.ADMIN_FEEDBACK_LOG_CHANNEL_ID || "1485371309784563933";
 
 const SUMMARY_CHANNEL_ID =
-  process.env.ADMIN_FEEDBACK_SUMMARY_CHANNEL_ID || "IDE_A_SUMMARY_CHANNEL_ID";
+  process.env.ADMIN_FEEDBACK_SUMMARY_CHANNEL_ID || "1485392296714174544";
 
 const DATA_FILE = path.join(__dirname, "adminfeedback-data.json");
 
@@ -293,7 +293,7 @@ ${fullText}
 Egy GTA RP szerver admin értékeléseit látod.
 
 Feladat:
-Írj egy rövid, tömör és konkrét véleményt az adminról maximum 4 mondatban.
+Írj egy rövid, tömör és konkrét véleményt az adminról maximum 4 mondatban semmiképp ne írj többet 4 mondatnál.
 
 Fontos szabályok:
 - Ne fogalmazz hivatalosan.

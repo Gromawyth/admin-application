@@ -1030,6 +1030,13 @@ if (
   return;
 }
 
+if (
+  interaction.isModalSubmit() &&
+  interaction.customId.startsWith("bugmodal:")
+) {
+  return;
+}
+
 // BUGREPORT modalok → szintén ne kezelje itt
 if (
   interaction.isModalSubmit() &&

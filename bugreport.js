@@ -210,8 +210,53 @@ function getStatusStyle(status) {
   return { color: 0xf1c40f, emoji: "⏳" };
 }
 
-function createButtons(bugId) {
+function createButtons(bugId, status = "Nyitott") {
+  if (status === "Megoldás") {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`bug:solved:${bugId}`)
+        .setLabel("Megoldás")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(true)
+    );
+  }
+
+  if (status === "Elutasítás") {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`bug:rejected:${bugId}`)
+        .setLabel("Elutasítás")
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(true)
+    );
+  }
+
+  if (status === "Dolgozunk rajta") {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`bug:working:${bugId}`)
+        .setLabel("Elküldve - Dolgozunk rajta")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(true),
+
+      new ButtonBuilder()
+        .setCustomId(`bug:solved:${bugId}`)
+        .setLabel("Megoldás")
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId(`bug:rejected:${bugId}`)
+        .setLabel("Elutasítás")
+        .setStyle(ButtonStyle.Danger)
+    );
+  }
+
   return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`bug:working:${bugId}`)
+      .setLabel("Dolgozunk rajta")
+      .setStyle(ButtonStyle.Primary),
+
     new ButtonBuilder()
       .setCustomId(`bug:solved:${bugId}`)
       .setLabel("Megoldás")
@@ -220,12 +265,7 @@ function createButtons(bugId) {
     new ButtonBuilder()
       .setCustomId(`bug:rejected:${bugId}`)
       .setLabel("Elutasítás")
-      .setStyle(ButtonStyle.Danger),
-
-    new ButtonBuilder()
-      .setCustomId(`bug:working:${bugId}`)
-      .setLabel("Dolgozunk rajta")
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Danger)
   );
 }
 
@@ -855,7 +895,7 @@ async function updateSummaryMessage(client, bug) {
 
   const payload = {
     embeds: [buildBugEmbed(bug)],
-    components: [createButtons(bug.id)],
+    components: [createButtons(bug.id, bug.status)],
   };
 
   if (bug.messageId) {

@@ -199,17 +199,17 @@ function getStatusStyle(status) {
 function createButtons(bugId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`bug_solved_${bugId}`)
+      .setCustomId(`bug:solved:${bugId}`)
       .setLabel("Megoldás")
       .setStyle(ButtonStyle.Success),
 
     new ButtonBuilder()
-      .setCustomId(`bug_rejected_${bugId}`)
+      .setCustomId(`bug:rejected:${bugId}`)
       .setLabel("Elutasítás")
       .setStyle(ButtonStyle.Danger),
 
     new ButtonBuilder()
-      .setCustomId(`bug_working_${bugId}`)
+      .setCustomId(`bug:working:${bugId}`)
       .setLabel("Dolgozunk rajta")
       .setStyle(ButtonStyle.Primary)
   );
@@ -888,18 +888,36 @@ function registerBugReport(client) {
   client.on("interactionCreate", async (interaction) => {
     try {
       if (!interaction.isButton()) return;
-      if (!interaction.customId.startsWith("bug_")) return;
+      if (
+        !interaction.customId.startsWith("bug_") &&
+        !interaction.customId.startsWith("bug:")
+      ) {
+        return;
+      }
 
-      const [, action, bugId] = interaction.customId.split("_");
+      let action = null;
+      let bugId = null;
+
+      if (interaction.customId.startsWith("bug:")) {
+        const parts = interaction.customId.split(":");
+        action = parts[1];
+        bugId = parts.slice(2).join(":");
+      } else {
+        const parts = interaction.customId.split("_");
+        action = parts[1];
+        bugId = parts.slice(2).join("_");
+      }
 
       if (!bugId) {
         if (interaction.deferred || interaction.replied) {
-          return interaction.editReply({ content: "Hibás gombazonosító." });
+          return interaction.editReply({
+            content: "Hibás gombazonosító."
+          });
         }
 
         return interaction.reply({
           content: "Hibás gombazonosító.",
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -917,7 +935,7 @@ function registerBugReport(client) {
 
       return interaction.reply({
         content: "Ismeretlen bug gomb.",
-        flags: MessageFlags.Ephemeral,
+        flags: MessageFlags.Ephemeral
       });
     } catch (error) {
       console.error("[BUGREPORT] interactionCreate hiba:", error);
@@ -925,12 +943,12 @@ function registerBugReport(client) {
       try {
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply({
-            content: "Hiba történt a művelet közben.",
+            content: "Hiba történt a művelet közben."
           });
         } else {
           await interaction.reply({
             content: "Hiba történt a művelet közben.",
-            flags: MessageFlags.Ephemeral,
+            flags: MessageFlags.Ephemeral
           });
         }
       } catch {}

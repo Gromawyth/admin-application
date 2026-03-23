@@ -11,14 +11,23 @@ const {
  * =========================
  */
 const CONFIG = {
-  ALTALANOS_LOG_CSATORNA_ID: process.env.ALTALANOS_LOG_CSATORNA_ID || "1485699792569892884",
-  TAG_LOG_CSATORNA_ID: process.env.TAG_LOG_CSATORNA_ID || "1459991439822815333",
-  STAT_LOG_CSATORNA_ID: process.env.STAT_LOG_CSATORNA_ID || "1485707724514660453",
+  TAG_LOG_CSATORNA_ID: "1459991439822815333",
+  MOD_LOG_CSATORNA_ID: "1485721532297908355",
+  UZENET_LOG_CSATORNA_ID: "1485721582616838385",
+  CSATORNA_LOG_CSATORNA_ID: "1485721638006816778",
+  RANG_LOG_CSATORNA_ID: "1485721832672985339",
+  TICKET_LOG_CSATORNA_ID: "1485721884313129242",
+  VOICE_LOG_CSATORNA_ID: "1485721923550838924",
+  INTERAKCIO_LOG_CSATORNA_ID: "1485721973945532557",
+  ASSET_LOG_CSATORNA_ID: "1485722116811788338",
+  STAT_LOG_CSATORNA_ID: "1485707724514660453",
+  ALTALANOS_LOG_CSATORNA_ID: "1485722992502898738",
 
-  TICKET_KATEGORIA_ID: process.env.TICKET_KATEGORIA_ID || null,
+  TICKET_KATEGORIA_ID: "1460215371666686077",
   TICKET_PREFIXEK: ["ticket-", "admin-", "help-", "support-", "report-", "unban-"],
 
-  AUDIT_EGYEZES_MS: 15000,
+  AUDIT_EGYEZES_MS: 30000,
+  AUDIT_VARAKOZAS_MS: 1500,
   MAX_MEZO_HOSSZ: 1000
 };
 
@@ -27,7 +36,7 @@ const CONFIG = {
  *     NAPI STATISZTIKÁK
  * =========================
  */
-const napiStatisztika = new Map(); // guildId -> stats
+const napiStatisztika = new Map();
 
 function maiKulcs(d = new Date()) {
   const y = d.getFullYear();
@@ -115,6 +124,10 @@ function internalEmbed(cim, szin, ikon = "🟢") {
     .setTimestamp();
 }
 
+function alvas(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function csatornaBetolt(client, csatornaId) {
   try {
     if (!csatornaId) return null;
@@ -124,13 +137,31 @@ async function csatornaBetolt(client, csatornaId) {
   }
 }
 
-async function kuldEmbed(client, csatornaId, embed) {
+function celCsatornaId(kulcs) {
+  const map = {
+    tag: CONFIG.TAG_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    mod: CONFIG.MOD_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    uzenet: CONFIG.UZENET_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    csatorna: CONFIG.CSATORNA_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    rang: CONFIG.RANG_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    ticket: CONFIG.TICKET_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    voice: CONFIG.VOICE_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    interakcio: CONFIG.INTERAKCIO_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    asset: CONFIG.ASSET_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID,
+    stat: CONFIG.STAT_LOG_CSATORNA_ID || CONFIG.ALTALANOS_LOG_CSATORNA_ID
+  };
+
+  return map[kulcs] || CONFIG.ALTALANOS_LOG_CSATORNA_ID || null;
+}
+
+async function kuldEmbed(client, logTipus, embed) {
   try {
+    const csatornaId = celCsatornaId(logTipus);
     const ch = await csatornaBetolt(client, csatornaId);
     if (!ch || !ch.isTextBased()) return;
     await ch.send({ embeds: [embed] });
   } catch (err) {
-    console.error("[LOG] Embed küldési hiba:", err);
+    console.error(`[LOG][${logTipus}] Embed küldési hiba:`, err);
   }
 }
 
@@ -147,7 +178,7 @@ function ticketCsatorna(csatorna) {
 
 async function auditKereses(guild, tipus, targetId, maxKor = CONFIG.AUDIT_EGYEZES_MS) {
   try {
-    const fetched = await guild.fetchAuditLogs({ type: tipus, limit: 6 });
+    const fetched = await guild.fetchAuditLogs({ type: tipus, limit: 10 });
     const now = Date.now();
 
     const talalat = fetched.entries.find((e) => {
@@ -160,6 +191,11 @@ async function auditKereses(guild, tipus, targetId, maxKor = CONFIG.AUDIT_EGYEZE
   } catch {
     return null;
   }
+}
+
+async function auditKeresesKesleltetve(guild, tipus, targetId, maxKor = CONFIG.AUDIT_EGYEZES_MS) {
+  await alvas(CONFIG.AUDIT_VARAKOZAS_MS);
+  return auditKereses(guild, tipus, targetId, maxKor);
 }
 
 function rangValtozasok(regiMember, ujMember) {
@@ -257,12 +293,10 @@ async function napiStatKuldes(client) {
         { name: "🎫 Ticket események", value: String(stat.ticketEsemény), inline: true },
 
         { name: "🔊 Voice belépések", value: String(stat.voiceBe), inline: true },
-        { name: "🔇 Voice kilépések", value: String(stat.voiceKi), inline: true },
-        { name: "🧾 Megjegyzés", value: "A statisztika éjfél után automatikusan új napra vált.", inline: false }
+        { name: "🔇 Voice kilépések", value: String(stat.voiceKi), inline: true }
       );
 
-    await kuldEmbed(client, CONFIG.STAT_LOG_CSATORNA_ID, embed);
-
+    await kuldEmbed(client, "stat", embed);
     napiStatisztika.set(guildId, statObjektum());
   }
 }
@@ -270,7 +304,7 @@ async function napiStatKuldes(client) {
 function msEjfelig() {
   const most = new Date();
   const kov = new Date(most);
-  kov.setHours(24, 0, 5, 0); // 00:00:05
+  kov.setHours(24, 0, 5, 0);
   return kov.getTime() - most.getTime();
 }
 
@@ -296,7 +330,7 @@ module.exports = function registerLogs(client) {
   });
 
   /**
-   * BELÉPÉS
+   * TAGOK
    */
   client.on("guildMemberAdd", async (member) => {
     const stat = guildStat(member.guild.id);
@@ -311,17 +345,14 @@ module.exports = function registerLogs(client) {
         { name: "🕒 Fiók létrehozva", value: idoBelyeg(member.user.createdTimestamp), inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.TAG_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "tag", embed);
   });
 
-  /**
-   * KILÉPÉS / KICK
-   */
   client.on("guildMemberRemove", async (member) => {
     const stat = guildStat(member.guild.id);
     stat.kilepes++;
 
-    const kick = await auditKereses(member.guild, AuditLogEvent.MemberKick, member.id);
+    const kick = await auditKeresesKesleltetve(member.guild, AuditLogEvent.MemberKick, member.id);
 
     if (kick) {
       stat.kick++;
@@ -336,7 +367,7 @@ module.exports = function registerLogs(client) {
           { name: "📄 Indok", value: kick.reason || "Nincs megadva", inline: false }
         );
 
-      await kuldEmbed(client, CONFIG.TAG_LOG_CSATORNA_ID, embed);
+      await kuldEmbed(client, "mod", embed);
       return;
     }
 
@@ -348,17 +379,17 @@ module.exports = function registerLogs(client) {
         { name: "🆔 ID", value: member.id, inline: true }
       );
 
-    await kuldEmbed(client, CONFIG.TAG_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "tag", embed);
   });
 
   /**
-   * BAN
+   * MODERÁCIÓ
    */
   client.on("guildBanAdd", async (ban) => {
     const stat = guildStat(ban.guild.id);
     stat.ban++;
 
-    const entry = await auditKereses(ban.guild, AuditLogEvent.MemberBanAdd, ban.user.id);
+    const entry = await auditKeresesKesleltetve(ban.guild, AuditLogEvent.MemberBanAdd, ban.user.id);
 
     const embed = internalEmbed("Ban végrehajtva", SZINEK.HIBA, "🔨")
       .setDescription(`${ban.user} bannt kapott.`)
@@ -368,17 +399,14 @@ module.exports = function registerLogs(client) {
         { name: "📄 Indok", value: entry?.reason || "Nincs megadva", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "mod", embed);
   });
 
-  /**
-   * UNBAN
-   */
   client.on("guildBanRemove", async (ban) => {
     const stat = guildStat(ban.guild.id);
     stat.unban++;
 
-    const entry = await auditKereses(ban.guild, AuditLogEvent.MemberBanRemove, ban.user.id);
+    const entry = await auditKeresesKesleltetve(ban.guild, AuditLogEvent.MemberBanRemove, ban.user.id);
 
     const embed = internalEmbed("Unban végrehajtva", SZINEK.SIKER, "🔓")
       .setDescription(`${ban.user} unbant kapott.`)
@@ -387,11 +415,11 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Végrehajtotta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "mod", embed);
   });
 
   /**
-   * ÜZENET TÖRLÉS
+   * ÜZENETEK
    */
   client.on("messageDelete", async (message) => {
     if (!message.guild || message.author?.bot) return;
@@ -399,24 +427,20 @@ module.exports = function registerLogs(client) {
     const stat = guildStat(message.guild.id);
     stat.toroltUzenet++;
 
-    if (ticketCsatorna(message.channel)) {
-      stat.ticketEsemény++;
-    }
+    const ticket = ticketCsatorna(message.channel);
+    if (ticket) stat.ticketEsemény++;
 
     const embed = internalEmbed("Üzenet törölve", SZINEK.HIBA, "🗑️")
       .addFields(
         { name: "👤 Felhasználó", value: `${message.author.tag} (${message.author.id})`, inline: false },
         { name: "💬 Csatorna", value: `${message.channel}`, inline: true },
-        { name: "🧵 Ticket csatorna", value: ticketCsatorna(message.channel) ? "Igen" : "Nem", inline: true },
+        { name: "🧵 Ticket csatorna", value: ticket ? "Igen" : "Nem", inline: true },
         { name: "📝 Tartalom", value: levag(message.content || "Nincs szöveges tartalom / nem cache-elt"), inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, ticket ? "ticket" : "uzenet", embed);
   });
 
-  /**
-   * ÜZENET SZERKESZTÉS
-   */
   client.on("messageUpdate", async (regi, uj) => {
     if (!uj.guild || uj.author?.bot) return;
     if (regi.content === uj.content) return;
@@ -424,20 +448,19 @@ module.exports = function registerLogs(client) {
     const stat = guildStat(uj.guild.id);
     stat.szerkesztettUzenet++;
 
-    if (ticketCsatorna(uj.channel)) {
-      stat.ticketEsemény++;
-    }
+    const ticket = ticketCsatorna(uj.channel);
+    if (ticket) stat.ticketEsemény++;
 
     const embed = internalEmbed("Üzenet szerkesztve", SZINEK.MODOSITAS, "✏️")
       .addFields(
         { name: "👤 Felhasználó", value: `${uj.author?.tag || "Ismeretlen"} (${uj.author?.id || "?"})`, inline: false },
         { name: "💬 Csatorna", value: `${uj.channel}`, inline: true },
-        { name: "🧵 Ticket csatorna", value: ticketCsatorna(uj.channel) ? "Igen" : "Nem", inline: true },
+        { name: "🧵 Ticket csatorna", value: ticket ? "Igen" : "Nem", inline: true },
         { name: "📄 Régi üzenet", value: levag(regi.content || "Nincs / nem cache-elt"), inline: false },
         { name: "📄 Új üzenet", value: levag(uj.content || "Nincs"), inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, ticket ? "ticket" : "uzenet", embed);
   });
 
   /**
@@ -469,19 +492,23 @@ module.exports = function registerLogs(client) {
       cim = "Select menü használva";
       ikon = "📚";
       mezok.push({ name: "🆔 Custom ID", value: interaction.customId || "Nincs", inline: false });
+    } else {
+      return;
     }
 
-    if (
-      interaction.channel && ticketCsatorna(interaction.channel) ||
+    const ticket = (
+      (interaction.channel && ticketCsatorna(interaction.channel)) ||
       interaction.customId?.toLowerCase?.().includes("ticket")
-    ) {
+    );
+
+    if (ticket) {
       const stat = interaction.guild ? guildStat(interaction.guild.id) : null;
       if (stat) stat.ticketEsemény++;
       mezok.push({ name: "🎫 Ticket kapcsolat", value: "Igen", inline: true });
     }
 
     const embed = internalEmbed(cim, SZINEK.INTERNAL_ZOLD, ikon).addFields(...mezok);
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, ticket ? "ticket" : "interakcio", embed);
   });
 
   /**
@@ -551,7 +578,7 @@ module.exports = function registerLogs(client) {
     }
 
     if (embed) {
-      await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+      await kuldEmbed(client, "voice", embed);
     }
   });
 
@@ -561,51 +588,43 @@ module.exports = function registerLogs(client) {
   client.on("channelCreate", async (channel) => {
     if (!channel.guild) return;
 
-    const entry = await auditKereses(channel.guild, AuditLogEvent.ChannelCreate, channel.id);
-
-    if (ticketCsatorna(channel)) {
-      const stat = guildStat(channel.guild.id);
-      stat.ticketEsemény++;
-    }
+    const entry = await auditKeresesKesleltetve(channel.guild, AuditLogEvent.ChannelCreate, channel.id);
+    const ticket = ticketCsatorna(channel);
+    if (ticket) guildStat(channel.guild.id).ticketEsemény++;
 
     const embed = internalEmbed(
-      ticketCsatorna(channel) ? "Ticket csatorna létrehozva" : "Csatorna létrehozva",
-      ticketCsatorna(channel) ? SZINEK.TICKET : SZINEK.SIKER,
-      ticketCsatorna(channel) ? "🎫" : "📁"
-    )
-      .addFields(
-        { name: "📌 Név", value: channel.name || "Ismeretlen", inline: true },
-        { name: "🆔 ID", value: channel.id, inline: true },
-        { name: "🧱 Típus", value: csatornaTipusSzoveg(channel), inline: true },
-        { name: "🛠️ Létrehozta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
-      );
+      ticket ? "Ticket csatorna létrehozva" : "Csatorna létrehozva",
+      ticket ? SZINEK.TICKET : SZINEK.SIKER,
+      ticket ? "🎫" : "📁"
+    ).addFields(
+      { name: "📌 Név", value: channel.name || "Ismeretlen", inline: true },
+      { name: "🆔 ID", value: channel.id, inline: true },
+      { name: "🧱 Típus", value: csatornaTipusSzoveg(channel), inline: true },
+      { name: "🛠️ Létrehozta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
+    );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, ticket ? "ticket" : "csatorna", embed);
   });
 
   client.on("channelDelete", async (channel) => {
     if (!channel.guild) return;
 
-    const entry = await auditKereses(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
-
-    if (ticketCsatorna(channel)) {
-      const stat = guildStat(channel.guild.id);
-      stat.ticketEsemény++;
-    }
+    const entry = await auditKeresesKesleltetve(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
+    const ticket = ticketCsatorna(channel);
+    if (ticket) guildStat(channel.guild.id).ticketEsemény++;
 
     const embed = internalEmbed(
-      ticketCsatorna(channel) ? "Ticket csatorna törölve" : "Csatorna törölve",
+      ticket ? "Ticket csatorna törölve" : "Csatorna törölve",
       SZINEK.HIBA,
-      ticketCsatorna(channel) ? "🎫" : "🗑️"
-    )
-      .addFields(
-        { name: "📌 Név", value: channel.name || "Ismeretlen", inline: true },
-        { name: "🆔 ID", value: channel.id, inline: true },
-        { name: "🧱 Típus", value: csatornaTipusSzoveg(channel), inline: true },
-        { name: "🛠️ Törölte", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
-      );
+      ticket ? "🎫" : "🗑️"
+    ).addFields(
+      { name: "📌 Név", value: channel.name || "Ismeretlen", inline: true },
+      { name: "🆔 ID", value: channel.id, inline: true },
+      { name: "🧱 Típus", value: csatornaTipusSzoveg(channel), inline: true },
+      { name: "🛠️ Törölte", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
+    );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, ticket ? "ticket" : "csatorna", embed);
   });
 
   client.on("channelUpdate", async (regi, uj) => {
@@ -631,17 +650,14 @@ module.exports = function registerLogs(client) {
 
     if (!valtozasok.length) return;
 
-    const entry = await auditKereses(uj.guild, AuditLogEvent.ChannelUpdate, uj.id);
-
-    if (ticketCsatorna(uj)) {
-      const stat = guildStat(uj.guild.id);
-      stat.ticketEsemény++;
-    }
+    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.ChannelUpdate, uj.id);
+    const ticket = ticketCsatorna(uj);
+    if (ticket) guildStat(uj.guild.id).ticketEsemény++;
 
     const embed = internalEmbed(
-      ticketCsatorna(uj) ? "Ticket csatorna módosítva" : "Csatorna módosítva",
-      ticketCsatorna(uj) ? SZINEK.TICKET : SZINEK.MODOSITAS,
-      ticketCsatorna(uj) ? "🎫" : "✏️"
+      ticket ? "Ticket csatorna módosítva" : "Csatorna módosítva",
+      ticket ? SZINEK.TICKET : SZINEK.MODOSITAS,
+      ticket ? "🎫" : "✏️"
     )
       .setDescription(valtozasok.join("\n"))
       .addFields(
@@ -649,7 +665,7 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, ticket ? "ticket" : "csatorna", embed);
   });
 
   /**
@@ -665,7 +681,7 @@ module.exports = function registerLogs(client) {
         { name: "📂 Szülő csatorna", value: thread.parentId ? `<#${thread.parentId}>` : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, ticketCsatorna(thread.parent) ? "ticket" : "csatorna", embed);
   });
 
   client.on("threadDelete", async (thread) => {
@@ -677,7 +693,7 @@ module.exports = function registerLogs(client) {
         { name: "🆔 ID", value: thread.id, inline: true }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "csatorna", embed);
   });
 
   client.on("threadUpdate", async (regi, uj) => {
@@ -696,47 +712,14 @@ module.exports = function registerLogs(client) {
         { name: "📌 Thread", value: `${uj.name} (${uj.id})`, inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-  });
-
-  /**
-   * STAGE
-   */
-  client.on("stageInstanceCreate", async (stage) => {
-    const embed = internalEmbed("Stage esemény létrehozva", SZINEK.SIKER, "🎙️")
-      .addFields(
-        { name: "📌 Téma", value: stage.topic || "Nincs", inline: false },
-        { name: "💬 Csatorna", value: `<#${stage.channelId}>`, inline: false }
-      );
-
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-  });
-
-  client.on("stageInstanceDelete", async (stage) => {
-    const embed = internalEmbed("Stage esemény törölve", SZINEK.HIBA, "🎙️")
-      .addFields(
-        { name: "📌 Téma", value: stage.topic || "Nincs", inline: false },
-        { name: "💬 Csatorna", value: `<#${stage.channelId}>`, inline: false }
-      );
-
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-  });
-
-  client.on("stageInstanceUpdate", async (regi, uj) => {
-    const embed = internalEmbed("Stage esemény módosítva", SZINEK.MODOSITAS, "🎙️")
-      .addFields(
-        { name: "📄 Régi téma", value: regi.topic || "Nincs", inline: false },
-        { name: "📄 Új téma", value: uj.topic || "Nincs", inline: false }
-      );
-
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "csatorna", embed);
   });
 
   /**
    * RANGOK
    */
   client.on("roleCreate", async (role) => {
-    const entry = await auditKereses(role.guild, AuditLogEvent.RoleCreate, role.id);
+    const entry = await auditKeresesKesleltetve(role.guild, AuditLogEvent.RoleCreate, role.id);
 
     const embed = internalEmbed("Rang létrehozva", SZINEK.SIKER, "🆕")
       .addFields(
@@ -745,11 +728,11 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Létrehozta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "rang", embed);
   });
 
   client.on("roleDelete", async (role) => {
-    const entry = await auditKereses(role.guild, AuditLogEvent.RoleDelete, role.id);
+    const entry = await auditKeresesKesleltetve(role.guild, AuditLogEvent.RoleDelete, role.id);
 
     const embed = internalEmbed("Rang törölve", SZINEK.HIBA, "🗑️")
       .addFields(
@@ -758,41 +741,40 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Törölte", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "rang", embed);
   });
 
   client.on("roleUpdate", async (regi, uj) => {
-  const valtozasok = [];
+    const valtozasok = [];
 
-  if (regi.name !== uj.name) valtozasok.push(`**Név:** ${regi.name} → ${uj.name}`);
-  if (regi.hexColor !== uj.hexColor) valtozasok.push(`**Szín:** ${regi.hexColor} → ${uj.hexColor}`);
-  if (regi.hoist !== uj.hoist) valtozasok.push(`**Külön megjelenítés:** ${igenNem(regi.hoist)} → ${igenNem(uj.hoist)}`);
-  if (regi.mentionable !== uj.mentionable) valtozasok.push(`**Megemlíthető:** ${igenNem(regi.mentionable)} → ${igenNem(uj.mentionable)}`);
+    if (regi.name !== uj.name) valtozasok.push(`**Név:** ${regi.name} → ${uj.name}`);
+    if (regi.hexColor !== uj.hexColor) valtozasok.push(`**Szín:** ${regi.hexColor} → ${uj.hexColor}`);
+    if (regi.hoist !== uj.hoist) valtozasok.push(`**Külön megjelenítés:** ${igenNem(regi.hoist)} → ${igenNem(uj.hoist)}`);
+    if (regi.mentionable !== uj.mentionable) valtozasok.push(`**Megemlíthető:** ${igenNem(regi.mentionable)} → ${igenNem(uj.mentionable)}`);
 
-  const diff = jogosultsagDiff(regi, uj);
+    const diff = jogosultsagDiff(regi, uj);
 
-  if (diff.kapott.length) {
-    valtozasok.push(`**Kapott jogosultságok:** ${diff.kapott.map((p) => `\`${p}\``).join(", ")}`);
-  }
-  if (diff.elvesztett.length) {
-    valtozasok.push(`**Elvett jogosultságok:** ${diff.elvesztett.map((p) => `\`${p}\``).join(", ")}`);
-  }
+    if (diff.kapott.length) {
+      valtozasok.push(`**Kapott jogosultságok:** ${diff.kapott.map((p) => `\`${p}\``).join(", ")}`);
+    }
+    if (diff.elvesztett.length) {
+      valtozasok.push(`**Elvett jogosultságok:** ${diff.elvesztett.map((p) => `\`${p}\``).join(", ")}`);
+    }
 
-  if (!valtozasok.length) return;
+    if (!valtozasok.length) return;
 
-  await new Promise(res => setTimeout(res, 1500));
+    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.RoleUpdate, uj.id);
 
-  const entry = await auditKereses(uj.guild, AuditLogEvent.RoleUpdate, uj.id);
+    const embed = internalEmbed("Rang / jogosultság módosítva", SZINEK.MODOSITAS, "🛡️")
+      .setDescription(valtozasok.join("\n"))
+      .addFields(
+        { name: "🏷️ Rang", value: `${uj.name} (${uj.id})`, inline: false },
+        { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
+      );
 
-  const embed = internalEmbed("Rang / jogosultság módosítva", SZINEK.MODOSITAS, "🛡️")
-    .setDescription(valtozasok.join("\n"))
-    .addFields(
-      { name: "🏷️ Rang", value: `${uj.name} (${uj.id})`, inline: false },
-      { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
-    );
+    await kuldEmbed(client, "rang", embed);
+  });
 
-  await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-});
   /**
    * TAG MÓDOSÍTÁSOK
    */
@@ -800,24 +782,24 @@ module.exports = function registerLogs(client) {
     const { hozzaadva, elveve } = rangValtozasok(regi, uj);
 
     if (hozzaadva.length || elveve.length) {
-      const entry = await auditKereses(uj.guild, AuditLogEvent.MemberRoleUpdate, uj.id);
+      const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberRoleUpdate, uj.id);
 
       const sorok = [];
       if (hozzaadva.length) sorok.push(`**Hozzáadva:** ${hozzaadva.map((r) => `${r}`).join(", ")}`);
       if (elveve.length) sorok.push(`**Elvéve:** ${elveve.map((r) => `${r}`).join(", ")}`);
 
-      const embed = internalEmbed("Rang változás", SZINEK.MODOSITAS, "👤")
+      const embed = internalEmbed("Tag rangjai módosultak", SZINEK.MODOSITAS, "👤")
         .setDescription(sorok.join("\n"))
         .addFields(
           { name: "👤 Érintett tag", value: `${uj.user.tag} (${uj.id})`, inline: false },
           { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
         );
 
-      await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+      await kuldEmbed(client, "rang", embed);
     }
 
     if (regi.nickname !== uj.nickname) {
-      const entry = await auditKereses(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
+      const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
 
       const embed = internalEmbed("Nick módosítás", SZINEK.MODOSITAS, "🧑‍💻")
         .addFields(
@@ -827,95 +809,15 @@ module.exports = function registerLogs(client) {
           { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
         );
 
-      await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+      await kuldEmbed(client, "tag", embed);
     }
-
-    if (regi.communicationDisabledUntilTimestamp !== uj.communicationDisabledUntilTimestamp) {
-      const entry = await auditKereses(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
-      const timeoutVan = !!uj.communicationDisabledUntilTimestamp && uj.communicationDisabledUntilTimestamp > Date.now();
-
-      const embed = internalEmbed(
-        timeoutVan ? "Timeout kiosztva / módosítva" : "Timeout eltávolítva",
-        timeoutVan ? SZINEK.FIGYELMEZTETES : SZINEK.SIKER,
-        timeoutVan ? "🔇" : "🔊"
-      )
-        .addFields(
-          { name: "👤 Felhasználó", value: `${uj.user.tag} (${uj.id})`, inline: false },
-          { name: "🕒 Lejárat", value: timeoutVan ? idoBelyeg(uj.communicationDisabledUntilTimestamp) : "Nincs timeout", inline: false },
-          { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
-        );
-
-      await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-    }
-  });
-
-  /**
-   * INVITE
-   */
-  client.on("inviteCreate", async (invite) => {
-    const embed = internalEmbed("Meghívó létrehozva", SZINEK.SIKER, "📨")
-      .addFields(
-        { name: "🔗 Kód", value: invite.code, inline: true },
-        { name: "💬 Csatorna", value: invite.channel ? `${invite.channel}` : "Ismeretlen", inline: true },
-        { name: "👤 Létrehozta", value: invite.inviter ? felhasznaloSzoveg(invite.inviter) : "Ismeretlen", inline: false }
-      );
-
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-  });
-
-  client.on("inviteDelete", async (invite) => {
-    const embed = internalEmbed("Meghívó törölve", SZINEK.HIBA, "📨")
-      .addFields(
-        { name: "🔗 Kód", value: invite.code || "Ismeretlen", inline: true },
-        { name: "💬 Csatorna", value: invite.channel ? `${invite.channel}` : "Ismeretlen", inline: true }
-      );
-
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-  });
-
-  /**
-   * WEBHOOK
-   */
-  client.on("webhooksUpdate", async (channel) => {
-    if (!channel.guild) return;
-
-    const createEntry = await auditKereses(channel.guild, AuditLogEvent.WebhookCreate);
-    const deleteEntry = await auditKereses(channel.guild, AuditLogEvent.WebhookDelete);
-    const updateEntry = await auditKereses(channel.guild, AuditLogEvent.WebhookUpdate);
-
-    let cim = "Webhook módosítás";
-    let ikon = "🔗";
-    let szin = SZINEK.MODOSITAS;
-    let vegrehajto = "Ismeretlen";
-
-    if (createEntry) {
-      cim = "Webhook létrehozva";
-      szin = SZINEK.SIKER;
-      vegrehajto = createEntry.executor ? felhasznaloSzoveg(createEntry.executor) : "Ismeretlen";
-    } else if (deleteEntry) {
-      cim = "Webhook törölve";
-      szin = SZINEK.HIBA;
-      vegrehajto = deleteEntry.executor ? felhasznaloSzoveg(deleteEntry.executor) : "Ismeretlen";
-    } else if (updateEntry) {
-      cim = "Webhook módosítva";
-      szin = SZINEK.MODOSITAS;
-      vegrehajto = updateEntry.executor ? felhasznaloSzoveg(updateEntry.executor) : "Ismeretlen";
-    }
-
-    const embed = internalEmbed(cim, szin, ikon)
-      .addFields(
-        { name: "💬 Csatorna", value: `${channel}`, inline: false },
-        { name: "🛠️ Végrehajtotta", value: vegrehajto, inline: false }
-      );
-
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
   });
 
   /**
    * EMOJI
    */
   client.on("emojiCreate", async (emoji) => {
-    const entry = await auditKereses(emoji.guild, AuditLogEvent.EmojiCreate, emoji.id);
+    const entry = await auditKeresesKesleltetve(emoji.guild, AuditLogEvent.EmojiCreate, emoji.id);
 
     const embed = internalEmbed("Emoji létrehozva", SZINEK.SIKER, "😀")
       .addFields(
@@ -924,11 +826,11 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Létrehozta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "asset", embed);
   });
 
   client.on("emojiDelete", async (emoji) => {
-    const entry = await auditKereses(emoji.guild, AuditLogEvent.EmojiDelete, emoji.id);
+    const entry = await auditKeresesKesleltetve(emoji.guild, AuditLogEvent.EmojiDelete, emoji.id);
 
     const embed = internalEmbed("Emoji törölve", SZINEK.HIBA, "😀")
       .addFields(
@@ -937,11 +839,11 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Törölte", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "asset", embed);
   });
 
   client.on("emojiUpdate", async (regi, uj) => {
-    const entry = await auditKereses(uj.guild, AuditLogEvent.EmojiUpdate, uj.id);
+    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.EmojiUpdate, uj.id);
 
     const embed = internalEmbed("Emoji módosítva", SZINEK.MODOSITAS, "😀")
       .addFields(
@@ -950,14 +852,14 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "asset", embed);
   });
 
   /**
    * STICKER
    */
   client.on("stickerCreate", async (sticker) => {
-    const entry = await auditKereses(sticker.guild, AuditLogEvent.StickerCreate, sticker.id);
+    const entry = await auditKeresesKesleltetve(sticker.guild, AuditLogEvent.StickerCreate, sticker.id);
 
     const embed = internalEmbed("Sticker létrehozva", SZINEK.SIKER, "🧷")
       .addFields(
@@ -966,11 +868,11 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Létrehozta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "asset", embed);
   });
 
   client.on("stickerDelete", async (sticker) => {
-    const entry = await auditKereses(sticker.guild, AuditLogEvent.StickerDelete, sticker.id);
+    const entry = await auditKeresesKesleltetve(sticker.guild, AuditLogEvent.StickerDelete, sticker.id);
 
     const embed = internalEmbed("Sticker törölve", SZINEK.HIBA, "🧷")
       .addFields(
@@ -979,25 +881,19 @@ module.exports = function registerLogs(client) {
         { name: "🛠️ Törölte", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "asset", embed);
   });
 
   client.on("stickerUpdate", async (regi, uj) => {
-    const entry = await auditKereses(uj.guild, AuditLogEvent.StickerUpdate, uj.id);
-
-    const valtozasok = [];
-    if (regi.name !== uj.name) valtozasok.push(`**Név:** ${regi.name} → ${uj.name}`);
-    if (regi.description !== uj.description) valtozasok.push(`**Leírás:** ${regi.description || "Nincs"} → ${uj.description || "Nincs"}`);
-
-    if (!valtozasok.length) return;
+    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.StickerUpdate, uj.id);
 
     const embed = internalEmbed("Sticker módosítva", SZINEK.MODOSITAS, "🧷")
-      .setDescription(valtozasok.join("\n"))
       .addFields(
-        { name: "🆔 ID", value: uj.id, inline: true },
+        { name: "📄 Régi név", value: regi.name || "Ismeretlen", inline: true },
+        { name: "📄 Új név", value: uj.name || "Ismeretlen", inline: true },
         { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
       );
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+    await kuldEmbed(client, "asset", embed);
   });
 };

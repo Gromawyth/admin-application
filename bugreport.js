@@ -898,14 +898,15 @@ async function updateSummaryMessage(client, bug) {
     components: [createButtons(bug.id, bug.status)],
   };
 
-  if (bug.messageId) {
-    const oldMsg = await summaryChannel.messages.fetch(bug.messageId).catch(() => null);
-    if (oldMsg) {
-      return await oldMsg.edit(payload);
-    }
-  }
+if (bug.messageId) {
+  const oldMsg = await summaryChannel.messages.fetch(bug.messageId).catch(() => null);
 
-  return await summaryChannel.send(payload);
+  if (oldMsg) {
+    return await oldMsg.edit(payload).catch(() => null);
+  }
+}
+
+return await summaryChannel.send(payload).catch(() => null);
 }
 
 async function sendFeedbackToAllThreads(client, bug, status, reason, handlerTag) {
@@ -1112,19 +1113,19 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
   }
 
   const msg = await updateSummaryMessage(client, bug);
-  if (msg) {
-    bug.messageId = msg.id;
-  }
+if (msg) {
+  bug.messageId = msg.id;
+}
 
-  await sendFeedbackToAllThreads(
-    client,
-    bug,
-    status,
-    bug.aiDecisionReason,
-    interaction.user?.tag || "Staff"
-  );
+await sendFeedbackToAllThreads(
+  client,
+  bug,
+  status,
+  bug.aiDecisionReason,
+  interaction.user?.tag || "Staff"
+);
 
-  saveData(data);
+saveData(data);
 
   if (isFinal) {
     scheduleDeletion(client, bug.id, bug.deleteAt);
@@ -1203,7 +1204,6 @@ function registerBugReport(client) {
 
   client.on("interactionCreate", async (interaction) => {
     try {
-      // GOMBOK
       if (interaction.isButton()) {
         if (!interaction.customId.startsWith("bug:") && !interaction.customId.startsWith("bug_")) {
           return;

@@ -1036,18 +1036,6 @@ if (
 ) {
   return;
 }
-
-// BUGREPORT modalok → szintén ne kezelje itt
-if (
-  interaction.isModalSubmit() &&
-  interaction.customId.startsWith("bugmodal:")
-) {
-  return;
-}
-
-if (interaction.isModalSubmit() && interaction.customId.startsWith("bugmodal:")) {
-  return;
-}
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "adminpanel") {
         await adminFeedback.sendPanel(interaction);

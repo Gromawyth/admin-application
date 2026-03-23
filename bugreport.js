@@ -68,6 +68,26 @@ function ensureDataFile() {
   }
 }
 
+function ensureBugDefaults(bug) {
+  if (!Array.isArray(bug.threads)) bug.threads = [];
+  if (!bug.status) bug.status = "Nyitott";
+  if (!bug.createdAt) bug.createdAt = Date.now();
+  if (!bug.updatedAt) bug.updatedAt = Date.now();
+  if (typeof bug.aiSummary !== "string") bug.aiSummary = bug.description || "";
+  if (typeof bug.aiDecisionReason !== "string") bug.aiDecisionReason = "";
+  if (!bug.lastForumFeedbackAt) bug.lastForumFeedbackAt = null;
+  if (!bug.lastForumFeedbackType) bug.lastForumFeedbackType = null;
+  if (!bug.threadFeedbackMessages || typeof bug.threadFeedbackMessages !== "object") {
+    bug.threadFeedbackMessages = {};
+  }
+  if (typeof bug.lastManualReason !== "string") bug.lastManualReason = "";
+
+  if (!Array.isArray(bug.commentInsights)) bug.commentInsights = [];
+  if (!bug.lastMeaningfulCommentAt) bug.lastMeaningfulCommentAt = null;
+  if (typeof bug.communityStatus !== "string") bug.communityStatus = "nincs";
+  if (typeof bug.communityNotes !== "string") bug.communityNotes = "";
+}
+
 function loadData() {
   ensureDataFile();
 
@@ -90,18 +110,7 @@ function loadData() {
     }
 
     for (const bug of Object.values(parsed.bugs)) {
-      if (!Array.isArray(bug.threads)) bug.threads = [];
-      if (!bug.status) bug.status = "Nyitott";
-      if (!bug.createdAt) bug.createdAt = Date.now();
-      if (!bug.updatedAt) bug.updatedAt = Date.now();
-      if (typeof bug.aiSummary !== "string") bug.aiSummary = bug.description || "";
-      if (typeof bug.aiDecisionReason !== "string") bug.aiDecisionReason = "";
-      if (!bug.lastForumFeedbackAt) bug.lastForumFeedbackAt = null;
-      if (!bug.lastForumFeedbackType) bug.lastForumFeedbackType = null;
-      if (!bug.threadFeedbackMessages || typeof bug.threadFeedbackMessages !== "object") {
-        bug.threadFeedbackMessages = {};
-      }
-      if (typeof bug.lastManualReason !== "string") bug.lastManualReason = "";
+      ensureBugDefaults(bug);
     }
 
     return parsed;
@@ -153,8 +162,14 @@ function cleanupShortText(text = "", max = 140) {
   let value = compactText(text);
 
   value = value
-    .replace(/Szükséges reprodukciós lépések és környezeti adatok a hiba izolálásához\.?/gi, "Érdemes még pár részletet írni róla.")
-    .replace(/nem minősül valós hibának, vagy a leírt jelenség nem reprodukálható hibaként\.?/gi, "nem tudtuk hibának elfogadni.")
+    .replace(
+      /Szükséges reprodukciós lépések és környezeti adatok a hiba izolálásához\.?/gi,
+      "Érdemes még pár részletet írni róla."
+    )
+    .replace(
+      /nem minősül valós hibának, vagy a leírt jelenség nem reprodukálható hibaként\.?/gi,
+      "nem tudtuk hibának elfogadni."
+    )
     .replace(/reprodukálható/gi, "előjön")
     .replace(/nem reprodukálható/gi, "nem tudtuk előhozni")
     .replace(/izolálásához/gi, "pontosításához")
@@ -274,12 +289,12 @@ function buildBugEmbed(bug) {
 
   const summaryText = cleanupShortText(
     bug.aiSummary || bug.description || "Nincs összefoglaló.",
-    220
+    320
   );
 
   const aiShort = cleanupShortText(
     bug.aiDecisionReason || bug.aiSummary || "Nincs rövid leírás.",
-    160
+    190
   );
 
   const decisionText =
@@ -293,6 +308,12 @@ function buildBugEmbed(bug) {
     bug.deleteAt && (bug.status === "Megoldás" || bug.status === "Elutasítás")
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "-";
+
+  const communityStatus = limitText(bug.communityStatus || "-", 140);
+  const communityNotes = limitText(bug.communityNotes || "-", 1024);
+  const lastCommentText = bug.lastMeaningfulCommentAt
+    ? `<t:${Math.floor(bug.lastMeaningfulCommentAt / 1000)}:f>`
+    : "-";
 
   return new EmbedBuilder()
     .setTitle(`${style.emoji} BUG: ${limitText(bug.canonicalTitle || bug.title, 200)}`)
@@ -319,8 +340,23 @@ function buildBugEmbed(bug) {
         inline: false,
       },
       {
+        name: "💬 Fórum visszajelzés",
+        value: communityStatus,
+        inline: true,
+      },
+      {
+        name: "🧾 Utolsó érdemi komment",
+        value: lastCommentText,
+        inline: true,
+      },
+      {
         name: "🔗 Kapcsolódó fórumbejegyzések",
         value: getThreadMentions(bug.threads || []),
+        inline: false,
+      },
+      {
+        name: "📎 Kiemelt hozzászólások",
+        value: communityNotes,
         inline: false,
       },
       {
@@ -371,7 +407,8 @@ function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
     title = "🛠️ Bejelentés állapota • Dolgozunk rajta";
     description =
       "Láttuk a bejelentést, átnéztük az első részleteket, és már foglalkozunk vele. Ha végleges döntés születik, ugyanebben a fórumban külön jelezni fogjuk.";
-    extraInfo = "A thread egyelőre nyitva marad, hogy a végleges döntésig visszanézhető legyen.";
+    extraInfo =
+      "A thread egyelőre nyitva marad, hogy a végleges döntésig visszanézhető legyen.";
   }
 
   return new EmbedBuilder()
@@ -416,7 +453,10 @@ function getForumFeedbackRecord(bug, threadId) {
     bug.threadFeedbackMessages = {};
   }
 
-  if (!bug.threadFeedbackMessages[threadId] || typeof bug.threadFeedbackMessages[threadId] !== "object") {
+  if (
+    !bug.threadFeedbackMessages[threadId] ||
+    typeof bug.threadFeedbackMessages[threadId] !== "object"
+  ) {
     bug.threadFeedbackMessages[threadId] = {};
   }
 
@@ -445,8 +485,8 @@ function createDecisionModal(action, bugId) {
     .setMaxLength(800)
     .setPlaceholder(
       action === "solved"
-        ? "Pl.: A hibát javítottuk, a frissítés kikerült, már nem jelentkezik."
-        : "Pl.: Ezt nem tudtuk hibaként elfogadni, mert már javítva volt vagy nem volt reprodukálható a jelenség."
+        ? "Pl.: Javítva lett, a hiba már nem jelentkezik."
+        : "Pl.: Nem tudtuk megerősíteni hibaként."
     );
 
   return new ModalBuilder()
@@ -500,14 +540,12 @@ function getRecentTrainingExamples(data) {
 async function aiGroupBug({ title, description, openBugs, trainingExamples }) {
   if (!openai) return null;
 
-  const candidates = openBugs
-    .slice(0, CONFIG.MAX_OPEN_BUGS_FOR_AI)
-    .map((bug) => ({
-      id: bug.id,
-      title: bug.canonicalTitle || bug.title,
-      summary: cleanupShortText(bug.aiSummary || bug.description || "", 220),
-      reports: (bug.threads || []).length,
-    }));
+  const candidates = openBugs.slice(0, CONFIG.MAX_OPEN_BUGS_FOR_AI).map((bug) => ({
+    id: bug.id,
+    title: bug.canonicalTitle || bug.title,
+    summary: cleanupShortText(bug.aiSummary || bug.description || "", 220),
+    reports: (bug.threads || []).length,
+  }));
 
   const examples = trainingExamples.slice(-CONFIG.MAX_TRAINING_EXAMPLES);
 
@@ -593,7 +631,7 @@ function getFallbackDecisionReason(status, manualReason) {
   if (status === "Elutasítás") {
     return note
       ? `Átnéztük a bejelentést, de ezt most nem tudtuk hibaként elfogadni. ${note} Ettől függetlenül köszönjük a jelzést, mert segít pontosabban átnézni a hasonló eseteket is.`
-      : "Átnéztük a bejelentést, de ezt most nem tudtuk hibaként elfogadni. Előfordulhat, hogy a jelzett jelenség már megoldódott, nem áll fenn, vagy nem hiba okozta. Ettől függetlenül köszönjük a jelzést.";
+      : "Átnéztük a bejelentést, de ezt most nem tudtuk hibaként elfogadni. Előfordulhat, hogy a jelzett jelenség már nem áll fenn, vagy jelenleg nem tudtuk hibaként megerősíteni. Ettől függetlenül köszönjük a jelzést.";
   }
 
   return note
@@ -887,68 +925,234 @@ async function syncThreadState(thread, status) {
 }
 
 // =========================
+// KOMMENT FIGYELÉS
+// =========================
+function findBugByThreadId(data, threadId) {
+  for (const bug of Object.values(data.bugs)) {
+    if (Array.isArray(bug.threads) && bug.threads.includes(threadId)) {
+      return bug;
+    }
+  }
+  return null;
+}
+
+function classifyForumComment(text = "") {
+  const value = normalizeText(text);
+
+  if (!value || value.length < 4) {
+    return { meaningful: false, type: "empty", summary: "" };
+  }
+
+  const solvedHints = [
+    "megoldottam",
+    "megoldodott",
+    "mar jo",
+    "mar mukodik",
+    "javult",
+    "jo lett",
+    "nalam mar nem jon elo",
+    "fixed",
+  ];
+
+  const ignoreHints = [
+    "semmis",
+    "figyelmen kivul",
+    "ignore",
+    "targytalan",
+    "nem aktualis",
+    "veletlen volt",
+    "megoldodott magatol",
+  ];
+
+  const extraHints = [
+    "extra info",
+    "plusz info",
+    "meg annyi",
+    "pontosan ugy",
+    "igy lehet elohozni",
+    "reprodukcio",
+    "nalam is",
+    "video",
+    "kepet csatoltam",
+    "log",
+    "hiba kod",
+    "error",
+  ];
+
+  if (solvedHints.some((x) => value.includes(normalizeText(x)))) {
+    return {
+      meaningful: true,
+      type: "solved_by_reporter",
+      summary: cleanupShortText(text, 180),
+    };
+  }
+
+  if (ignoreHints.some((x) => value.includes(normalizeText(x)))) {
+    return {
+      meaningful: true,
+      type: "ignore",
+      summary: cleanupShortText(text, 180),
+    };
+  }
+
+  if (extraHints.some((x) => value.includes(normalizeText(x))) || value.length >= 30) {
+    return {
+      meaningful: true,
+      type: "extra_info",
+      summary: cleanupShortText(text, 180),
+    };
+  }
+
+  return {
+    meaningful: false,
+    type: "smalltalk",
+    summary: "",
+  };
+}
+
+function rebuildCommunityNotes(bug) {
+  const items = Array.isArray(bug.commentInsights) ? bug.commentInsights.slice(-5) : [];
+
+  if (!items.length) {
+    bug.communityNotes = "-";
+    return;
+  }
+
+  bug.communityNotes = items
+    .map((item) => `• ${item.authorTag}: ${item.summary}`)
+    .join("\n");
+}
+
+async function processForumReply(client, message) {
+  if (!message || !message.channel || message.author?.bot) return;
+
+  const thread = message.channel;
+
+  if (thread.parentId !== CONFIG.BUG_FORUM_CHANNEL_ID) return;
+  if (thread.type !== ChannelType.PublicThread) return;
+
+  const content = compactText(message.content || "");
+  if (!content) return;
+
+  const data = loadData();
+  const bug = findBugByThreadId(data, thread.id);
+  if (!bug) return;
+
+  ensureBugDefaults(bug);
+
+  if (["Megoldás", "Elutasítás"].includes(bug.status)) return;
+
+  const result = classifyForumComment(content);
+  if (!result.meaningful) return;
+
+  bug.commentInsights.push({
+    authorId: message.author.id,
+    authorTag: message.author.tag || message.author.username || "Ismeretlen",
+    messageId: message.id,
+    threadId: thread.id,
+    type: result.type,
+    summary: result.summary,
+    createdAt: Date.now(),
+  });
+
+  bug.commentInsights = bug.commentInsights.slice(-15);
+  bug.lastMeaningfulCommentAt = Date.now();
+  bug.updatedAt = Date.now();
+
+  if (result.type === "solved_by_reporter") {
+    bug.communityStatus = "bejelentő szerint megoldódott";
+  } else if (result.type === "ignore") {
+    bug.communityStatus = "figyelmen kívül hagyható";
+  } else if (result.type === "extra_info") {
+    bug.communityStatus = "extra információ érkezett";
+  }
+
+  rebuildCommunityNotes(bug);
+
+  try {
+    const msg = await updateSummaryMessage(client, bug);
+    if (msg) {
+      bug.messageId = msg.id;
+    }
+  } catch (error) {
+    console.error("[BUGREPORT] processForumReply -> updateSummaryMessage hiba:", error);
+  }
+
+  saveData(data);
+}
+
+// =========================
 // DISCORD
 // =========================
 async function updateSummaryMessage(client, bug) {
-  const summaryChannel = await client.channels.fetch(CONFIG.BUG_SUMMARY_CHANNEL_ID).catch(() => null);
-  if (!summaryChannel) return null;
+  const summaryChannel = await client.channels
+    .fetch(CONFIG.BUG_SUMMARY_CHANNEL_ID)
+    .catch(() => null);
+
+  if (!summaryChannel) {
+    throw new Error("A BUG_SUMMARY_CHANNEL_ID csatorna nem található.");
+  }
 
   const payload = {
     embeds: [buildBugEmbed(bug)],
     components: [createButtons(bug.id, bug.status)],
   };
 
-if (bug.messageId) {
-  const oldMsg = await summaryChannel.messages.fetch(bug.messageId).catch(() => null);
+  if (bug.messageId) {
+    const oldMsg = await summaryChannel.messages.fetch(bug.messageId).catch(() => null);
 
-  if (oldMsg) {
-    return await oldMsg.edit(payload).catch(() => null);
+    if (oldMsg) {
+      return await oldMsg.edit(payload);
+    }
   }
-}
 
-return await summaryChannel.send(payload).catch(() => null);
+  return await summaryChannel.send(payload);
 }
 
 async function sendFeedbackToAllThreads(client, bug, status, reason, handlerTag) {
   for (const threadId of bug.threads || []) {
-    const thread = await client.channels.fetch(threadId).catch(() => null);
-    if (!thread) continue;
+    try {
+      const thread = await client.channels.fetch(threadId).catch(() => null);
+      if (!thread) continue;
 
-    const record = getForumFeedbackRecord(bug, threadId);
+      const record = getForumFeedbackRecord(bug, threadId);
 
-    if ((status === "Megoldás" || status === "Elutasítás") && record.workingMessageId) {
-      await deleteTrackedThreadMessage(thread, record.workingMessageId);
-      record.workingMessageId = null;
-    }
+      if ((status === "Megoldás" || status === "Elutasítás") && record.workingMessageId) {
+        await deleteTrackedThreadMessage(thread, record.workingMessageId);
+        record.workingMessageId = null;
+      }
 
-    const embed = buildForumFeedbackEmbed({
-      status,
-      reason,
-      handlerTag,
-      bug,
-    });
+      const embed = buildForumFeedbackEmbed({
+        status,
+        reason,
+        handlerTag,
+        bug,
+      });
 
-    const sent = await thread.send({ embeds: [embed] }).catch(() => null);
-    if (!sent) {
+      const sent = await thread.send({ embeds: [embed] }).catch((err) => {
+        console.error(`[BUGREPORT] thread.send hiba (${threadId}):`, err);
+        return null;
+      });
+
+      if (sent) {
+        if (status === "Dolgozunk rajta") {
+          if (record.workingMessageId && record.workingMessageId !== sent.id) {
+            await deleteTrackedThreadMessage(thread, record.workingMessageId);
+          }
+          record.workingMessageId = sent.id;
+        } else {
+          if (record.finalMessageId && record.finalMessageId !== sent.id) {
+            await deleteTrackedThreadMessage(thread, record.finalMessageId);
+          }
+          record.finalMessageId = sent.id;
+        }
+      }
+
       await applyThreadStatusTag(thread, status);
       await syncThreadState(thread, status);
-      continue;
+    } catch (error) {
+      console.error(`[BUGREPORT] sendFeedbackToAllThreads hiba (${threadId}):`, error);
     }
-
-    if (status === "Dolgozunk rajta") {
-      if (record.workingMessageId && record.workingMessageId !== sent.id) {
-        await deleteTrackedThreadMessage(thread, record.workingMessageId);
-      }
-      record.workingMessageId = sent.id;
-    } else {
-      if (record.finalMessageId && record.finalMessageId !== sent.id) {
-        await deleteTrackedThreadMessage(thread, record.finalMessageId);
-      }
-      record.finalMessageId = sent.id;
-    }
-
-    await applyThreadStatusTag(thread, status);
-    await syncThreadState(thread, status);
   }
 }
 
@@ -976,6 +1180,7 @@ async function processNewForumThread(client, thread) {
 
   if (result.type === "match" && result.bugId && data.bugs[result.bugId]) {
     const bug = data.bugs[result.bugId];
+    ensureBugDefaults(bug);
 
     if (!bug.threads.includes(thread.id)) {
       bug.threads.push(thread.id);
@@ -983,19 +1188,19 @@ async function processNewForumThread(client, thread) {
 
     bug.updatedAt = Date.now();
 
-    if (!bug.threadFeedbackMessages || typeof bug.threadFeedbackMessages !== "object") {
-      bug.threadFeedbackMessages = {};
-    }
-
     if (result.source === "ai") {
       bug.canonicalTitle = result.canonicalTitle || bug.canonicalTitle || bug.title;
       bug.aiSummary = result.summary || bug.aiSummary || bug.description;
       bug.aiDecisionReason = result.decisionReason || bug.aiDecisionReason;
     }
 
-    const msg = await updateSummaryMessage(client, bug);
-    if (msg) {
-      bug.messageId = msg.id;
+    try {
+      const msg = await updateSummaryMessage(client, bug);
+      if (msg) {
+        bug.messageId = msg.id;
+      }
+    } catch (error) {
+      console.error("[BUGREPORT] processNewForumThread -> updateSummaryMessage hiba:", error);
     }
 
     saveData(data);
@@ -1041,13 +1246,21 @@ async function processNewForumThread(client, thread) {
     lastForumFeedbackType: null,
     lastManualReason: "",
     threadFeedbackMessages: {},
+    commentInsights: [],
+    lastMeaningfulCommentAt: null,
+    communityStatus: "nincs",
+    communityNotes: "-",
   };
 
   data.bugs[bugId] = bug;
 
-  const msg = await updateSummaryMessage(client, bug);
-  if (msg) {
-    bug.messageId = msg.id;
+  try {
+    const msg = await updateSummaryMessage(client, bug);
+    if (msg) {
+      bug.messageId = msg.id;
+    }
+  } catch (error) {
+    console.error("[BUGREPORT] új bug -> updateSummaryMessage hiba:", error);
   }
 
   saveData(data);
@@ -1080,20 +1293,24 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
     });
   }
 
-  if (!bug.threadFeedbackMessages || typeof bug.threadFeedbackMessages !== "object") {
-    bug.threadFeedbackMessages = {};
-  }
+  ensureBugDefaults(bug);
 
   const finalStatuses = ["Megoldás", "Elutasítás"];
   const wasFinal = finalStatuses.includes(bug.status);
   const isFinal = finalStatuses.includes(status);
 
-  const reason = await aiDecisionReason({
-    bug,
-    status,
-    trainingExamples: getRecentTrainingExamples(data),
-    manualReason,
-  });
+  let reason;
+  try {
+    reason = await aiDecisionReason({
+      bug,
+      status,
+      trainingExamples: getRecentTrainingExamples(data),
+      manualReason,
+    });
+  } catch (error) {
+    console.error("[BUGREPORT] aiDecisionReason hiba:", error);
+    reason = getFallbackDecisionReason(status, manualReason);
+  }
 
   bug.status = status;
   bug.handler = interaction.user?.tag || bug.handler || "Staff";
@@ -1112,20 +1329,33 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
     clearDeletionSchedule(bug.id);
   }
 
-  const msg = await updateSummaryMessage(client, bug);
-if (msg) {
-  bug.messageId = msg.id;
-}
+  try {
+    const msg = await updateSummaryMessage(client, bug);
+    if (msg) {
+      bug.messageId = msg.id;
+    }
+  } catch (error) {
+    console.error("[BUGREPORT] updateSummaryMessage hiba:", error);
+  }
 
-await sendFeedbackToAllThreads(
-  client,
-  bug,
-  status,
-  bug.aiDecisionReason,
-  interaction.user?.tag || "Staff"
-);
+  try {
+    await sendFeedbackToAllThreads(
+      client,
+      bug,
+      status,
+      bug.aiDecisionReason,
+      interaction.user?.tag || "Staff"
+    );
+  } catch (error) {
+    console.error("[BUGREPORT] sendFeedbackToAllThreads hiba:", error);
+  }
 
-saveData(data);
+  try {
+    saveData(data);
+  } catch (error) {
+    console.error("[BUGREPORT] saveData hiba:", error);
+    throw error;
+  }
 
   if (isFinal) {
     scheduleDeletion(client, bug.id, bug.deleteAt);
@@ -1134,9 +1364,12 @@ saveData(data);
   }
 
   const replyTextMap = {
-    "Megoldás": "A bug állapota sikeresen **Megoldás** lett. A fórumok frissítve, archiválva és időzítve lettek.",
-    "Elutasítás": "A bug állapota sikeresen **Elutasítás** lett. A fórumok frissítve, archiválva és időzítve lettek.",
-    "Dolgozunk rajta": "A bug állapota sikeresen **Dolgozunk rajta** lett. A fórumok frissítve lettek.",
+    Megoldás:
+      "A bug állapota sikeresen **Megoldás** lett. A fórumok frissítve, archiválva és időzítve lettek.",
+    Elutasítás:
+      "A bug állapota sikeresen **Elutasítás** lett. A fórumok frissítve, archiválva és időzítve lettek.",
+    "Dolgozunk rajta":
+      "A bug állapota sikeresen **Dolgozunk rajta** lett. A fórumok frissítve lettek.",
   };
 
   if (interaction.deferred || interaction.replied) {
@@ -1202,10 +1435,21 @@ function registerBugReport(client) {
     }
   });
 
+  client.on("messageCreate", async (message) => {
+    try {
+      await processForumReply(client, message);
+    } catch (error) {
+      console.error("[BUGREPORT] messageCreate hiba:", error);
+    }
+  });
+
   client.on("interactionCreate", async (interaction) => {
     try {
       if (interaction.isButton()) {
-        if (!interaction.customId.startsWith("bug:") && !interaction.customId.startsWith("bug_")) {
+        if (
+          !interaction.customId.startsWith("bug:") &&
+          !interaction.customId.startsWith("bug_")
+        ) {
           return;
         }
 
@@ -1218,12 +1462,10 @@ function registerBugReport(client) {
           });
         }
 
-        // Working: azonnal mehet, nincs modal
         if (action === "working") {
           return await handleStatusChange(client, interaction, bugId, "Dolgozunk rajta");
         }
 
-        // Solved / Rejected: modal nyílik
         if (action === "solved" || action === "rejected") {
           const modal = createDecisionModal(action, bugId);
           return await interaction.showModal(modal);
@@ -1235,7 +1477,6 @@ function registerBugReport(client) {
         });
       }
 
-      // MODAL
       if (interaction.isModalSubmit()) {
         if (!interaction.customId.startsWith("bugmodal:")) return;
 
@@ -1263,6 +1504,12 @@ function registerBugReport(client) {
         }
 
         if (action === "rejected") {
+          console.log("[BUGREPORT] Rejected modal submit:", {
+            bugId,
+            manualReason,
+            user: interaction.user?.tag,
+          });
+
           return await handleStatusChange(
             client,
             interaction,

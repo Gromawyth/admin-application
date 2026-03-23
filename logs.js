@@ -762,36 +762,37 @@ module.exports = function registerLogs(client) {
   });
 
   client.on("roleUpdate", async (regi, uj) => {
-    const valtozasok = [];
+  const valtozasok = [];
 
-    if (regi.name !== uj.name) valtozasok.push(`**Név:** ${regi.name} → ${uj.name}`);
-    if (regi.hexColor !== uj.hexColor) valtozasok.push(`**Szín:** ${regi.hexColor} → ${uj.hexColor}`);
-    if (regi.hoist !== uj.hoist) valtozasok.push(`**Külön megjelenítés:** ${igenNem(regi.hoist)} → ${igenNem(uj.hoist)}`);
-    if (regi.mentionable !== uj.mentionable) valtozasok.push(`**Megemlíthető:** ${igenNem(regi.mentionable)} → ${igenNem(uj.mentionable)}`);
+  if (regi.name !== uj.name) valtozasok.push(`**Név:** ${regi.name} → ${uj.name}`);
+  if (regi.hexColor !== uj.hexColor) valtozasok.push(`**Szín:** ${regi.hexColor} → ${uj.hexColor}`);
+  if (regi.hoist !== uj.hoist) valtozasok.push(`**Külön megjelenítés:** ${igenNem(regi.hoist)} → ${igenNem(uj.hoist)}`);
+  if (regi.mentionable !== uj.mentionable) valtozasok.push(`**Megemlíthető:** ${igenNem(regi.mentionable)} → ${igenNem(uj.mentionable)}`);
 
-    const diff = jogosultsagDiff(regi, uj);
+  const diff = jogosultsagDiff(regi, uj);
 
-    if (diff.kapott.length) {
-      valtozasok.push(`**Kapott jogosultságok:** ${diff.kapott.map((p) => `\`${p}\``).join(", ")}`);
-    }
-    if (diff.elvesztett.length) {
-      valtozasok.push(`**Elvett jogosultságok:** ${diff.elvesztett.map((p) => `\`${p}\``).join(", ")}`);
-    }
+  if (diff.kapott.length) {
+    valtozasok.push(`**Kapott jogosultságok:** ${diff.kapott.map((p) => `\`${p}\``).join(", ")}`);
+  }
+  if (diff.elvesztett.length) {
+    valtozasok.push(`**Elvett jogosultságok:** ${diff.elvesztett.map((p) => `\`${p}\``).join(", ")}`);
+  }
 
-    if (!valtozasok.length) return;
+  if (!valtozasok.length) return;
 
-    const entry = await auditKereses(uj.guild, AuditLogEvent.RoleUpdate, uj.id);
+  await new Promise(res => setTimeout(res, 1500));
 
-    const embed = internalEmbed("Rang / jogosultság módosítva", SZINEK.MODOSITAS, "🛡️")
-      .setDescription(valtozasok.join("\n"))
-      .addFields(
-        { name: "🏷️ Rang", value: `${uj.name} (${uj.id})`, inline: false },
-        { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
-      );
+  const entry = await auditKereses(uj.guild, AuditLogEvent.RoleUpdate, uj.id);
 
-    await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
-  });
+  const embed = internalEmbed("Rang / jogosultság módosítva", SZINEK.MODOSITAS, "🛡️")
+    .setDescription(valtozasok.join("\n"))
+    .addFields(
+      { name: "🏷️ Rang", value: `${uj.name} (${uj.id})`, inline: false },
+      { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
+    );
 
+  await kuldEmbed(client, CONFIG.ALTALANOS_LOG_CSATORNA_ID, embed);
+});
   /**
    * TAG MÓDOSÍTÁSOK
    */

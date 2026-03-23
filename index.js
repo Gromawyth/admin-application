@@ -50,12 +50,26 @@ const {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildInvites,
+    GatewayIntentBits.GuildEmojisAndStickers,
+    GatewayIntentBits.GuildWebhooks
   ],
-  partials: [Partials.Channel],
+  partials: [
+    Partials.User,
+    Partials.Channel,
+    Partials.Message,
+    Partials.GuildMember
+  ],
 });
+registerLogs(client);
 // 🔽 ÚJ: külső fájl betöltése
 const adminFeedback = require("./adminfeedback");
+const registerLogs = require("./logs");
 
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";

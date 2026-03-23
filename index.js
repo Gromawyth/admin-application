@@ -505,6 +505,11 @@ function buildTicketModal(typeKey) {
 
 async function registerCommands() {
   const commands = [
+new SlashCommandBuilder()
+  .setName("discordstats")
+  .setDescription("Elküldi az aktuális statisztikát a statisztika csatornába.")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
     new SlashCommandBuilder()
   .setName("adminpanel")
   .setDescription("Admin értékelő panel")

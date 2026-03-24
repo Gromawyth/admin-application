@@ -70,7 +70,9 @@ const client = new Client({
 const adminFeedback = require("./adminfeedback");
 const registerLogs = require("./logs");
 const bugReport = require("./bugreport");
+const ideaSystem = require("./otletek");
 bugReport.registerBugReport(client);
+ideaSystem.registerIdeaSystem(client);
 registerLogs(client);
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";
@@ -1024,7 +1026,8 @@ if (
   interaction.isButton() &&
   (
     interaction.customId.startsWith("bug_") ||
-    interaction.customId.startsWith("bug:")
+    interaction.customId.startsWith("bug:") ||
+    interaction.customId.startsWith("idea:")
   )
 ) {
   return;
@@ -1032,7 +1035,10 @@ if (
 
 if (
   interaction.isModalSubmit() &&
-  interaction.customId.startsWith("bugmodal:")
+  (
+    interaction.customId.startsWith("bugmodal:") ||
+    interaction.customId.startsWith("ideamodal:")
+  )
 ) {
   return;
 }

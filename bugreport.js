@@ -213,7 +213,7 @@ function getThreadMentions(threadIds = []) {
 
 function getStatusStyle(status) {
   if (status === "Megoldva") return { color: 0x2ecc71, emoji: "✅" };
-  if (status === "Elutasítás") return { color: 0xe74c3c, emoji: "❌" };
+  if (status === "Elutasítva") return { color: 0xe74c3c, emoji: "❌" };
   if (status === "Dolgozunk rajta") return { color: 0x3498db, emoji: "🛠️" };
   return { color: 0xf1c40f, emoji: "⏳" };
 }
@@ -229,11 +229,11 @@ function createButtons(bugId, status = "Nyitott") {
     );
   }
 
-  if (status === "Elutasítás") {
+  if (status === "Elutasítva") {
     return new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`bug:rejected:${bugId}`)
-        .setLabel("Elutasítás")
+        .setLabel("Elutasítva")
         .setStyle(ButtonStyle.Danger)
         .setDisabled(true)
     );
@@ -252,7 +252,7 @@ function createButtons(bugId, status = "Nyitott") {
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`bug:rejected:${bugId}`)
-        .setLabel("Elutasítás")
+        .setLabel("Elutasítva")
         .setStyle(ButtonStyle.Danger)
     );
   }
@@ -268,7 +268,7 @@ function createButtons(bugId, status = "Nyitott") {
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`bug:rejected:${bugId}`)
-      .setLabel("Elutasítás")
+      .setLabel("Elutasítva")
       .setStyle(ButtonStyle.Danger)
   );
 }
@@ -360,7 +360,7 @@ function buildBugEmbed(bug) {
         }`;
 
   const deleteText =
-    bug.deleteAt && (bug.status === "Megoldva" || bug.status === "Elutasítás")
+    bug.deleteAt && (bug.status === "Megoldva" || bug.status === "Elutasítva")
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "-";
 
@@ -438,7 +438,7 @@ function buildBugEmbed(bug) {
 function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
   const style = getStatusStyle(status);
   const deleteTimeText =
-    bug.deleteAt && (status === "Megoldva" || status === "Elutasítás")
+    bug.deleteAt && (status === "Megoldva" || status === "Elutasítva")
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "nincs ütemezve";
 
@@ -451,7 +451,7 @@ function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
     description =
       "Átnéztük a bejelentést, és a jelzett hibát megoldottnak jelöltük. Köszönjük, hogy jelezted, ezzel sokat segítettél a szerver javításában.";
     extraInfo = `A fórumbejegyzés archiválva lett, és ${deleteTimeText} törölve lesz.`;
-  } else if (status === "Elutasítás") {
+  } else if (status === "Elutasítva") {
     title = "❌ Bejelentés lezárva • Elutasítva";
     description =
       "Átnéztük a bejelentést, de ezt most nem tudtuk hibaként elfogadni. Ettől függetlenül köszönjük a jelzést, mert segít pontosabban átnézni a hasonló eseteket is.";
@@ -525,7 +525,7 @@ async function deleteTrackedThreadMessage(thread, messageId) {
 function createDecisionModal(action, bugId) {
   const titleMap = {
     solved: "Bug elbírálása • Megoldva",
-    rejected: "Bug elbírálása • Elutasítás",
+    rejected: "Bug elbírálása • Elutasítva",
   };
 
   const input = new TextInputBuilder()
@@ -912,7 +912,7 @@ function getFallbackDecisionReason(status, manualReason) {
       : "Átnéztük a bejelentést, és a jelzett hibát javítottnak jelöltük. A probléma már nem jelentkezik a jelenlegi állapot szerint. Köszönjük, hogy jelezted, ezzel sokat segítettél.";
   }
 
-  if (status === "Elutasítás") {
+  if (status === "Elutasítva") {
     return note
       ? `Átnéztük a bejelentést, de ezt most nem tudtuk hibaként elfogadni. ${note} Ettől függetlenül köszönjük a jelzést, mert segít pontosabban átnézni a hasonló eseteket is.`
       : "Átnéztük a bejelentést, de ezt most nem tudtuk hibaként elfogadni. Előfordulhat, hogy a jelzett jelenség már nem áll fenn, vagy jelenleg nem tudtuk hibaként megerősíteni. Ettől függetlenül köszönjük a jelzést.";
@@ -1135,7 +1135,7 @@ function restoreDeletionSchedules(client) {
   const data = loadData();
 
   for (const bug of Object.values(data.bugs)) {
-    if (bug.deleteAt && (bug.status === "Megoldva" || bug.status === "Elutasítás")) {
+    if (bug.deleteAt && (bug.status === "Megoldva" || bug.status === "Elutasítva")) {
       scheduleDeletion(client, bug.id, bug.deleteAt);
     }
   }
@@ -1146,7 +1146,7 @@ function restoreDeletionSchedules(client) {
 // =========================
 function getStatusTagKeywords(status) {
   if (status === "Megoldva") return CONFIG.TAG_NAMES.SOLVED;
-  if (status === "Elutasítás") return CONFIG.TAG_NAMES.REJECTED;
+  if (status === "Elutasítva") return CONFIG.TAG_NAMES.REJECTED;
   if (status === "Dolgozunk rajta") return CONFIG.TAG_NAMES.WORKING;
   return CONFIG.TAG_NAMES.OPEN;
 }
@@ -1202,7 +1202,7 @@ async function syncThreadState(thread, status) {
     return;
   }
 
-  if (status === "Megoldva" || status === "Elutasítás") {
+  if (status === "Megoldva" || status === "Elutasítva") {
     await thread.setLocked(true).catch(() => null);
     await thread.setArchived(true).catch(() => null);
   }
@@ -1237,7 +1237,7 @@ async function processForumReply(client, message) {
 
   ensureBugDefaults(bug);
 
-  if (["Megoldva", "Elutasítás"].includes(bug.status)) return;
+  if (["Megoldva", "Elutasítva"].includes(bug.status)) return;
 
   let analysis;
   try {
@@ -1327,7 +1327,7 @@ async function sendFeedbackToAllThreads(client, bug, status, reason, handlerTag)
 
       const record = getForumFeedbackRecord(bug, threadId);
 
-      if ((status === "Megoldva" || status === "Elutasítás") && record.workingMessageId) {
+      if ((status === "Megoldva" || status === "Elutasítva") && record.workingMessageId) {
         await deleteTrackedThreadMessage(thread, record.workingMessageId);
         record.workingMessageId = null;
       }
@@ -1509,7 +1509,7 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
 
   ensureBugDefaults(bug);
 
-  const finalStatuses = ["Megoldva", "Elutasítás"];
+  const finalStatuses = ["Megoldva", "Elutasítva"];
   const wasFinal = finalStatuses.includes(bug.status);
   const isFinal = finalStatuses.includes(status);
 
@@ -1580,8 +1580,8 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
   const replyTextMap = {
     Megoldva:
       "A bug állapota sikeresen **Megoldva** lett. A fórumok frissítve, archiválva és időzítve lettek.",
-    Elutasítás:
-      "A bug állapota sikeresen **Elutasítás** lett. A fórumok frissítve, archiválva és időzítve lettek.",
+    Elutasítva:
+      "A bug állapota sikeresen **Elutasítva** lett. A fórumok frissítve, archiválva és időzítve lettek.",
     "Dolgozunk rajta":
       "A bug állapota sikeresen **Dolgozunk rajta** lett. A fórumok frissítve lettek.",
   };

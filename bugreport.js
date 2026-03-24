@@ -212,18 +212,18 @@ function getThreadMentions(threadIds = []) {
 }
 
 function getStatusStyle(status) {
-  if (status === "Megoldás") return { color: 0x2ecc71, emoji: "✅" };
+  if (status === "Megoldva") return { color: 0x2ecc71, emoji: "✅" };
   if (status === "Elutasítás") return { color: 0xe74c3c, emoji: "❌" };
   if (status === "Dolgozunk rajta") return { color: 0x3498db, emoji: "🛠️" };
   return { color: 0xf1c40f, emoji: "⏳" };
 }
 
 function createButtons(bugId, status = "Nyitott") {
-  if (status === "Megoldás") {
+  if (status === "Megoldva") {
     return new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`bug:solved:${bugId}`)
-        .setLabel("Megoldás")
+        .setLabel("Megoldva")
         .setStyle(ButtonStyle.Success)
         .setDisabled(true)
     );
@@ -248,7 +248,7 @@ function createButtons(bugId, status = "Nyitott") {
         .setDisabled(true),
       new ButtonBuilder()
         .setCustomId(`bug:solved:${bugId}`)
-        .setLabel("Megoldás")
+        .setLabel("Megoldva")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`bug:rejected:${bugId}`)
@@ -264,7 +264,7 @@ function createButtons(bugId, status = "Nyitott") {
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`bug:solved:${bugId}`)
-      .setLabel("Megoldás")
+      .setLabel("Megoldva")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`bug:rejected:${bugId}`)
@@ -360,7 +360,7 @@ function buildBugEmbed(bug) {
         }`;
 
   const deleteText =
-    bug.deleteAt && (bug.status === "Megoldás" || bug.status === "Elutasítás")
+    bug.deleteAt && (bug.status === "Megoldva" || bug.status === "Elutasítás")
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "-";
 
@@ -438,7 +438,7 @@ function buildBugEmbed(bug) {
 function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
   const style = getStatusStyle(status);
   const deleteTimeText =
-    bug.deleteAt && (status === "Megoldás" || status === "Elutasítás")
+    bug.deleteAt && (status === "Megoldva" || status === "Elutasítás")
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "nincs ütemezve";
 
@@ -446,8 +446,8 @@ function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
   let description = "A bejelentést átnéztük, és frissítettük az állapotát.";
   let extraInfo = "A thread jelenleg nyitva marad.";
 
-  if (status === "Megoldás") {
-    title = "✅ Bejelentés lezárva • Megoldás";
+  if (status === "Megoldva") {
+    title = "✅ Bejelentés lezárva • Megoldva";
     description =
       "Átnéztük a bejelentést, és a jelzett hibát megoldottnak jelöltük. Köszönjük, hogy jelezted, ezzel sokat segítettél a szerver javításában.";
     extraInfo = `A fórumbejegyzés archiválva lett, és ${deleteTimeText} törölve lesz.`;
@@ -524,7 +524,7 @@ async function deleteTrackedThreadMessage(thread, messageId) {
 
 function createDecisionModal(action, bugId) {
   const titleMap = {
-    solved: "Bug elbírálása • Megoldás",
+    solved: "Bug elbírálása • Megoldva",
     rejected: "Bug elbírálása • Elutasítás",
   };
 
@@ -906,7 +906,7 @@ Csak a kész magyar szöveget add vissza.
 function getFallbackDecisionReason(status, manualReason) {
   const note = compactText(manualReason || "");
 
-  if (status === "Megoldás") {
+  if (status === "Megoldva") {
     return note
       ? `Átnéztük a bejelentést, és a jelzett hibát javítottnak jelöltük. ${note} Köszönjük, hogy jelezted, ezzel sokat segítettél.`
       : "Átnéztük a bejelentést, és a jelzett hibát javítottnak jelöltük. A probléma már nem jelentkezik a jelenlegi állapot szerint. Köszönjük, hogy jelezted, ezzel sokat segítettél.";
@@ -1135,7 +1135,7 @@ function restoreDeletionSchedules(client) {
   const data = loadData();
 
   for (const bug of Object.values(data.bugs)) {
-    if (bug.deleteAt && (bug.status === "Megoldás" || bug.status === "Elutasítás")) {
+    if (bug.deleteAt && (bug.status === "Megoldva" || bug.status === "Elutasítás")) {
       scheduleDeletion(client, bug.id, bug.deleteAt);
     }
   }
@@ -1145,7 +1145,7 @@ function restoreDeletionSchedules(client) {
 // CÍMKÉK / THREAD ÁLLAPOT
 // =========================
 function getStatusTagKeywords(status) {
-  if (status === "Megoldás") return CONFIG.TAG_NAMES.SOLVED;
+  if (status === "Megoldva") return CONFIG.TAG_NAMES.SOLVED;
   if (status === "Elutasítás") return CONFIG.TAG_NAMES.REJECTED;
   if (status === "Dolgozunk rajta") return CONFIG.TAG_NAMES.WORKING;
   return CONFIG.TAG_NAMES.OPEN;
@@ -1202,7 +1202,7 @@ async function syncThreadState(thread, status) {
     return;
   }
 
-  if (status === "Megoldás" || status === "Elutasítás") {
+  if (status === "Megoldva" || status === "Elutasítás") {
     await thread.setLocked(true).catch(() => null);
     await thread.setArchived(true).catch(() => null);
   }
@@ -1237,7 +1237,7 @@ async function processForumReply(client, message) {
 
   ensureBugDefaults(bug);
 
-  if (["Megoldás", "Elutasítás"].includes(bug.status)) return;
+  if (["Megoldva", "Elutasítás"].includes(bug.status)) return;
 
   let analysis;
   try {
@@ -1327,7 +1327,7 @@ async function sendFeedbackToAllThreads(client, bug, status, reason, handlerTag)
 
       const record = getForumFeedbackRecord(bug, threadId);
 
-      if ((status === "Megoldás" || status === "Elutasítás") && record.workingMessageId) {
+      if ((status === "Megoldva" || status === "Elutasítás") && record.workingMessageId) {
         await deleteTrackedThreadMessage(thread, record.workingMessageId);
         record.workingMessageId = null;
       }
@@ -1509,7 +1509,7 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
 
   ensureBugDefaults(bug);
 
-  const finalStatuses = ["Megoldás", "Elutasítás"];
+  const finalStatuses = ["Megoldva", "Elutasítás"];
   const wasFinal = finalStatuses.includes(bug.status);
   const isFinal = finalStatuses.includes(status);
 
@@ -1578,8 +1578,8 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
   }
 
   const replyTextMap = {
-    Megoldás:
-      "A bug állapota sikeresen **Megoldás** lett. A fórumok frissítve, archiválva és időzítve lettek.",
+    Megoldva:
+      "A bug állapota sikeresen **Megoldva** lett. A fórumok frissítve, archiválva és időzítve lettek.",
     Elutasítás:
       "A bug állapota sikeresen **Elutasítás** lett. A fórumok frissítve, archiválva és időzítve lettek.",
     "Dolgozunk rajta":
@@ -1712,7 +1712,7 @@ function registerBugReport(client) {
             client,
             interaction,
             bugId,
-            "Megoldás",
+            "Megoldva",
             manualReason
           );
         }

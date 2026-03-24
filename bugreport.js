@@ -31,8 +31,8 @@ const CONFIG = {
 
   DELETE_AFTER_MS: 24 * 60 * 60 * 1000,
 
-  MAX_COMMENT_INSIGHTS: 20,
-  MAX_COMMENT_CONTEXT_ITEMS: 8,
+  MAX_COMMENT_INSIGHTS: 40,
+  MAX_COMMENT_CONTEXT_ITEMS: 12,
 
   TAG_NAMES: {
     OPEN: ["nyitott", "open"],
@@ -452,7 +452,7 @@ function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
       "Átnéztük a bejelentést, és a jelzett hibát megoldottnak jelöltük. Köszönjük, hogy jelezted, ezzel sokat segítettél a szerver javításában.";
     extraInfo = `A fórumbejegyzés archiválva lett, és ${deleteTimeText} törölve lesz.`;
   } else if (status === "Elutasítás") {
-    title = "❌ Bejelentés lezárva • Elutasítás";
+    title = "❌ Bejelentés lezárva • Elutasítva";
     description =
       "Átnéztük a bejelentést, de ezt most nem tudtuk hibaként elfogadni. Ettől függetlenül köszönjük a jelzést, mert segít pontosabban átnézni a hasonló eseteket is.";
     extraInfo = `A fórumbejegyzés archiválva lett, és ${deleteTimeText} törölve lesz.`;
@@ -1728,7 +1728,7 @@ function registerBugReport(client) {
             client,
             interaction,
             bugId,
-            "Elutasítás",
+            "Elutasítva",
             manualReason
           );
         }

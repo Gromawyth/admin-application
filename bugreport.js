@@ -160,7 +160,7 @@ function compactText(text = "") {
     .trim();
 }
 
-function cleanupShortText(text = "", max = 140) {
+function cleanupShortText(text = "", max = 400) {
   let value = compactText(text);
 
   value = value
@@ -607,7 +607,7 @@ Feladat:
 - döntsd el, hogy az új hibajelentés ugyanahhoz a meglévő NYITOTT bughoz tartozik-e
 - ha igen, add vissza a meglévő bug id-ját
 - ha nem, a matchBugId legyen null
-- a summary legyen nagyon rövid, egyszerű magyar szöveg
+- a summary legyen rövid, egyszerű magyar szöveg
 - a decisionReason legyen rövid, hétköznapi, könnyen érthető magyar szöveg
 - a canonicalTitle legyen rövid és tiszta
 
@@ -615,8 +615,8 @@ Fontos:
 - ne használj bonyolult vagy technikai szavakat
 - ne írj okoskodó stílusban
 - ne használd azt, hogy reprodukálható / nem reprodukálható
-- maximum 1 rövid mondat summary
-- maximum 1 rövid mondat decisionReason
+- maximum 2-4 mondat summary
+- maximum 2 rövid mondat decisionReason
 
 Korábbi példák:
 ${JSON.stringify(examples, null, 2)}
@@ -658,7 +658,7 @@ Csak JSON-t adj vissza:
       matchBugId: parsed.matchBugId || null,
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
       canonicalTitle: limitText(parsed.canonicalTitle || title, 180),
-      summary: cleanupShortText(parsed.summary || description || title, 280),
+      summary: cleanupShortText(parsed.summary || description || title, 520),
       decisionReason: cleanupShortText(
         parsed.decisionReason || "A hibajelentés feldolgozva.",
         150
@@ -1044,7 +1044,7 @@ async function classifyBug(data, title, description) {
       type: "match",
       bugId: fallback.bugId,
       canonicalTitle: title,
-      summary: cleanupShortText(description || title, 280),
+      summary: cleanupShortText(description || title, 400),
       decisionReason: "Hasonlít egy meglévő hibára.",
       confidence: fallback.confidence,
       source: "fallback",

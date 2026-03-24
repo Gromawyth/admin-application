@@ -485,7 +485,7 @@ function buildForumFeedbackEmbed({ status, reason, handlerTag, bug }) {
         inline: true,
       },
       {
-        name: "📝 Indoklás",
+        name: "📝 Ai hozzászólás",
         value: limitText(reason || "-", 1024),
         inline: false,
       },

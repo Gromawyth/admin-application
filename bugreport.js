@@ -31,6 +31,9 @@ const CONFIG = {
 
   DELETE_AFTER_MS: 24 * 60 * 60 * 1000,
 
+  MAX_COMMENT_INSIGHTS: 20,
+  MAX_COMMENT_CONTEXT_ITEMS: 8,
+
   TAG_NAMES: {
     OPEN: ["nyitott", "open"],
     WORKING: ["dolgozunk rajta", "folyamatban", "in progress", "working"],
@@ -270,7 +273,7 @@ function createButtons(bugId, status = "Nyitott") {
   );
 }
 
-function getCommentContextForAI(bug, maxItems = 6) {
+function getCommentContextForAI(bug, maxItems = CONFIG.MAX_COMMENT_CONTEXT_ITEMS) {
   if (!bug || !Array.isArray(bug.commentInsights) || !bug.commentInsights.length) {
     return "Nincs érdemi fórumos visszajelzés.";
   }
@@ -282,6 +285,9 @@ function getCommentContextForAI(bug, maxItems = 6) {
         solved_by_reporter: "bejelentő szerint megoldódott",
         ignore: "figyelmen kívül hagyható",
         extra_info: "plusz információ",
+        confirms_issue: "megerősíti a hibát",
+        asks_help: "pontosítást kér / segítséget kér",
+        other_meaningful: "egyéb érdemi visszajelzés",
         smalltalk: "egyéb",
       };
 
@@ -290,17 +296,60 @@ function getCommentContextForAI(bug, maxItems = 6) {
     .join("\n");
 }
 
+function rebuildCommunityNotes(bug) {
+  const items = Array.isArray(bug.commentInsights) ? bug.commentInsights.slice(-6) : [];
+
+  if (!items.length) {
+    bug.communityNotes = "-";
+    return;
+  }
+
+  bug.communityNotes = items
+    .map((item) => `• ${item.authorTag}: ${item.summary}`)
+    .join("\n");
+}
+
+function deriveCommunityStatus(bug) {
+  const items = Array.isArray(bug.commentInsights) ? bug.commentInsights.slice(-8) : [];
+  if (!items.length) return "nincs";
+
+  const counts = {
+    solved_by_reporter: 0,
+    ignore: 0,
+    extra_info: 0,
+    confirms_issue: 0,
+    asks_help: 0,
+    other_meaningful: 0,
+  };
+
+  for (const item of items) {
+    if (counts[item.type] !== undefined) {
+      counts[item.type]++;
+    }
+  }
+
+  if (counts.solved_by_reporter > 0) return "bejelentő szerint megoldódott";
+  if (counts.ignore > 0) return "figyelmen kívül hagyható vagy már nem aktuális";
+  if (counts.extra_info > 0 && counts.confirms_issue > 0) {
+    return "plusz információ és megerősítés is érkezett";
+  }
+  if (counts.extra_info > 0) return "extra információ érkezett";
+  if (counts.confirms_issue > 0) return "több visszajelzés is megerősíti a hibát";
+  if (counts.asks_help > 0) return "további pontosítás merült fel";
+  return "érdemi fórumos visszajelzés érkezett";
+}
+
 function buildBugEmbed(bug) {
   const style = getStatusStyle(bug.status);
 
   const summaryText = cleanupShortText(
     bug.aiSummary || bug.description || "Nincs összefoglaló.",
-    400
+    520
   );
 
   const aiShort = cleanupShortText(
     bug.aiDecisionReason || bug.aiSummary || "Nincs rövid leírás.",
-    190
+    220
   );
 
   const decisionText =
@@ -315,7 +364,7 @@ function buildBugEmbed(bug) {
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "-";
 
-  const communityStatus = limitText(bug.communityStatus || "-", 140);
+  const communityStatus = limitText(bug.communityStatus || "-", 160);
   const communityNotes = limitText(bug.communityNotes || "-", 1024);
   const lastCommentText = bug.lastMeaningfulCommentAt
     ? `<t:${Math.floor(bug.lastMeaningfulCommentAt / 1000)}:f>`
@@ -507,7 +556,7 @@ function addTrainingExample(data, bug, status) {
 
   const example = {
     title: bug.canonicalTitle || bug.title || "Ismeretlen bug",
-    summary: cleanupShortText(bug.aiSummary || bug.description || "", 220),
+    summary: cleanupShortText(bug.aiSummary || bug.description || "", 240),
     status,
     decisionReason: cleanupShortText(bug.aiDecisionReason || "", 220),
     createdAt: Date.now(),
@@ -545,7 +594,7 @@ async function aiGroupBug({ title, description, openBugs, trainingExamples }) {
   const candidates = openBugs.slice(0, CONFIG.MAX_OPEN_BUGS_FOR_AI).map((bug) => ({
     id: bug.id,
     title: bug.canonicalTitle || bug.title,
-    summary: cleanupShortText(bug.aiSummary || bug.description || "", 220),
+    summary: cleanupShortText(bug.aiSummary || bug.description || "", 240),
     reports: (bug.threads || []).length,
   }));
 
@@ -609,15 +658,177 @@ Csak JSON-t adj vissza:
       matchBugId: parsed.matchBugId || null,
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
       canonicalTitle: limitText(parsed.canonicalTitle || title, 180),
-      summary: cleanupShortText(parsed.summary || description || title, 260),
+      summary: cleanupShortText(parsed.summary || description || title, 280),
       decisionReason: cleanupShortText(
         parsed.decisionReason || "A hibajelentés feldolgozva.",
-        140
+        150
       ),
     };
   } catch (error) {
     console.error("[BUGREPORT] AI grouping hiba:", error?.message || error);
     return null;
+  }
+}
+
+async function aiAnalyzeForumComment({ bug, content, authorTag }) {
+  const fallbackText = compactText(content || "");
+
+  if (!fallbackText) {
+    return {
+      meaningful: false,
+      type: "smalltalk",
+      summary: "",
+    };
+  }
+
+  if (!openai) {
+    const short = normalizeText(fallbackText);
+
+    if (fallbackText.length < 12) {
+      return {
+        meaningful: false,
+        type: "smalltalk",
+        summary: "",
+      };
+    }
+
+    if (
+      short.includes("megoldottam") ||
+      short.includes("mukodik") ||
+      short.includes("mar jo") ||
+      short.includes("javult")
+    ) {
+      return {
+        meaningful: true,
+        type: "solved_by_reporter",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    if (
+      short.includes("semmis") ||
+      short.includes("nem aktualis") ||
+      short.includes("ignore") ||
+      short.includes("targytalan")
+    ) {
+      return {
+        meaningful: true,
+        type: "ignore",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    if (fallbackText.length >= 18) {
+      return {
+        meaningful: true,
+        type: "other_meaningful",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    return {
+      meaningful: false,
+      type: "smalltalk",
+      summary: "",
+    };
+  }
+
+  const prompt = `
+Te egy Discord bugrendszer kommentelemzője vagy.
+
+Feladat:
+- döntsd el, hogy ez a fórumos hozzászólás érdemi-e a bug szempontjából
+- ha érdemi, röviden foglald össze
+- ha nem érdemi, akkor meaningful legyen false
+- ne kulcsszavak alapján dönts, hanem a teljes komment értelme alapján
+- a komment lehet:
+  - megoldódást jelző
+  - figyelmen kívül hagyható / semmis
+  - extra információ
+  - a hibát megerősítő visszajelzés
+  - pontosítást vagy segítséget kérő hozzászólás
+  - vagy egyéb érdemi komment
+
+Lehetséges type értékek:
+- solved_by_reporter
+- ignore
+- extra_info
+- confirms_issue
+- asks_help
+- other_meaningful
+- smalltalk
+
+Szabályok:
+- csak JSON-t adj vissza
+- summary legyen rövid, természetes magyar mondat vagy mondattöredék
+- ne legyen túl technikai
+- ha a komment nem lényeges, summary legyen üres string
+
+Bug címe:
+${bug.canonicalTitle || bug.title || "Ismeretlen bug"}
+
+Bug leírás:
+${bug.description || "Nincs leírás."}
+
+Korábbi érdemi kommentek:
+${getCommentContextForAI(bug, 4)}
+
+Komment szerzője:
+${authorTag || "Ismeretlen"}
+
+Új komment:
+${fallbackText}
+
+Csak JSON:
+{
+  "meaningful": true vagy false,
+  "type": "solved_by_reporter",
+  "summary": "rövid összefoglaló"
+}
+`;
+
+  try {
+    const response = await openai.responses.create({
+      model: CONFIG.OPENAI_MODEL,
+      input: prompt,
+      reasoning: { effort: "low" },
+    });
+
+    const text = (response.output_text || "").trim();
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace === -1 || lastBrace === -1) {
+      throw new Error("Nem jött vissza értelmezhető JSON.");
+    }
+
+    const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
+    const allowedTypes = new Set([
+      "solved_by_reporter",
+      "ignore",
+      "extra_info",
+      "confirms_issue",
+      "asks_help",
+      "other_meaningful",
+      "smalltalk",
+    ]);
+
+    const meaningful = Boolean(parsed.meaningful);
+    const type = allowedTypes.has(parsed.type) ? parsed.type : "other_meaningful";
+    const summary = meaningful ? cleanupShortText(parsed.summary || fallbackText, 180) : "";
+
+    return {
+      meaningful,
+      type: meaningful ? type : "smalltalk",
+      summary,
+    };
+  } catch (error) {
+    console.error("[BUGREPORT] aiAnalyzeForumComment hiba:", error?.message || error);
+
+    return {
+      meaningful: fallbackText.length >= 18,
+      type: fallbackText.length >= 18 ? "other_meaningful" : "smalltalk",
+      summary: fallbackText.length >= 18 ? cleanupShortText(fallbackText, 180) : "",
+    };
   }
 }
 
@@ -634,7 +845,7 @@ async function aiRefreshBugSummaryFromComments(bug) {
     ]
       .filter(Boolean)
       .join(" "),
-    320
+    420
   );
 
   if (!openai) {
@@ -645,15 +856,17 @@ async function aiRefreshBugSummaryFromComments(bug) {
 Te egy Discord bugkezelő rendszer rövid magyar összefoglaló generátora vagy.
 
 Feladat:
-- írj 2 rövid, természetes magyar mondatot
+- írj 2-4 rövid, természetes magyar mondatot
 - ez a szöveg lesz a bug embed főcím alatti leírása
-- legyen kicsit részletesebb, mint egy egymondatos kivonat
-- de ne legyen túl hosszú
+- lehet kicsit hosszabb és informatívabb
+- de ne legyen túl hosszú és ne legyen regény
 - vedd figyelembe az eredeti hibaleírást és a fórumos hozzászólások lényegét is
-- ha a kommentek szerint a bug már megoldódott, semmis, vagy plusz infó érkezett, azt természetesen építsd bele
+- ha a kommentek szerint a hiba több embernél is előjön, írd bele
+- ha a kommentek szerint már megoldódott vagy semmis, azt is építsd bele természetesen
 - ne használj listát
 - ne írj technikai vagy túl hivatalos stílusban
 - ne írj címet, csak maga a leírás legyen
+- a szöveg jól nézzen ki embed leírásként
 
 Bug címe:
 ${bug.canonicalTitle || bug.title || "Ismeretlen bug"}
@@ -683,7 +896,7 @@ Csak a kész magyar szöveget add vissza.
     const text = compactText(response.output_text || "");
     if (!text) return fallback;
 
-    return cleanupShortText(text, 400);
+    return cleanupShortText(text, 520);
   } catch (error) {
     console.error("[BUGREPORT] aiRefreshBugSummaryFromComments hiba:", error?.message || error);
     return fallback;
@@ -831,7 +1044,7 @@ async function classifyBug(data, title, description) {
       type: "match",
       bugId: fallback.bugId,
       canonicalTitle: title,
-      summary: cleanupShortText(description || title, 260),
+      summary: cleanupShortText(description || title, 280),
       decisionReason: "Hasonlít egy meglévő hibára.",
       confidence: fallback.confidence,
       source: "fallback",
@@ -842,10 +1055,10 @@ async function classifyBug(data, title, description) {
     type: "new",
     bugId: null,
     canonicalTitle: aiResult?.canonicalTitle || title,
-    summary: cleanupShortText(aiResult?.summary || description || title, 260),
+    summary: cleanupShortText(aiResult?.summary || description || title, 280),
     decisionReason: cleanupShortText(
       aiResult?.decisionReason || "Új hibaként lett felvéve.",
-      140
+      150
     ),
     confidence: aiResult?.confidence || 0,
     source: aiResult ? "ai_no_match" : "fallback_new",
@@ -1007,93 +1220,6 @@ function findBugByThreadId(data, threadId) {
   return null;
 }
 
-function classifyForumComment(text = "") {
-  const value = normalizeText(text);
-
-  if (!value || value.length < 4) {
-    return { meaningful: false, type: "empty", summary: "" };
-  }
-
-  const solvedHints = [
-    "megoldottam",
-    "megoldodott",
-    "mar jo",
-    "mar mukodik",
-    "javult",
-    "jo lett",
-    "nalam mar nem jon elo",
-    "fixed",
-  ];
-
-  const ignoreHints = [
-    "semmis",
-    "figyelmen kivul",
-    "ignore",
-    "targytalan",
-    "nem aktualis",
-    "veletlen volt",
-    "megoldodott magatol",
-  ];
-
-  const extraHints = [
-    "extra info",
-    "plusz info",
-    "meg annyi",
-    "pontosan ugy",
-    "igy lehet elohozni",
-    "reprodukcio",
-    "nalam is",
-    "video",
-    "kepet csatoltam",
-    "log",
-    "hiba kod",
-    "error",
-  ];
-
-  if (solvedHints.some((x) => value.includes(normalizeText(x)))) {
-    return {
-      meaningful: true,
-      type: "solved_by_reporter",
-      summary: cleanupShortText(text, 180),
-    };
-  }
-
-  if (ignoreHints.some((x) => value.includes(normalizeText(x)))) {
-    return {
-      meaningful: true,
-      type: "ignore",
-      summary: cleanupShortText(text, 180),
-    };
-  }
-
-  if (extraHints.some((x) => value.includes(normalizeText(x))) || value.length >= 30) {
-    return {
-      meaningful: true,
-      type: "extra_info",
-      summary: cleanupShortText(text, 180),
-    };
-  }
-
-  return {
-    meaningful: false,
-    type: "smalltalk",
-    summary: "",
-  };
-}
-
-function rebuildCommunityNotes(bug) {
-  const items = Array.isArray(bug.commentInsights) ? bug.commentInsights.slice(-5) : [];
-
-  if (!items.length) {
-    bug.communityNotes = "-";
-    return;
-  }
-
-  bug.communityNotes = items
-    .map((item) => `• ${item.authorTag}: ${item.summary}`)
-    .join("\n");
-}
-
 async function processForumReply(client, message) {
   if (!message || !message.channel || message.author?.bot) return;
 
@@ -1113,31 +1239,39 @@ async function processForumReply(client, message) {
 
   if (["Megoldás", "Elutasítás"].includes(bug.status)) return;
 
-  const result = classifyForumComment(content);
-  if (!result.meaningful) return;
+  let analysis;
+  try {
+    analysis = await aiAnalyzeForumComment({
+      bug,
+      content,
+      authorTag: message.author?.tag || message.author?.username || "Ismeretlen",
+    });
+  } catch (error) {
+    console.error("[BUGREPORT] processForumReply -> aiAnalyzeForumComment hiba:", error);
+    analysis = {
+      meaningful: content.length >= 18,
+      type: content.length >= 18 ? "other_meaningful" : "smalltalk",
+      summary: content.length >= 18 ? cleanupShortText(content, 180) : "",
+    };
+  }
+
+  if (!analysis?.meaningful) return;
 
   bug.commentInsights.push({
     authorId: message.author.id,
     authorTag: message.author.tag || message.author.username || "Ismeretlen",
     messageId: message.id,
     threadId: thread.id,
-    type: result.type,
-    summary: result.summary,
+    type: analysis.type || "other_meaningful",
+    summary: cleanupShortText(analysis.summary || content, 180),
     createdAt: Date.now(),
   });
 
-  bug.commentInsights = bug.commentInsights.slice(-15);
+  bug.commentInsights = bug.commentInsights.slice(-CONFIG.MAX_COMMENT_INSIGHTS);
   bug.lastMeaningfulCommentAt = Date.now();
   bug.updatedAt = Date.now();
 
-  if (result.type === "solved_by_reporter") {
-    bug.communityStatus = "bejelentő szerint megoldódott";
-  } else if (result.type === "ignore") {
-    bug.communityStatus = "figyelmen kívül hagyható";
-  } else if (result.type === "extra_info") {
-    bug.communityStatus = "extra információ érkezett";
-  }
-
+  bug.communityStatus = deriveCommunityStatus(bug);
   rebuildCommunityNotes(bug);
 
   try {
@@ -1269,7 +1403,7 @@ async function processNewForumThread(client, thread) {
       bug.canonicalTitle = result.canonicalTitle || bug.canonicalTitle || bug.title;
       bug.aiSummary = cleanupShortText(
         result.summary || bug.aiSummary || bug.description,
-        260
+        280
       );
       bug.aiDecisionReason = result.decisionReason || bug.aiDecisionReason;
     }
@@ -1309,10 +1443,10 @@ async function processNewForumThread(client, thread) {
     title,
     canonicalTitle: result.canonicalTitle || title,
     description,
-    aiSummary: cleanupShortText(result.summary || description, 260),
+    aiSummary: cleanupShortText(result.summary || description, 280),
     aiDecisionReason: cleanupShortText(
       result.decisionReason || "Új hibaként lett felvéve.",
-      140
+      150
     ),
     threads: [thread.id],
     status: "Nyitott",

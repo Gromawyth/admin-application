@@ -74,7 +74,7 @@ MIN_AI_CONFIDENCE_FOR_BAN: 86,
 
   MIN_INCIDENT_SCORE_FOR_LOG: 20,
   USER_CASE_COOLDOWN_MS: 15_000,
-  DELETE_NOTICE_TTL_MS: 25_000,
+  DELETE_NOTICE_TTL_MS: 50_000,
 
   DECAY_DAYS_STRONG: 7,
   DECAY_DAYS_MEDIUM: 30,
@@ -997,7 +997,9 @@ Staff szöveg: ${safeStaffText || "nincs"}
   if (mode === "unban") {
     return safeStaffText || "A korábbi korlátozás feloldásra került, a helyzetet felülvizsgáltuk.";
   }
-
+if (mode === "warn_notice") {
+  return safeStaffText || "Figyelmeztetést kaptál, mert az üzeneted problémásnak minősült. Ha ez folytatódik, a rendszer szigorúbban fog reagálni.";
+}
   if (mode === "delete_notice") {
     return safeStaffText || "Az üzenetedet a rendszer eltávolította, mert szabályszegésre utaló tartalmat észlelt.";
   }
@@ -1063,10 +1065,6 @@ if (hasAdServer && points >= 55 && action === "ignore") {
 const projectedRisk = Math.max(0, Math.min(100, currentRisk + Math.round(points * 0.38)));
 
 // 1) tényleg súlyos kivételek
-if (hasImmediateScam && confidence >= 75) {
-  action = "ban";
-  points = Math.max(points, 96);
-}
 
 if (hasImmediateDox && confidence >= 80) {
   action = "ban";
@@ -1138,7 +1136,11 @@ if (
 }
 
 // 5) alap erősítések
-if (ruleScan.score >= 25 && action === "ignore") {
+if (ruleScan.score >= 12 && action === "ignore") {
+  action = "warn";
+}
+
+if (ruleScan.score >= 25 && ["ignore", "warn"].includes(action)) {
   action = "delete";
 }
 
@@ -1593,6 +1595,53 @@ async function sendDeleteNoticeInChannel(message, member, profile, final) {
   }
 }
 
+async function sendWarnNoticeInChannel(message, member, profile, final) {
+  try {
+    const noticeText = await aiWriteUserFacingMessage({
+      mode: "warn_notice",
+      context: `A felhasználó figyelmeztetést kapott. Szabály: ${final.ruleBroken}. Indok: ${final.reason}. Kockázat: ${getRiskPercent(profile)}%.`,
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(colorBySeverity(final.severity || "enyhe"))
+      .setTitle("⚠️ AI figyelmeztetés")
+      .setDescription(noticeText)
+      .addFields(
+        {
+          name: "📜 Indok",
+          value: trimField(final.reason, 1024),
+          inline: false,
+        },
+        {
+          name: "📊 Kockázati szint",
+          value: `**${getRiskPercent(profile)}%** (${getRiskBand(profile)})`,
+          inline: true,
+        },
+        {
+          name: "⏭️ Mi várható később?",
+          value: trimField(getExpectedSanction(profile), 1024),
+          inline: true,
+        }
+      )
+      .setFooter({ text: `${CONFIG.SERVER_NAME} • Ez az értesítés rövid idő múlva törlődik` })
+      .setTimestamp(new Date());
+
+    const sent = await message.channel.send({
+      content: `${safeMentionUser(member.id)} \u200b`,
+      allowedMentions: { users: [member.id] },
+      embeds: [embed],
+    }).catch(() => null);
+
+    if (sent) {
+      setTimeout(() => {
+        sent.delete().catch(() => null);
+      }, CONFIG.DELETE_NOTICE_TTL_MS);
+    }
+  } catch (error) {
+    console.error("[AIMOD] sendWarnNoticeInChannel hiba:", error);
+  }
+}
+
 async function getTargetUser(client, userId) {
   return client.users.cache.get(userId) || await client.users.fetch(userId).catch(() => null);
 }
@@ -1607,6 +1656,7 @@ function buildEvidenceSummary(message, final) {
 async function applyDecision(client, message, member, final, profile) {
   let executedAction = "ignore";
   let deleteDone = false;
+  let warnNotice = false;
 
   const reason = `[AI Moderation] ${cleanText(final.reason, 300)}`;
 
@@ -1622,7 +1672,7 @@ async function applyDecision(client, message, member, final, profile) {
     if (ok) {
       profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
       executedAction = "timeout";
-      return { executedAction, deleteDone };
+      return { executedAction, deleteDone, warnNotice };
     }
   }
 
@@ -1631,7 +1681,7 @@ async function applyDecision(client, message, member, final, profile) {
     if (ok) {
       profile.totals.kicks = (profile.totals.kicks || 0) + 1;
       executedAction = "kick";
-      return { executedAction, deleteDone };
+      return { executedAction, deleteDone, warnNotice };
     }
   }
 
@@ -1655,7 +1705,7 @@ async function applyDecision(client, message, member, final, profile) {
       };
       saveStore();
 
-      return { executedAction, deleteDone };
+      return { executedAction, deleteDone, warnNotice };
     }
   }
 
@@ -1665,12 +1715,12 @@ async function applyDecision(client, message, member, final, profile) {
 
   if (final.action === "warn") {
     executedAction = "warn";
+    warnNotice = true;
     profile.totals.warnings = (profile.totals.warnings || 0) + 1;
   }
 
-  return { executedAction, deleteDone };
+  return { executedAction, deleteDone, warnNotice };
 }
-
 function scanMemberNames(member) {
   const hits = [];
   const username = `${member?.user?.username || ""} ${member?.displayName || ""}`;
@@ -1739,6 +1789,8 @@ async function processMessage(client, message) {
   if (!message.content?.trim()) return;
 
   const member = message.member;
+  if (!member) return;
+
   const profile = getUserProfile(member.id);
 
   const recentSameUser = (profile.recentMessages || []).filter(
@@ -1753,7 +1805,10 @@ async function processMessage(client, message) {
     return;
   }
 
-  const channelMessages = await message.channel.messages.fetch({ limit: CONFIG.MAX_CONTEXT_MESSAGES }).catch(() => null);
+  const channelMessages = await message.channel.messages
+    .fetch({ limit: CONFIG.MAX_CONTEXT_MESSAGES })
+    .catch(() => null);
+
   const contextMessages = channelMessages
     ? [...channelMessages.values()]
         .filter((m) => !m.author?.bot)
@@ -1773,13 +1828,21 @@ async function processMessage(client, message) {
   let aiResult = {
     category: "other",
     categoryHu: "Egyéb szabálysértés",
-    severity: ruleScan.score >= 60 ? "magas" : ruleScan.score >= 20 ? "közepes" : "enyhe",
+    severity:
+      ruleScan.score >= 60 ? "magas" :
+      ruleScan.score >= 20 ? "közepes" :
+      "enyhe",
     confidence: Math.min(96, Math.max(40, ruleScan.score)),
     points: ruleScan.score,
-    ruleBroken: pickHighestRuleHit(ruleScan.hits)?.label || "Szabályszegés gyanú",
-    reason: pickHighestRuleHit(ruleScan.hits)?.label || "Szabályalapú találat alapján problémás tartalom.",
-    analysis: "Az üzenet és a közelmúltbeli mintázat alapján a rendszer szabálysértésre utaló viselkedést érzékelt. A tartalom problémásnak tűnik, ezért a rendszer automatikus moderációs lépést mérlegelt. A visszaeső minták a döntést súlyosabb irányba tolhatják.",
-    patternSummary: "A rendszer szerint emelkedő kockázatú viselkedés figyelhető meg.",
+    ruleBroken:
+      pickHighestRuleHit(ruleScan.hits)?.label || "Szabályszegés gyanú",
+    reason:
+      pickHighestRuleHit(ruleScan.hits)?.label ||
+      "Szabályalapú találat alapján problémás tartalom.",
+    analysis:
+      "Az üzenet és a közelmúltbeli mintázat alapján a rendszer szabálysértésre utaló viselkedést érzékelt. A tartalom problémásnak tűnik, ezért a rendszer automatikus moderációs lépést mérlegelt. A visszaeső minták a döntést súlyosabb irányba tolhatják.",
+    patternSummary:
+      "A rendszer szerint emelkedő kockázatú viselkedés figyelhető meg.",
     recommendedAction:
       ruleScan.score >= 85 ? "kick" :
       ruleScan.score >= 55 ? "timeout" :
@@ -1821,52 +1884,43 @@ async function processMessage(client, message) {
   const actionResult = await applyDecision(client, message, member, final, profile);
   final.action = actionResult.executedAction || final.action;
 
-  let currentStatus = "Megfigyelés";
-  if (final.action === "timeout") currentStatus = "Timeout végrehajtva";
-  else if (final.action === "kick") currentStatus = "Kick végrehajtva";
-  else if (final.action === "ban") currentStatus = "Ban végrehajtva";
-  else if (final.action === "delete") currentStatus = "Üzenet törölve";
-  else if (final.projectedRisk >= CONFIG.BAN_NEAR_THRESHOLD) currentStatus = "Ban közelében";
-  else if (final.projectedRisk >= CONFIG.KICK_NEAR_THRESHOLD) currentStatus = "Kick közelében";
-  else if (final.projectedRisk >= CONFIG.HIGH_RISK_THRESHOLD) currentStatus = "Magas kockázat";
-  else currentStatus = "Megfigyelés";
-
-  setActiveCase(profile, {
-    lastAction: actionToLabel(final.action),
-    lastActionRaw: final.action,
-    lastSeverity: final.severity,
-    lastCategory: final.categoryHu,
-    lastRuleBroken: final.ruleBroken,
-    lastAnalysis: final.analysis,
-    lastPatternSummary: final.patternSummary,
-    lastMessageContent: cleanText(message.content, 1024),
-    lastReason: final.reason,
-    lastEvidence: buildEvidenceSummary(message, final),
-    currentStatus,
-    lastMessageId: message.id,
-    lastChannelId: message.channelId,
-    lastProjectedRisk: final.projectedRisk,
-  });
-
-  saveStore();
-
   if (actionResult.deleteDone) {
     await sendDeleteNoticeInChannel(message, member, profile, final);
   }
 
-  const shouldCaseRefresh =
-    final.shouldNotifyStaff &&
-    (
-      final.points >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG ||
-      ["delete", "timeout", "kick", "ban"].includes(final.action) ||
-      now() - (profile.lastCaseAt || 0) >= CONFIG.USER_CASE_COOLDOWN_MS
-    );
-
-  if (shouldCaseRefresh) {
-    await resendUnifiedCaseMessage(client, member, profile);
-    profile.lastCaseAt = now();
-    saveStore();
+  if (actionResult.warnNotice) {
+    await sendWarnNoticeInChannel(message, member, profile, final);
   }
+
+  let currentStatus = "Megfigyelés";
+  if (final.action === "timeout") currentStatus = "Timeout végrehajtva";
+  else if (final.action === "kick") currentStatus = "Kick végrehajtva";
+  else if (final.action === "ban") currentStatus = "Ban végrehajtva";
+  else if (final.action === "warn") currentStatus = "Figyelmeztetés kiadva";
+  else if (final.action === "delete") currentStatus = "Üzenet törölve";
+  else if (final.action === "ignore") currentStatus = "Nem történt szankció";
+
+  upsertActiveCase(member.id, {
+    userId: member.id,
+    username: member.user?.tag || member.user?.username || "Ismeretlen",
+    displayName: member.displayName || member.user?.username || "Ismeretlen",
+    riskPercent: getRiskPercent(profile),
+    riskBand: getRiskBand(profile),
+    lastCategory: final.categoryHu || final.category || "Egyéb",
+    lastSeverity: final.severity,
+    lastRuleBroken: final.ruleBroken,
+    lastReason: final.reason,
+    lastAnalysis: final.analysis,
+    lastPatternSummary: final.patternSummary,
+    lastMessageContent: cleanText(message.content, 1000),
+    lastEvidence: buildEvidenceSummary(message, final),
+    currentStatus,
+    lastMessageId: message.id,
+    lastChannelId: message.channelId,
+  });
+
+  saveStore();
+  await resendUnifiedCaseMessage(client, member, profile);
 }
 
 function hasStaffPermission(interaction) {

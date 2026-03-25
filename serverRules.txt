@@ -1,0 +1,288 @@
+SZERVER SZABÁLYZAT
+I. Általános alapelvek
+1. Alapelvek és értelmezés
+Amennyiben egy adott helyzetre a szabályzat nem tartalmaz konkrét rendelkezést, minden esetben a józan ész elve az irányadó. A szerver célja nem a valóság teljes körű szimulálása, hanem a magas színvonalú és élvezetes játékélmény biztosítása.
+A szabályok minden játékosra egyformán vonatkoznak. Kivétel kizárólag akkor alkalmazható, ha azt az adott szabálypont kifejezetten lehetővé teszi, vagy a vezetőség erre külön engedélyt ad. Frakcióhovatartozás vagy karakterkoncepció nem jelent felmentést a szabályok alól.
+2. Out of Character (OOC) magatartás
+Az OOC kommunikáció során minden játékos köteles tisztelettel és kulturált módon viselkedni. Az OOC alapú diszkrimináció bármely formája szigorúan tiltott, és súlyos – akár végleges – közösségi kitiltást vonhat maga után minden platformon (InGame, Discord, Fórum, stb.).
+Adminisztrátori ügyintézés esetén az adminisztrátor utasításait kötelező követni, még akkor is, ha az érintett fél nem ért egyet a döntéssel. Amennyiben valaki sérelmesnek tart egy intézkedést, a fórumon hivatalos panasz benyújtására van lehetősége, amelyet a vezetőség bírál el.
+Adminisztrátori ügyintézés kizárólag az OOC chat felületén történhet, amely minden játékos számára elérhető és naplózott. Az adminisztrátor nem köteles voice alapú ügyintézésre. Amennyiben az ingame ügyintézés nem elegendő, a fórumon hivatalos panasz tehető.
+Tilos Panaszkönyvvel fenyegetni más játékost OOC keretek között. Ez súlyos közösségi szabálysértésnek minősül.
+3. Külső programok és módosítások
+Tilos minden olyan külső program, segédszoftver vagy eszköz használata, amely jogosulatlan előnyt biztosít más játékosokkal szemben. Ide tartoznak többek között:
+makrók (egér, billentyűzet, külső program),
+autohotkey vagy hasonló automatizált megoldások,
+bármilyen tiltott bindRP (kivétel: hivatalos rendvédelmi megafon).
+Kliensoldali grafikai módosítások kizárólag saját felelősségre használhatók. A szerver üzemeltetői semmilyen felelősséget nem vállalnak az ezekből eredő problémákért.
+A GTA V mechanikájának vagy fizikai rendszerének szándékos kihasználása szigorúan tilos.
+4. Hibák és bugok kezelése
+Minden játékos köteles a tudomására jutott hibát vagy rendszerproblémát a megfelelő fórumfelületen bejelenteni. A hibák kihasználása vagy az azokkal való visszaélés szankciót, súlyos esetben kitiltást von maga után.
+Amennyiben nem egyértelmű, hogy egy jelenség hibának minősül-e, az adminisztrátor jelenlétében reprodukálható.
+II. Karakteralkotás és szerepjáték
+5. Karakterkoncepció
+Új karakter létrehozása előtt javasolt részletes háttértörténetet és személyiséget kialakítani. A karakter külső és belső tulajdonságainak összhangban kell állniuk egymással és a szerverkörnyezettel.
+A karakterszerkesztési kérelmeket az adminisztrátorok bírálják el, akik jogosultak módosítást kérni vagy a kérelmet elutasítani.
+Az adminisztrátor jogosult a nem megfelelő megjelenésű karaktert azonnal visszaküldeni szerkesztésre.
+6. Öltözködés és megjelenés
+A karakter öltözetének illeszkednie kell:
+a szerver aktuális időjárásához,
+a környezethez,
+az adott tevékenységhez.
+Indokolatlan maszkviselés nem megengedett. Amennyiben a karakter rendelkezik előzetesen kidolgozott és elfogadott karaktertörténettel (pl. maradandó arcsérülés, égési sérülés, orvosi ok, pszichés trauma stb.), amely indokolja az arc eltakarását, és ezt szükség esetén igazolni tudja, a maszk viselése megengedett.
+Búvárkodás esetén mélyvízben teljes felszerelés szükséges; sekély vízben nem kötelező.
+7. Karakternév szabályozás
+A karakter neve:
+amerikai formátumú (Keresztnév Vezetéknév),
+nem tartalmazhat rövidítést,
+nem lehet híresség, közszereplő, videojáték-karakter neve,
+nem lehet mém vagy viccjellegű név.
+Az adminisztrátor jogosult a nem megfelelő nevet azonnal módosítani.
+8. Karakterek közötti kapcsolat
+Tilos azonos vagy gyakorlatilag megegyező karaktert létrehozni (XML újrafelhasználása, azonos személyiség, célok).
+A karakterek között sem közvetlen, sem közvetett kapcsolat nem lehet. CK után az új karakter nem kapcsolódhat az előzőhöz.
+Az adminisztrátorok döntése végleges a név és megjelenés megfelelősége kapcsán.
+III. Szerepjáték alapelvek
+9. Szerepben maradás
+A szerveren való tartózkodás teljes ideje alatt kötelező szerepben maradni. A szerepjáték megszakítása semmilyen indokkal nem megengedett.
+Szabálytalanság gyanúja esetén a szituáció lezárását követően kell adminisztrátort értesíteni. A szabálysértés súlyosságát mérlegelve nem vagy köteles megvárni a szituáció lezárását az adminisztrátor értesítésével.
+Az AFK státusz nem mentesít a szerepjáték alól. A karakterrel más játékosok továbbra is interakcióba léphetnek, és az ebből adódó szerepjáték-helyzetek érvényesnek minősülnek.
+10. Sérülések és realizmus
+Súlyos sérüléseket, nagy ütközéseket és animba esést minden esetben megfelelően szerepjátékozni kell.
+Frontális karambol vagy lőtt sérülés nem minimalizálható enyhe horzsolássá.
+Kisebb ütközések és minimális sérülések: A GTA V mechanikájából és a szerveren futó scriptekből adódó, kisebb mértékű koccanásokat és minimális sérüléseket nem szükséges külön RP-zni. Súlyosabb, komoly, karakteredre következménnyel járó események esetén az RP kötelező.
+Tűzharc során animba esett és scriptesen elhunyt karakter nem térhet vissza ugyanabba a tűzharcba.
+Halál esetén az adott eseményhez kapcsolódó emlékek elvesznek.
+11. Immerszió
+Tilos az immerzió rombolása, például:
+indokolatlan ugrálás,
+animációk spammelése,
+irreális viselkedés.
+AFK állapotot minimalizálni kell; indokolt esetben adminisztrátori eltávolítás lehetséges.
+12. Powergaming és FearRP
+Tilos fizikailag lehetetlen cselekedetet végrehajtani vagy másra erőltetni.
+Kötelező a félelem és az életben maradás ösztönének szerepjátéka.
+A FearRP teljes hiánya akár Character Kill következménnyel járhat.
+IV. Szabálysértések típusai és speciális RP-helyzetek
+13. Deathmatch (DM), Spawn Kill, Revenge Kill (RK), ForceRP
+Deathmatch (DM)
+Deathmatchnek minősül, ha egy játékos megfelelő indok nélkül, vagy aránytalan indokkal öl meg egy másik játékost. Ide tartozik az is, ha valaki szándékos provokációval olyan helyzetet teremt, amely indokolatlan halálesethez vezet.
+Nem minősül DM-nek többek között:
+ha járművel történő elütés kizárólag közvetlen életveszély elhárítása érdekében történik,
+ha rendvédelmi szerv tagja csak abban az esetben kerül megölésre, amikor bizonyítottan elkerülhetetlen lenne az illegális tárgyak felfedezése és nincs más menekülési lehetőség,
+ha egy játékos súlyosan provokatív, rasszista vagy szélsőséges kijelentéseket tesz, teljes mértékben figyelmen kívül hagyva a FearRP-t (a józan ész elve minden esetben alkalmazandó).
+Tilos megölni:
+frissen újraéledt játékost, amíg a respawn időzítő aktív, kivéve, ha az újraéledt játékos azonnal fegyveres támadást indít és a helyzet elkerülhetetlenné válik,
+olyan játékost, aki 5 percnél kevesebb ideje tartózkodik a szerveren, kivéve reconnect esetén,
+CP-be érkező vagy onnan távozó játékost (fair play 3 másodperces szabály érvényes).
+Revenge Kill (RK)
+Revenge Killnek minősül:
+ha valaki a saját halála után bosszúból megöli a korábbi támadóját,
+ha halál után másoktól szerzett információ alapján visszakapcsolódik az adott eseményszálba,
+ha IC jail vagy halál után azonnal visszatér az esemény helyszínére.
+A helyszínre való visszatérés minimum 45 perc elteltével vagy a teljes szituáció lezárása után lehetséges.
+ForceRP
+ForceRP minden olyan helyzet, amikor egy játékos másra kényszeríti rá a saját szerepjátékát, különösen akkor, ha annak következményeit a másik fél nem tudja érdemben kezelni (pl. azonnali halált eredményező /me cselekvés).
+14. Metagaming (MG)
+Metagaming minden olyan eset, amikor OOC információ IC keretek között kerül felhasználásra.
+Tilos:
+Discordon vagy más külső platformon IC eseményeket egyeztetni,
+előző vagy másodlagos karakterrel kapcsolatos információkat átvinni,
+PM rendszeren keresztül IC eseményeket megszervezni szerepjáték nélkül,
+a szerver felügyelete alatt nem álló platformot IC kommunikációra használni.
+Frakció Discordon IC felület kizárólag előzetes engedéllyel és adminisztrátori jelenléttel működhet.
+A metagaming bizonyítása súlyos szankcióval jár, többszörös karakterhasználat esetén a rendszer végleges megvonását is eredményezheti.
+V. Illegális tevékenységek és rablási szabályok
+15. Általános illegális tevékenységek
+Legális frakciók tagjai kizárólag önvédelemből vehetnek részt gyilkosságban. Scriptes rablásokban sem aktívan, sem passzívan nem működhetnek közre.
+Maszk viselése esetén az elkövető nem felismerhető.
+Kesztyű használata esetén ujjlenyomat nem marad, kivéve, ha a kesztyű eltávolításra kerül a cselekmény során.
+16. Rablási időkorlátozások és helyszínek
+Meghatározott területeken (farmok, fakitermelők, horgászbolt, ócskás, szőlőültetvény) rablás kizárólag 20:00–08:00 között engedélyezett.
+Forgalmas helyeken tilos rabolni vagy ölni, kivéve, ha az érintettek éppen illegális üzletben vesznek részt.
+Forgalmas helynek minősül többek között:
+Városháza és környéke
+Rendvédelmi és BCFD központok
+Bankok
+Alapmunkák teljes területe
+Repülőterek teljes területe
+Közösségi blippek környezete
+Autókereskedések
+17. Emberrablás
+Túszul ejteni kizárólag valós játékost lehet.
+Beépített túsz használata kizárólag vezetői engedéllyel lehetséges, maximum az összes túsz 10%-ában.
+Maximum váltságdíj:
+200.000$/fő
+abszolút maximum 600.000$
+BCFD szolgálatban lévő tagja nem rabolható el kórház vagy tűzoltóság területén.
+Irreális orvosi beavatkozás kikényszerítése nem megengedett.
+Egyazon játékos által elkövetett emberrablás között minimum 2 óra időkülönbség kötelező. Kivétel: folyamatos, összefüggő eseményszál.
+18. Chain Robbing
+Tilos az irreálisan sűrű, sorozatos rablás (chain robbing).
+Egy órán belül több azonos típusú nagyobb rablás súlyos szabálysértésnek minősül.
+Jármű- és ingatlanfeltörések nem esnek időkorlátozás alá.
+19. Rablás utáni magatartás
+Amennyiben az áldozat teljes mértékben együttműködik, tilos megölni.
+Kivétel: teljes FearRP hiánya.
+Hang alapján történő felismerés nem elfogadott bizonyíték.
+Kezdő játékos (15 játszott óráig) nem rabolható.
+VI. Vagyon, kereskedelem és OOC visszaélések
+20. OOC kereskedelem
+Az OOC alapú kereskedelem minden formája szigorúan tilos.
+A vagyon karakterek közötti mozgatása kizárólag logikus IC háttérrel történhet.
+Tiltott:
+vagyon átruházása karakterváltás vagy ban előtt,
+indokolatlan vagyonmozgatás alt karakterek között.
+Részletfizetéses vagy hitelezési megállapodások saját felelősségre történnek.
+PayPal-s (valós pénzért vásárolt) itemek elvétele csak adminisztrátori jóváhagyással, megfelelő bizonyítékokkal (screenshot, log) történhet. A visszaélést bizonyító fél kötelessége a dokumentáció.
+21. OOC hazugság és sértegetés
+Tilos az adminisztrátor vagy más játékos félrevezetése.
+Tilos az OOC rágalmazás és sértegetés bármely platformon.
+22. Hirdetések és illegális tartalom
+Hirdetés:
+nem lehet félrevezető,
+nem lehet minőségileg igénytelen,
+nem tartalmazhat konkrét személynek szóló felszólítást,
+nem lehet társkereső jellegű.
+Hirdetésből rablás kizárólag akkor lehetséges, ha az IC körülmények ezt indokolttá teszik (pl. ismert bűnöző hirdet magas értékű tárgyat). Általános szabály: hirdetésből nincs rablás.
+Illegális tárgyakkal kereskedni kizárólag Dark Weben keresztül lehet.
+Burkolt illegális hirdetés SMS-ben nem megengedett.
+Tilos más játékoshoz odafutni és azonnal megkérdezni, eladó-e az autója. Járművek kereskedése kizárólag hirdetés útján, vagy kialakult IC kapcsolat alapján történhet.
+VII. Character Kill (CK) és frakcióval kapcsolatos eljárások
+23. Character Kill (CK)
+Character Kill esetén a játékos köteles teljesen új identitást létrehozni:
+új név,
+új külső,
+új karakterkoncepció.
+Két hetente legfeljebb egy alkalommal lehetséges karakterváltás.
+Egy korábban CK-zott karakter egyszer hozható vissza, amennyiben:
+legalább két hónap eltelt,
+a vezetőség értesítve lett a karakter korábbi sorsáról,
+a vezetőség jóváhagyja a kérelmet.
+A döntés nem automatikus, minden eset egyedileg kerül elbírálásra.
+Más játékos CK-zása előtt – frakción belüli CK kivételével – kötelező a vezetőség előzetes jóváhagyása, bizonyítékok bemutatásával. A vezetőség döntése végleges és bármikor visszavonható.
+Frakción belüli eltávolítás esetén a frakcióvezető dönthet CK-val vagy CK nélkül.
+Rendvédelmi, kormányzati és BCFD tagok csak teljes karakterszerkesztést követően csatlakozhatnak illegális frakcióhoz vagy folytathatnak illegális tevékenységet – és ez fordítva is érvényes.
+Frakciókban tilos OOC rangok használata (pl. "főnök", "tag", "vezető"). A hierarchia kizárólag IC keretek között működhet.
+24. Frakcióbuktatás
+Frakció felszámolásához vezetőségi engedély szükséges. A kérelemhez részletes bizonyítékok kellenek:
+képi anyag,
+logok,
+nyomozati dokumentáció,
+összefüggő akták.
+Amennyiben egy nyomozót munka közben megölnek, az adott akta vonatkozásában nem folytathatja tevékenységét. Ha minden érintett nyomozó életét veszti, az akta törlésre kerül.
+A vezetőség jogosult megállapítani, hogy a bizonyíték elegendő-e a teljes szervezet felelősségre vonásához.
+Tilos rövid időn belül több frakció között váltogatni. Karakterváltás vagy frakcióelhagyás után minimum 1 hét várakozási idő kötelező új frakcióba lépés előtt (kivétel: vezetői engedély).
+VIII. Fegyverhasználat és speciális eszközök
+25. Éles lőfegyverek használata
+Amennyiben tűzharc során civil áldozat történik, annak teljes IC felelőssége az érintett frakciót terheli.
+BCFD egység tagjai kizárólag akkor támadhatók, ha aktív tűzharc közben nem végeznek ellátást és egyértelműen visszaélnek helyzetükkel. Ellenkező esetben lelövésük DM-nek minősül.
+Túsztárgyaló megölése szigorúan tilos. Kivétel: ha a tárgyaló egyértelműen igazolja kilétét és fegyverrel támad. A tárgyaló halála automatikusan a túszok elengedését eredményezi.
+26. Nem halálos fegyverek (sokkoló, beanbag)
+Használatuk szituációfüggő. A fegyvert alkalmazó játékos köteles:
+ésszerű reakcióidőt hagyni elővétel és használat között, figyelembe véve a távolságot és a helyzetet,
+a célpontnak megfelelő sérülés-RP lehetőséget biztosítani.
+Vízben tartózkodó játékos ellen sokkoló használata tilos.
+Rendvédelmi szerv tagja éles fegyveres fenyegetés esetén sokkolóval válaszolhat, ha a távolság és körülmények ezt reálissá teszik. A döntés felelőssége az alkalmazót terheli.
+27. Fegyverelővétel és fegyvertartás
+A fegyverelővételhez nem szükséges külön /me parancs.
+Fegyverlimit:
+maximum 1 nagyfegyver,
+maximum 1 kisfegyver.
+SMG-k és lefűrészelt shotgun kisfegyvernek minősülnek a meghatározott típusok szerint.
+IX. Kamera- és megfigyelőrendszer
+28. Dashcam, bodycam, CCTV
+Rendvédelmi és kormányzati járművek RP szerint dashcammel felszereltek.
+Az érintett szervek tagjai bodycammel rendelkeznek.
+Civil jármű esetén:
+a kamera felszerelését külön ki kell szerepjátszani,
+a felvételt rögzíteni kell.
+A scriptelt CCTV rendszerek élő képet biztosítanak, visszamentést nem tárolnak, de RP során figyelembe vehetők.
+Felhasználás módjai:
+élő megfigyelés,
+/do alapú visszajátszás,
+rögzített videó bemutatása.
+Vita esetén adminisztrátor dönt.
+X. Járműhasználati szabályok
+29. Általános járműszabályok
+Járműlopás kizárólag megfelelő, több soros elő-RP-vel történhet. Ugyanez vonatkozik a bolt- és bankrablásokra is.
+Kilőtt vagy hiányzó kerék esetén:
+2 vagy több hibás kerékkel közlekedni tilos,
+1 hibás keréknél maximum 60 km/h,
+felnin közlekedni tilos.
+Síneken közlekedni nem engedélyezett (kivétel: kerékpár józan ésszel).
+Kétéltű jármű illegális tevékenységre nem használható.
+30. Helikopter és repülő
+Helikopter:
+kizárólag kijelölt helyen szervizelhető,
+vontatása nem megengedett,
+leszállás csak kijelölt területeken lehetséges.
+Repülőgép:
+kizárólag hivatalos kifutópályán landolhat,
+illegális tevékenységre nem használható.
+Kifutópályát minden esetben szabadon kell hagyni.
+31. PIT manőver
+Kizárólag rendvédelem alkalmazhatja.
+Feltételek:
+150 km/h alatt,
+nem alkalmazható szakadék, híd, alagút, folyó mellett, valamint városi területen,
+csak súlyos közlekedési veszély esetén.
+Motoros, kerékpáros, quad nem PIT-elhető.
+32. Lövés járműből
+Mozgó járműből:
+vezetőülésből tilos lőni,
+utas- vagy hátsó ülésről engedélyezett.
+Motor esetén kizárólag hátsó ülésről lehetséges lövés.
+XI. Speciális RP-kategóriák
+33. Undorító Roleplay
+Kizárólag minden érintett fél OOC beleegyezésével történhet, elkülönített helyszínen.
+Bármely fél bármikor megszakíthatja.
+Mindig tiltott:
+zoofília,
+mechanofília.
+Adminisztrátor a józan ész elve alapján bármikor közbeavatkozhat.
+34. Öngyilkosság RP
+Csak hosszabb karakterfejlődés és dokumentált előzmények után lehetséges.
+Bizonyítékokat meg kell őrizni.
+Folyamatban lévő eljárás alatt öngyilkosság RP nem hajtható végre.
+XII. Többkarakteres rendszer
+Vagyon nem vihető át karakterek között.
+CK-zott elsődleges karakter nem hozható vissza másodlagosként.
+A karakterek nem lehetnek hatással egymás életére.
+Metagaming esetén a rendszer véglegesen megvonható.
+Az elsődleges karakter frakciója prioritást élvez.
+Minőségileg gyenge RP esetén a rendszer használata megvonható.
+XIII. Egyéb rendszerek és technikai szabályok
+35. Karakterleírás
+Minimum 300 karakter.
+Tartalmaznia kell a külső jellemzőket.
+Troll vagy üres leírás nem elfogadott.
+36. Graffiti
+Tilos:
+diszkriminatív,
+szélsőséges,
+önkényuralmi jelképre utaló,
+OOC sértő tartalom.
+Adminisztrátor visszakövetheti az eredetet.
+37. Weaponattach és hideweapon
+Irreális, láthatatlan vagy aránytalan elhelyezés tilos.
+A /hideweapon nem használható a józan ész megsértésével.
+38. ERP
+Nyilvános helyen végzett ERP IC következményekkel járhat.
+Kerülni kell, hogy harmadik fél akaratán kívül ilyen helyzetbe kerüljön.
+39. Rules Lawyering
+Tilos a szabályok szó szerinti, rosszhiszemű kiforgatása a roleplay szellemiségének megkerülése érdekében.
+Vitás helyzetben az adminisztrátor döntése végleges. A hosszas, szabályértelmezésen alapuló vitatkozás szankcionálható.
+XIV. Szolgáltatások és speciális tárgyak
+40. Prémium Pontos szolgáltatások használata
+PP-s szolgáltatások – így gyógyulás, javítás, egyéb kártyák – használata aktív szerepjáték közben szigorúan tilos. Ezek kizárólag szituációmentes, biztonságos környezetben, RP-t nem zavaró módon használhatóak. A szabály megsértése szankciót von maga után.
+41. Szerelői szerződések
+Szerelőműhelyek kizárólag hivatalos, írásos szerződés alapján végezhetnek munkát frakciók számára. A szerződésnek tartalmaznia kell a díjazást, határidőt, felelősségi köröket és a teljesítés feltételeit. Szóbeli megállapodások nem jogerősek vitás helyzetekben.
+42. Egyedi rendszám
+Egyedi rendszám használata kizárólag adminisztrátori engedéllyel lehetséges. A rendszám nem utalhat sértő, trágár, védett tartalomra, vagy valós rendszámra. A visszaélés esetén a rendszám azonnal visszavonásra kerül.
+43. Iratok és kulcsok kezelése
+OOC iratok (igazolvány, jogosítvány, fegyverengedély) és járműkulcsok elvétele szigorúan tilos. Ezek kizárólag adminisztrátori beavatkozással, megfelelő IC indokkal és dokumentációval vonhatók vissza. A szabály megsértése súlyos szankciót von maga után. Ez alól kivételt jelent a BCSO tagjai, akik ezeket az iratokat természetesen vissza is adják az RP szituációnak végén.
+XV. Közlekedési és hatósági szabályok
+44. Indokolatlan menekülés és provokálás
+Tilos indokolatlanul menekülni rendvédelmi megállítás elől, vagy szándékosan provokálni hatósági szervet valós IC indok nélkül. A "csak szórakozásból" történő menekülés vagy provokáció szankciót von maga után.
+45. Csekk elől menekülés
+Közlekedési ellenőrzés (csekk) elől menekülni csak valós IC fenyegetés esetén engedélyezett (pl. érvényes elfogató parancs, ismert bűncselekmény). Az indokolatlan elmenekülés szigorúan tilos.

@@ -71,9 +71,10 @@ const adminFeedback = require("./adminfeedback");
 const registerLogs = require("./logs");
 const bugReport = require("./bugreport");
 const ideaSystem = require("./otletek");
-const ticketAI = require("./aiticket");
+const aiModeration = require("./aimoderation");
 bugReport.registerBugReport(client);
 ideaSystem.registerIdeaSystem(client);
+aiModeration.registerAiModeration(client);
 registerLogs(client);
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";
@@ -510,7 +511,6 @@ function buildTicketModal(typeKey) {
 
 async function registerCommands() {
   const commands = [
-  ...ticketAI.getSlashCommands(),
 new SlashCommandBuilder()
   .setName("discordstats")
   .setDescription("Elküldi az aktuális statisztikát a statisztika csatornába.")
@@ -897,14 +897,7 @@ async function handleTicketModalSubmit(interaction) {
     });
     return;
   }
-  
-client.on("messageCreate", async (message) => {
-  try {
-    await ticketAI.maybeReplyInTicket(message);
-  } catch (error) {
-    console.error("❌ AI ticket hiba:", error);
-  }
-});
+
   const answers = type.questions.map((_, index) =>
     interaction.fields.getTextInputValue(`q${index + 1}`)
   );
@@ -1031,8 +1024,6 @@ async function handleTicketClose(interaction) {
 
 client.on("interactionCreate", async (interaction) => {
   try {
-    const handledByTicketAI = await ticketAI.handleInteraction(interaction);
-    if (handledByTicketAI) return;
 if (
   interaction.isButton() &&
   (

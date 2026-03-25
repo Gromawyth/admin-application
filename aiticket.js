@@ -19,8 +19,8 @@ const knowledge = require("./ticketKnowledge");
 // =========================
 
 const CONFIG = {
-  TICKET_CATEGORY_ID: "1486421760906887250",
-  STAFF_PING_ROLE_ID: "IDE_A_KOZOS_STAFF_PING_ROLE_ID",
+  TICKET_CATEGORY_ID: "1460215371666686077",
+  STAFF_PING_ROLE_ID: "1403401954712883200",
   STAFF_PING_MODE: "everyone", // "role" vagy "everyone"
 
   // Ezek zárhatják le a ticketet a tulajdonoson kívül

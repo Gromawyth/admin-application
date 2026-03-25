@@ -1024,26 +1024,29 @@ async function handleTicketClose(interaction) {
 
 client.on("interactionCreate", async (interaction) => {
   try {
-if (
-  interaction.isButton() &&
-  (
-    interaction.customId.startsWith("bug_") ||
-    interaction.customId.startsWith("bug:") ||
-    interaction.customId.startsWith("idea:")
-  )
-) {
-  return;
-}
+    if (
+      interaction.isButton() &&
+      (
+        interaction.customId.startsWith("bug_") ||
+        interaction.customId.startsWith("bug:") ||
+        interaction.customId.startsWith("idea:") ||
+        interaction.customId.startsWith("aimod:")
+      )
+    ) {
+      return;
+    }
 
-if (
-  interaction.isModalSubmit() &&
-  (
-    interaction.customId.startsWith("bugmodal:") ||
-    interaction.customId.startsWith("ideamodal:")
-  )
-) {
-  return;
-}
+    if (
+      interaction.isModalSubmit() &&
+      (
+        interaction.customId.startsWith("bugmodal:") ||
+        interaction.customId.startsWith("ideamodal:") ||
+        interaction.customId.startsWith("aimod:")
+      )
+    ) {
+      return;
+    }
+
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "adminpanel") {
         await adminFeedback.sendPanel(interaction);
@@ -1069,38 +1072,38 @@ if (
       }
     }
 
-if (interaction.isButton()) {
-  if (interaction.customId.startsWith("feedback_")) {
-    await adminFeedback.handleButton(interaction);
-    return;
-  }
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith("feedback_")) {
+        await adminFeedback.handleButton(interaction);
+        return;
+      }
 
-  if (
-    interaction.customId === "accept_adminseged" ||
-    interaction.customId === "reject_adminseged" ||
-    interaction.customId === "accept_admin" ||
-    interaction.customId === "reject_admin"
-  ) {
-    await handleApplicationDecision(interaction);
-    return;
-  }
+      if (
+        interaction.customId === "accept_adminseged" ||
+        interaction.customId === "reject_adminseged" ||
+        interaction.customId === "accept_admin" ||
+        interaction.customId === "reject_admin"
+      ) {
+        await handleApplicationDecision(interaction);
+        return;
+      }
 
-  if (interaction.customId.startsWith("ticket_open_")) {
-    await handleTicketOpenButton(interaction);
-    return;
-  }
+      if (interaction.customId.startsWith("ticket_open_")) {
+        await handleTicketOpenButton(interaction);
+        return;
+      }
 
-  if (interaction.customId === "ticket_close") {
-    await handleTicketClose(interaction);
-    return;
-  }
+      if (interaction.customId === "ticket_close") {
+        await handleTicketClose(interaction);
+        return;
+      }
 
-  await interaction.reply({
-    content: "Ismeretlen gomb.",
-    ephemeral: true
-  });
-  return;
-}
+      await interaction.reply({
+        content: "Ismeretlen gomb.",
+        ephemeral: true
+      });
+      return;
+    }
   } catch (error) {
     console.error("❌ Hiba interactionCreate közben:", error);
 

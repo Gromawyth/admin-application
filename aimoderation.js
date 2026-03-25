@@ -22,17 +22,13 @@ const openai = new OpenAI({
 const CONFIG = {
   SERVER_NAME: "internalGaming",
 
-    // ---- LOG / STAFF ----
+  // =========================
+  // IDE ÍRD A SAJÁT ID-KAT
+  // =========================
   MOD_LOG_CHANNEL_ID: "1485721532297908355",
-  STAFF_ROLE_IDS: [
-    "1403403484090470564",
-    "1322545317995876397"
-  ],
 
-  // ---- KIVÉTELEK ----
-  EXEMPT_ROLE_IDS: [
-    // pl staff roleok, tulaj, fejlesztő
-    "1403403484090470564",
+  STAFF_ROLE_IDS: [
+   "1403403484090470564",
     "1322545317995876397",
     "1403401954712883200",
     "1322545317995876398",
@@ -40,19 +36,11 @@ const CONFIG = {
     "1322545317995876401",
     "1322545317995876400",
     "1322545317995876402"
-    
   ],
-  EXEMPT_CHANNEL_IDS: [
-    // pl bot, log, ticket, admin panel, stb
-    ""
-  ],
-  EXEMPT_CATEGORY_IDS: [
-    // pl ticket kategória, staff kategória
-    "1459959093174210825",
-    "1459975538717491401",
-    "1459968270974324891",
-    "1459941531698987171"
-  ],
+
+  EXEMPT_ROLE_IDS: [],
+  EXEMPT_CHANNEL_IDS: [],
+  EXEMPT_CATEGORY_IDS: [],
 
   ALLOW_DELETE: true,
   ALLOW_TIMEOUT: true,
@@ -62,14 +50,15 @@ const CONFIG = {
   AI_MODEL: "gpt-5-mini",
 
   MAX_CONTEXT_MESSAGES: 8,
-  MAX_PROFILE_INCIDENTS: 150,
-  MAX_LAST_MESSAGES_PER_USER: 18,
+  MAX_PROFILE_INCIDENTS: 160,
+  MAX_LAST_MESSAGES_PER_USER: 20,
 
-  WATCH_THRESHOLD: 40,
-  HIGH_RISK_THRESHOLD: 75,
-  KICK_NEAR_THRESHOLD: 115,
-  BAN_NEAR_THRESHOLD: 145,
-  AUTO_BAN_READY_THRESHOLD: 185,
+  // Kockázat % küszöbök
+  WATCH_THRESHOLD: 35,
+  HIGH_RISK_THRESHOLD: 55,
+  KICK_NEAR_THRESHOLD: 75,
+  BAN_NEAR_THRESHOLD: 90,
+  AUTO_BAN_READY_THRESHOLD: 100,
 
   MIN_AI_CONFIDENCE_FOR_TIMEOUT: 58,
   MIN_AI_CONFIDENCE_FOR_KICK: 72,
@@ -94,6 +83,11 @@ const CONFIG = {
   USER_ALERT_COOLDOWN_MS: 60 * 60 * 1000,
   USER_INCIDENT_LOG_COOLDOWN_MS: 75 * 1000,
   DEDUPE_SIMILAR_WINDOW_MS: 3 * 60 * 1000,
+
+  // Kockázat csökkenés
+  DECAY_DAYS_STRONG: 7,
+  DECAY_DAYS_MEDIUM: 30,
+  DECAY_DAYS_LIGHT: 90,
 
   DATA_FILE: path.join(__dirname, "aimoderation-data.json"),
 
@@ -175,6 +169,10 @@ function trimField(text, max = 1024) {
   return cleanText(text, max) || "-";
 }
 
+function safeMentionUser(userId) {
+  return userId ? `<@${userId}>` : "Ismeretlen";
+}
+
 function isStaff(member) {
   if (!member?.roles?.cache) return false;
   return CONFIG.STAFF_ROLE_IDS.some((id) => member.roles.cache.has(id));
@@ -203,26 +201,22 @@ function shouldIgnoreMessage(message) {
   return false;
 }
 
-function safeMentionUser(userId) {
-  return userId ? `<@${userId}>` : "Ismeretlen";
-}
-
 function colorBySeverity(severity) {
   switch (severity) {
-    case "critical": return 0xaa0000;
-    case "high": return 0xd63c3c;
-    case "medium": return 0xff8a00;
-    case "low": return 0xf0c419;
+    case "kritikus": return 0xaa0000;
+    case "magas": return 0xd63c3c;
+    case "közepes": return 0xff8a00;
+    case "enyhe": return 0xf0c419;
     default: return 0x2f3136;
   }
 }
 
 function emojiBySeverity(severity) {
   switch (severity) {
-    case "critical": return "🛑";
-    case "high": return "🚨";
-    case "medium": return "⚠️";
-    case "low": return "🟡";
+    case "kritikus": return "🛑";
+    case "magas": return "🚨";
+    case "közepes": return "⚠️";
+    case "enyhe": return "🟡";
     default: return "ℹ️";
   }
 }
@@ -269,32 +263,48 @@ function pushRecentMessage(userId, message) {
 function addIncident(userId, incident) {
   const profile = getUserProfile(userId);
   profile.incidents.push(incident);
+
   if (profile.incidents.length > CONFIG.MAX_PROFILE_INCIDENTS) {
     profile.incidents = profile.incidents.slice(-CONFIG.MAX_PROFILE_INCIDENTS);
   }
 }
 
-function getWeightedRisk(profile) {
+function getIncidentDecayWeight(ageMs) {
+  const d7 = CONFIG.DECAY_DAYS_STRONG * 24 * 60 * 60 * 1000;
+  const d30 = CONFIG.DECAY_DAYS_MEDIUM * 24 * 60 * 60 * 1000;
+  const d90 = CONFIG.DECAY_DAYS_LIGHT * 24 * 60 * 60 * 1000;
+
+  if (ageMs <= d7) return 1;
+  if (ageMs <= d30) return 0.6;
+  if (ageMs <= d90) return 0.25;
+  return 0.06;
+}
+
+function getRawRiskValue(profile) {
   const current = now();
   let risk = 0;
 
   for (const inc of profile.incidents || []) {
     const age = current - (inc.createdAt || current);
-    let weight = 0;
-
-    if (age <= 7 * 24 * 60 * 60 * 1000) weight = 1;
-    else if (age <= 30 * 24 * 60 * 60 * 1000) weight = 0.65;
-    else if (age <= 90 * 24 * 60 * 60 * 1000) weight = 0.25;
-    else weight = 0.08;
-
-    risk += (Number(inc.points || 0) * weight);
+    const weight = getIncidentDecayWeight(age);
+    risk += Number(inc.points || 0) * weight;
   }
 
   risk += (profile.totals?.timeouts || 0) * 10;
-  risk += (profile.totals?.kicks || 0) * 24;
-  risk += (profile.totals?.bans || 0) * 90;
+  risk += (profile.totals?.kicks || 0) * 18;
+  risk += (profile.totals?.bans || 0) * 30;
 
-  return Math.round(risk);
+  return risk;
+}
+
+function getRiskPercent(profile) {
+  const raw = getRawRiskValue(profile);
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+function getProjectedRiskPercent(profile, extraPoints = 0) {
+  const raw = getRawRiskValue(profile) + extraPoints;
+  return Math.max(0, Math.min(100, Math.round(raw)));
 }
 
 function getRecentIncidentCounts(profile) {
@@ -306,7 +316,7 @@ function getRecentIncidentCounts(profile) {
 
   for (const inc of profile.incidents || []) {
     const age = current - (inc.createdAt || current);
-    const severe = ["medium", "high", "critical"].includes(inc.severity);
+    const severe = ["közepes", "magas", "kritikus"].includes(inc.severity);
 
     if (age <= 7 * 24 * 60 * 60 * 1000) {
       last7d++;
@@ -350,15 +360,16 @@ function actionToLabel(action) {
     case "timeout": return "Timeout / mute";
     case "kick": return "Kick";
     case "ban": return "Ban";
+    case "unban": return "Feloldás / unban";
     default: return "Nincs";
   }
 }
 
 function timeoutMsForSeverity(severity) {
   switch (severity) {
-    case "critical": return CONFIG.TIMEOUT_MINUTES_CRITICAL * 60 * 1000;
-    case "high": return CONFIG.TIMEOUT_MINUTES_HIGH * 60 * 1000;
-    case "medium": return CONFIG.TIMEOUT_MINUTES_MEDIUM * 60 * 1000;
+    case "kritikus": return CONFIG.TIMEOUT_MINUTES_CRITICAL * 60 * 1000;
+    case "magas": return CONFIG.TIMEOUT_MINUTES_HIGH * 60 * 1000;
+    case "közepes": return CONFIG.TIMEOUT_MINUTES_MEDIUM * 60 * 1000;
     default: return CONFIG.TIMEOUT_MINUTES_LOW * 60 * 1000;
   }
 }
@@ -379,47 +390,28 @@ function similarityKey(category, reason, content) {
   return `${category || "other"}|${cleanText(reason || "", 120)}|${cleanText(content || "", 140)}`;
 }
 
-function getMessageLink(message) {
-  try {
-    return `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.id}`;
-  } catch {
-    return null;
-  }
-}
-
 const REGEX = {
   invite: /(discord\.gg\/|discord\.com\/invite\/)/i,
-
   oocTrade:
     /\b(ooc keresked[eé]s|ooc trade|érdekel valakit|elad[oó] ig vagyon|ig vagyon elad[oó]|item elad[oó]|account elad[oó]|accountot eladom|veszek accountot|irl|val[óo]s ?p[eé]nz|forint|ft\b|eur[oó]|paypal|revolut|utal(ok|ás)?|bankk[aá]rtya|nitro|steam gift|giftcard|p[eé]nz[ée]rt adom|p[eé]nz[ée]rt veszem|ig vagyonért|accountért|itemért)\b/i,
-
   doxxing:
     /\b(facebook|fb profil|insta|instagram|telefonsz[aá]m|lakc[ií]m|c[ií]m[e]?|szem[eé]lyi|anyja neve|ad[óo]sz[aá]m|taj|priv[aá]t k[eé]p|nem publikus k[eé]p|kirakom a k[eé]p[eé]t|kirakom a facebookj[aá]t)\b/i,
-
   threat:
-    /\b(meg[oö]llek|megverlek|sz[eé]tszedlek|kiny[ií]rlak|elkaplak|megtal[áa]llak|megkereslek|feljelentelek a csal[aá]dod|kicsinállak)\b/i,
-
+    /\b(meg[oö]llek|megverlek|sz[eé]tszedlek|kiny[ií]rlak|elkaplak|megtal[áa]llak|megkereslek|kicsinállak)\b/i,
   harassment:
     /\b(kurva any[aá]d|any[aá]d|nyomor[eé]k|retkes|patk[aá]ny|geci|id[ií]óta|majom|szarh[aá]zi|semmirekell[oő]|csicska|hülye vagy|rohadj meg|dogolj meg|dögölj meg)\b/i,
-
   staffAbuse:
     /\b(admin|moder[aá]tor|vezet[oő]s[eé]g|staff|fejleszt[oő]|szerver|internalgaming)\b.{0,30}\b(szar|szarh[aá]zi|retkes|nyomor[eé]k|hullad[eé]k|boh[oó]c|geci|fos|szutyok|szenny)\b/i,
-
   adServer:
     /\b(discord\.gg\/|discord\.com\/invite\/|gyertek|gyere fel|jöjjön mindenki|jöjjetek|gyertek át|fel mindenki|másik szerver|jobb szerver|jobb mint ez|ne legyen ezen a szerveren|itt rossz|át ide|tesztgaming|gazdagrp|szerverre|serverre)\b/i,
-
   nsfw:
     /\b(porn[oó]|18\+|nsfw|meztelen|szexk[eé]p|nudes?|farkad|pin[aá]|szop[aá]s|basz[aá]s|kuki|punci)\b/i,
-
   politics:
     /\b(n[aá]ci|zsid[oó]|cig[aá]nyok|rom[aá]k|fidesz|tisza|orb[aá]n|migr[aá]nsok)\b/i,
-
   vpnBanEvade:
     /\b(vpn|proxy|újra visszaj[oö]ttem|alt account|m[aá]sik account|ban evasion|bannoltak de visszaj[oö]ttem)\b/i,
-
   scam:
     /\b(ingyen nitro|free nitro|steam aj[aá]nd[eé]k|gift link|próbáld ki ezt a linket|token|bejelentkezés itt|login here|free csgo skin)\b/i,
-
   mentionAbuse: /<@!?\d+>/g,
   emoji: /<a?:\w+:\d+>|[\u{1F300}-\u{1FAFF}]/gu,
   repeatChars: /(.)\1{9,}/i,
@@ -445,33 +437,33 @@ function scanRules(message, recentSameUser = []) {
   }
 
   if (REGEX.doxxing.test(content)) {
-    hits.push({ key: "doxxing", points: 74, label: "Privát adat / doxxing gyanú" });
-    score += 74;
+    hits.push({ key: "doxxing", points: 78, label: "Privát adat / doxxing gyanú" });
+    score += 78;
   }
 
   if (REGEX.threat.test(content)) {
-    hits.push({ key: "threat", points: 60, label: "Fenyegetés gyanú" });
-    score += 60;
+    hits.push({ key: "threat", points: 62, label: "Fenyegetés gyanú" });
+    score += 62;
   }
 
   if (REGEX.staffAbuse.test(content)) {
-    hits.push({ key: "staff_abuse", points: 46, label: "Staff / szerver obszcén szidalmazása" });
-    score += 46;
+    hits.push({ key: "staff_abuse", points: 48, label: "Staff / szerver obszcén szidalmazása" });
+    score += 48;
   }
 
   if (REGEX.harassment.test(content)) {
-    hits.push({ key: "harassment", points: 32, label: "Célzott sértegetés / zaklatás gyanú" });
-    score += 32;
+    hits.push({ key: "harassment", points: 34, label: "Célzott sértegetés / zaklatás gyanú" });
+    score += 34;
   }
 
   if (REGEX.adServer.test(content)) {
-    hits.push({ key: "ad_server", points: 55, label: "Más szerver reklám / uszítás" });
-    score += 55;
+    hits.push({ key: "ad_server", points: 56, label: "Más szerver reklám / uszítás" });
+    score += 56;
   }
 
   if (REGEX.nsfw.test(content)) {
-    hits.push({ key: "nsfw", points: 54, label: "NSFW / obszcén tartalom gyanú" });
-    score += 54;
+    hits.push({ key: "nsfw", points: 56, label: "NSFW / obszcén tartalom gyanú" });
+    score += 56;
   }
 
   if (REGEX.politics.test(content)) {
@@ -480,13 +472,13 @@ function scanRules(message, recentSameUser = []) {
   }
 
   if (REGEX.vpnBanEvade.test(content)) {
-    hits.push({ key: "vpn_ban_evasion", points: 78, label: "VPN / ban evasion gyanú" });
-    score += 78;
+    hits.push({ key: "vpn_ban_evasion", points: 80, label: "VPN / ban evasion gyanú" });
+    score += 80;
   }
 
   if (REGEX.scam.test(content)) {
-    hits.push({ key: "scam", points: 90, label: "Scam / átverés gyanú" });
-    score += 90;
+    hits.push({ key: "scam", points: 92, label: "Scam / átverés gyanú" });
+    score += 92;
   }
 
   const mentionCount = (content.match(REGEX.mentionAbuse) || []).length;
@@ -558,6 +550,28 @@ function shouldRunAi(ruleScore, content) {
   return suspiciousWords.some((w) => lower.includes(w));
 }
 
+function normalizeSeverityHu(input) {
+  switch (input) {
+    case "critical":
+    case "kritikus":
+      return "kritikus";
+    case "high":
+    case "magas":
+      return "magas";
+    case "medium":
+    case "közepes":
+      return "közepes";
+    case "low":
+    case "enyhe":
+    default:
+      return "enyhe";
+  }
+}
+
+function normalizeAction(value) {
+  return ["ignore", "warn", "delete", "timeout", "kick", "ban", "unban"].includes(value) ? value : "ignore";
+}
+
 async function aiAnalyzeModeration(payload) {
   const {
     messageContent,
@@ -593,7 +607,7 @@ ${buildRulesText()}
 Felhasználó:
 - username: ${username || "ismeretlen"}
 - displayName: ${displayName || "ismeretlen"}
-- jelenlegi risk: ${currentRisk}
+- jelenlegi kockázat: ${currentRisk}%
 - előzmények: ${incidentSummary || "nincs"}
 
 Szabályalapú találatok:
@@ -610,6 +624,7 @@ Nagyon fontos:
 - "gyertek", "jöjjön mindenki", "gyertek át", más szervernév említése, "senki ne legyen ezen a szerveren", átcsalogatás -> reklám / uszítás.
 - Staff vagy szerver obszcén minősítése -> komoly szabálysértés.
 - Több kisebb szabálysértést is vehetsz komolynak, ha együtt problémás mintát adnak.
+- Ha visszaeső a felhasználó, emeld a javasolt súlyosságot és a kockázatot.
 
 A válaszod KIZÁRÓLAG JSON legyen.
 Pontozz határozottan. Ne legyél túl enyhe.
@@ -617,7 +632,7 @@ Pontozz határozottan. Ne legyél túl enyhe.
 JSON:
 {
   "category": "harassment | threat | staff_abuse | doxxing | nsfw | ad_server | spam | flood | ooc_trade | scam | ban_evasion | politics_sensitive | clean | other",
-  "severity": "low | medium | high | critical",
+  "severity": "enyhe | közepes | magas | kritikus",
   "confidence": 0,
   "points": 0,
   "targeted": false,
@@ -648,12 +663,14 @@ JSON:
   const content = response.choices?.[0]?.message?.content?.trim() || "{}";
 
   try {
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    parsed.severity = normalizeSeverityHu(parsed.severity);
+    return parsed;
   } catch (error) {
     console.error("[AIMOD] AI JSON parse hiba:", error, content);
     return {
       category: "other",
-      severity: "low",
+      severity: "enyhe",
       confidence: 25,
       points: 0,
       targeted: false,
@@ -671,7 +688,11 @@ JSON:
 function summarizeIncidents(profile) {
   const counts = getRecentIncidentCounts(profile);
   const totals = profile.totals || {};
-  return `7 nap: ${counts.last7d} incidens / ${counts.serious7d} komoly, 30 nap: ${counts.last30d} incidens / ${counts.serious30d} komoly, timeout: ${totals.timeouts || 0}, kick: ${totals.kicks || 0}, ban: ${totals.bans || 0}`;
+  return {
+    seven: `Összes incidens: ${counts.last7d}\nKomoly incidens: ${counts.serious7d}`,
+    thirty: `Összes incidens: ${counts.last30d}\nKomoly incidens: ${counts.serious30d}`,
+    actions: `Timeout: ${totals.timeouts || 0}\nKick: ${totals.kicks || 0}\nBan: ${totals.bans || 0}`,
+  };
 }
 
 function pickHighestRuleHit(ruleHits) {
@@ -679,17 +700,9 @@ function pickHighestRuleHit(ruleHits) {
   return [...ruleHits].sort((a, b) => (b.points || 0) - (a.points || 0))[0];
 }
 
-function normalizeSeverity(value) {
-  return ["low", "medium", "high", "critical"].includes(value) ? value : "low";
-}
-
-function normalizeAction(value) {
-  return ["ignore", "warn", "delete", "timeout", "kick", "ban"].includes(value) ? value : "ignore";
-}
-
 function finalDecision({ profile, ruleScan, aiResult }) {
-  const currentRisk = getWeightedRisk(profile);
-  const severity = normalizeSeverity(aiResult.severity);
+  const currentRisk = getRiskPercent(profile);
+  const severity = normalizeSeverityHu(aiResult.severity);
   const highestRule = pickHighestRuleHit(ruleScan.hits);
 
   let points = Math.max(
@@ -714,7 +727,7 @@ function finalDecision({ profile, ruleScan, aiResult }) {
   const hasImmediateDox = ruleScan.hits.some((h) => h.key === "doxxing");
   const hasBanEvasion = ruleScan.hits.some((h) => h.key === "vpn_ban_evasion");
   const hasAdServer = ruleScan.hits.some((h) => h.key === "ad_server");
-  const severe = ["high", "critical"].includes(severity);
+  const severe = ["magas", "kritikus"].includes(severity);
 
   if (hasImmediateTrade) {
     action = "ban";
@@ -740,7 +753,7 @@ function finalDecision({ profile, ruleScan, aiResult }) {
     action = "delete";
   }
 
-  const projectedRisk = currentRisk + points;
+  const projectedRisk = Math.max(0, Math.min(100, currentRisk + Math.round(points * 0.55)));
 
   if (projectedRisk >= CONFIG.AUTO_BAN_READY_THRESHOLD && severe && confidence >= CONFIG.MIN_AI_CONFIDENCE_FOR_BAN) {
     action = "ban";
@@ -801,25 +814,54 @@ function finalDecision({ profile, ruleScan, aiResult }) {
   };
 }
 
+function buildActionButtons(userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`aimod:reviewok:${userId}`)
+      .setLabel("Jól döntött")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId(`aimod:mistake:${userId}`)
+      .setLabel("AI tévedett")
+      .setStyle(ButtonStyle.Danger),
+
+    new ButtonBuilder()
+      .setCustomId(`aimod:apology:${userId}`)
+      .setLabel("Bocsánatkérés küldése")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId(`aimod:unban:${userId}`)
+      .setLabel("Feloldás / Unban")
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
 function buildIncidentEmbed({ message, member, final, profile, crossedStage }) {
-  const risk = getWeightedRisk(profile);
+  const currentRisk = getRiskPercent(profile);
   const color = colorBySeverity(final.severity);
   const emoji = emojiBySeverity(final.severity);
-  const messageLink = getMessageLink(message);
+  const summaries = summarizeIncidents(profile);
+  const repeated =
+    summaries &&
+    ((profile.totals?.timeouts || 0) > 0 ||
+      (profile.totals?.kicks || 0) > 0 ||
+      (profile.incidents?.length || 0) >= 3);
 
   return new EmbedBuilder()
     .setColor(color)
-    .setTitle(`${emoji} AI Moderációs incidens`)
+    .setTitle(`${emoji} AI moderációs incidens`)
     .setDescription(
       [
         `**Felhasználó:** ${safeMentionUser(member?.id)}`,
         `**Név:** ${trimField(member?.user?.tag || member?.user?.username || "Ismeretlen", 256)}`,
         `**Csatorna:** ${message?.channel ? `${message.channel}` : "-"}`,
-        `**Akció:** **${actionToLabel(final.action)}**`,
+        `**Végrehajtott művelet:** **${actionToLabel(final.action)}**`,
         `**Súlyosság:** **${final.severity}**`,
         `**Kategória:** **${trimField(final.category, 128)}**`,
-        messageLink ? `**Üzenet:** [Megnyitás](${messageLink})` : null,
-      ].filter(Boolean).join("\n")
+        `**AI bizonyosság:** **${final.confidence}%**`,
+      ].join("\n")
     )
     .addFields(
       {
@@ -838,23 +880,38 @@ function buildIncidentEmbed({ message, member, final, profile, crossedStage }) {
         inline: false,
       },
       {
-        name: "📊 Pontok",
-        value: `Incidens: **${final.points}**\nJelenlegi kockázat: **${risk}**\nIncidens után becsült: **${final.projectedRisk}**`,
+        name: "📉 Jelenlegi kockázat",
+        value: `**${currentRisk}%**`,
         inline: true,
       },
       {
-        name: "🎯 AI bizonyosság",
-        value: `${final.confidence}%`,
+        name: "📈 Becsült kockázat az incidens után",
+        value: `**${final.projectedRisk}%**`,
         inline: true,
       },
       {
-        name: "📈 Státusz",
-        value: crossedStage ? `Küszöb átlépve: **${stageLabel(crossedStage)}**` : stageLabel(riskStage(risk)),
+        name: "🚦 Állapot",
+        value: crossedStage ? `**${stageLabel(crossedStage)}**` : `**${stageLabel(riskStage(currentRisk))}**`,
         inline: true,
       },
       {
-        name: "🗂️ Előzmények",
-        value: trimField(summarizeIncidents(profile), 1024),
+        name: "🗓️ Előzmények - 7 nap",
+        value: trimField(summaries.seven, 1024),
+        inline: true,
+      },
+      {
+        name: "🗓️ Előzmények - 30 nap",
+        value: trimField(summaries.thirty, 1024),
+        inline: true,
+      },
+      {
+        name: "🔨 Korábbi műveletek",
+        value: trimField(summaries.actions, 1024),
+        inline: true,
+      },
+      {
+        name: "♻️ Visszaesés",
+        value: repeated ? "Igen, a felhasználónak többszöri vagy ismétlődő szabálysértési mintája van." : "Jelenleg nem látszik komoly visszaeső minta.",
         inline: false,
       }
     )
@@ -863,11 +920,13 @@ function buildIncidentEmbed({ message, member, final, profile, crossedStage }) {
 }
 
 function buildThresholdEmbed({ member, profile, stage, reasonText }) {
-  const risk = getWeightedRisk(profile);
+  const risk = getRiskPercent(profile);
   const severity =
-    stage === "ban_near" || stage === "auto_ban_ready" ? "critical"
-      : stage === "kick_near" ? "high"
-      : "medium";
+    stage === "ban_near" || stage === "auto_ban_ready" ? "kritikus"
+      : stage === "kick_near" ? "magas"
+      : "közepes";
+
+  const summaries = summarizeIncidents(profile);
 
   return new EmbedBuilder()
     .setColor(colorBySeverity(severity))
@@ -877,7 +936,7 @@ function buildThresholdEmbed({ member, profile, stage, reasonText }) {
         `**Felhasználó:** ${safeMentionUser(member?.id)}`,
         `**Név:** ${trimField(member?.user?.tag || member?.user?.username || "Ismeretlen", 256)}`,
         `**Állapot:** **${stageLabel(stage)}**`,
-        `**Jelenlegi kockázat:** **${risk}**`,
+        `**Jelenlegi kockázat:** **${risk}%**`,
       ].join("\n")
     )
     .addFields(
@@ -887,93 +946,82 @@ function buildThresholdEmbed({ member, profile, stage, reasonText }) {
         inline: false,
       },
       {
-        name: "🗂️ Közelmúlt összegzés",
-        value: trimField(summarizeIncidents(profile), 1024),
-        inline: false,
+        name: "🗓️ Előzmények - 7 nap",
+        value: trimField(summaries.seven, 1024),
+        inline: true,
+      },
+      {
+        name: "🗓️ Előzmények - 30 nap",
+        value: trimField(summaries.thirty, 1024),
+        inline: true,
+      },
+      {
+        name: "🔨 Korábbi műveletek",
+        value: trimField(summaries.actions, 1024),
+        inline: true,
       }
     )
     .setFooter({ text: `AI Risk Alert • ${CONFIG.SERVER_NAME}` })
     .setTimestamp(new Date());
 }
 
-function buildBanActionEmbed({ guild, userId, reason, record }) {
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`aimod:unban:${userId}`)
-      .setLabel("Unban")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`aimod:reviewok:${userId}`)
-      .setLabel("Döntés helyes")
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  const embed = new EmbedBuilder()
-    .setColor(0xaa0000)
-    .setTitle("🛑 Automata ban végrehajtva")
+function buildActionEmbed({ title, color, userId, actionLabel, reason, moderatorId = null }) {
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
     .setDescription(
       [
         `**Felhasználó:** ${safeMentionUser(userId)}`,
-        `**Guild:** ${trimField(guild?.name || "-", 256)}`,
-        `**Végrehajtotta:** AI Moderation`,
-      ].join("\n")
+        `**Művelet:** **${actionLabel}**`,
+        moderatorId ? `**Kezelte:** ${safeMentionUser(moderatorId)}` : `**Kezelte:** AI Moderation`,
+      ].filter(Boolean).join("\n")
     )
-    .addFields(
-      {
-        name: "📜 Indok",
-        value: trimField(reason, 1024),
-        inline: false,
-      },
-      {
-        name: "📊 Előzmény adatok",
-        value: trimField(record || "-", 1024),
-        inline: false,
-      }
-    )
-    .setFooter({ text: `Ban log • ${CONFIG.SERVER_NAME}` })
+    .addFields({
+      name: "📝 Indoklás",
+      value: trimField(reason, 1024),
+      inline: false,
+    })
+    .setFooter({ text: `AI Moderation Action • ${CONFIG.SERVER_NAME}` })
     .setTimestamp(new Date());
-
-  return { embed, row };
 }
 
-function buildUnbanModal(userId) {
+function buildReasonModal(customId, title, label, placeholder) {
   const input = new TextInputBuilder()
     .setCustomId("reason")
-    .setLabel("Unban indoklás")
+    .setLabel(label)
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(false)
     .setMaxLength(700)
-    .setPlaceholder("Pl.: AI túl szigorú volt, téves kontextus, staff felülbírálat.");
+    .setPlaceholder(placeholder || "Opcionális indoklás...");
 
   return new ModalBuilder()
-    .setCustomId(`aimod:unban_modal:${userId}`)
-    .setTitle("Feloldás / Unban")
+    .setCustomId(customId)
+    .setTitle(title)
     .addComponents(new ActionRowBuilder().addComponents(input));
 }
 
-async function sendOrEditAlertMessage(client, userId, embed) {
+async function deleteAndResendAlertMessage(client, key, embed) {
   const logChannel = getLogChannel(client);
   if (!logChannel) return null;
 
-  const existingId = store.alertMessages[userId];
+  const existingId = store.alertMessages[key];
   if (existingId) {
     const existing = await logChannel.messages.fetch(existingId).catch(() => null);
     if (existing) {
-      await existing.edit({ embeds: [embed] }).catch(() => null);
-      return existing;
+      await existing.delete().catch(() => null);
     }
   }
 
   const msg = await logChannel.send({ embeds: [embed] }).catch(() => null);
   if (msg) {
-    store.alertMessages[userId] = msg.id;
+    store.alertMessages[key] = msg.id;
     saveStore();
   }
   return msg;
 }
 
 async function logIncident(client, payload) {
-  const { userId, key, embed } = payload;
+  const { userId, key, embed, includeButtons = true } = payload;
   const logChannel = getLogChannel(client);
   if (!logChannel) return null;
 
@@ -983,14 +1031,15 @@ async function logIncident(client, payload) {
   if (last && now() - last.at <= CONFIG.DEDUPE_SIMILAR_WINDOW_MS) {
     const oldMsg = await logChannel.messages.fetch(last.messageId).catch(() => null);
     if (oldMsg) {
-      await oldMsg.edit({ embeds: [embed] }).catch(() => null);
-      store.lastLogs[dedupeKey].at = now();
-      saveStore();
-      return oldMsg;
+      await oldMsg.delete().catch(() => null);
     }
   }
 
-  const msg = await logChannel.send({ embeds: [embed] }).catch(() => null);
+  const msg = await logChannel.send({
+    embeds: [embed],
+    components: includeButtons ? [buildActionButtons(userId)] : [],
+  }).catch(() => null);
+
   if (msg) {
     store.lastLogs[dedupeKey] = {
       at: now(),
@@ -1050,6 +1099,35 @@ async function safeBan(member, reason, deleteMessageSeconds = 0) {
   }
 }
 
+async function notifyUserDM(user, embed) {
+  try {
+    if (!user) return false;
+    await user.send({ embeds: [embed] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function logModerationAction(client, userId, title, color, actionLabel, reason, moderatorId = null) {
+  const logChannel = getLogChannel(client);
+  if (!logChannel) return;
+
+  const embed = buildActionEmbed({
+    title,
+    color,
+    userId,
+    actionLabel,
+    reason,
+    moderatorId,
+  });
+
+  await logChannel.send({
+    embeds: [embed],
+    components: [buildActionButtons(userId)],
+  }).catch(() => null);
+}
+
 async function applyDecision(client, message, member, final, profile) {
   let executedAction = "ignore";
   let deleteDone = false;
@@ -1068,6 +1146,16 @@ async function applyDecision(client, message, member, final, profile) {
     if (ok) {
       profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
       executedAction = "timeout";
+
+      await logModerationAction(
+        client,
+        member.id,
+        "🔇 Automata timeout végrehajtva",
+        0xff8a00,
+        "Timeout / mute",
+        `${final.reason}\nIdőtartam: ${final.timeoutMinutes} perc`
+      );
+
       return { executedAction, deleteDone };
     }
   }
@@ -1077,6 +1165,16 @@ async function applyDecision(client, message, member, final, profile) {
     if (ok) {
       profile.totals.kicks = (profile.totals.kicks || 0) + 1;
       executedAction = "kick";
+
+      await logModerationAction(
+        client,
+        member.id,
+        "👢 Automata kick végrehajtva",
+        0xd63c3c,
+        "Kick",
+        final.reason
+      );
+
       return { executedAction, deleteDone };
     }
   }
@@ -1097,21 +1195,14 @@ async function applyDecision(client, message, member, final, profile) {
       };
       saveStore();
 
-      const logChannel = getLogChannel(client);
-      if (logChannel) {
-        const banRecord = `Kockázat: ${getWeightedRisk(profile)} | Timeout: ${profile.totals.timeouts || 0} | Kick: ${profile.totals.kicks || 0} | Ban: ${profile.totals.bans || 0}`;
-        const { embed, row } = buildBanActionEmbed({
-          guild: member.guild,
-          userId: member.id,
-          reason: final.reason,
-          record: banRecord,
-        });
-
-        await logChannel.send({
-          embeds: [embed],
-          components: [row],
-        }).catch(() => null);
-      }
+      await logModerationAction(
+        client,
+        member.id,
+        "🛑 Automata ban végrehajtva",
+        0xaa0000,
+        "Ban",
+        final.reason
+      );
 
       return { executedAction, deleteDone };
     }
@@ -1162,7 +1253,7 @@ async function handleMemberNameCheck(client, member, source = "memberAdd") {
     addIncident(member.id, {
       type: "name_violation",
       category: "name_profile",
-      severity: "medium",
+      severity: "közepes",
       points,
       confidence: 90,
       reason: hits.join(", "),
@@ -1172,9 +1263,6 @@ async function handleMemberNameCheck(client, member, source = "memberAdd") {
     });
 
     saveStore();
-
-    const logChannel = getLogChannel(client);
-    if (!logChannel) return;
 
     const embed = new EmbedBuilder()
       .setColor(0xff8a00)
@@ -1193,15 +1281,15 @@ async function handleMemberNameCheck(client, member, source = "memberAdd") {
           inline: false,
         },
         {
-          name: "📊 Kockázati pont",
-          value: String(getWeightedRisk(profile)),
+          name: "📉 Jelenlegi kockázat",
+          value: `${getRiskPercent(profile)}%`,
           inline: true,
         }
       )
       .setFooter({ text: `AI Name Check • ${CONFIG.SERVER_NAME}` })
       .setTimestamp(new Date());
 
-    await sendOrEditAlertMessage(client, `name_${member.id}`, embed);
+    await deleteAndResendAlertMessage(client, `name_${member.id}`, embed);
   } catch (error) {
     console.error("[AIMOD] handleMemberNameCheck hiba:", error);
   }
@@ -1240,12 +1328,12 @@ async function processMessage(client, message) {
         .slice(-CONFIG.MAX_CONTEXT_MESSAGES)
     : [];
 
-  const currentRisk = getWeightedRisk(profile);
-  const incidentSummary = summarizeIncidents(profile);
+  const currentRisk = getRiskPercent(profile);
+  const incidentSummary = JSON.stringify(summarizeIncidents(profile));
 
   let aiResult = {
     category: "other",
-    severity: ruleScan.score >= 60 ? "high" : ruleScan.score >= 20 ? "medium" : "low",
+    severity: ruleScan.score >= 60 ? "magas" : ruleScan.score >= 20 ? "közepes" : "enyhe",
     confidence: Math.min(96, Math.max(40, ruleScan.score)),
     points: ruleScan.score,
     targeted: false,
@@ -1296,7 +1384,7 @@ async function processMessage(client, message) {
   const actionResult = await applyDecision(client, message, member, final, profile);
   final.action = actionResult.executedAction || final.action;
 
-  const newRisk = getWeightedRisk(profile);
+  const newRisk = getRiskPercent(profile);
   const afterStage = riskStage(newRisk);
   const crossedStage = beforeStage !== afterStage ? afterStage : null;
 
@@ -1325,6 +1413,7 @@ async function processMessage(client, message) {
         userId: member.id,
         key,
         embed,
+        includeButtons: true,
       });
 
       profile.lastIncidentLogAt = now();
@@ -1341,7 +1430,7 @@ async function processMessage(client, message) {
         reasonText: final.reason,
       });
 
-      await sendOrEditAlertMessage(client, member.id, alertEmbed);
+      await deleteAndResendAlertMessage(client, member.id, alertEmbed);
       profile.lastAlertAt = now();
       profile.lastAlertLevel = crossedStage;
       saveStore();
@@ -1362,6 +1451,42 @@ function hasStaffPermission(interaction) {
   return Boolean(hasRole || hasAdmin || hasBanPerm);
 }
 
+async function sendMistakeDM(user, customReason = "") {
+  const embed = new EmbedBuilder()
+    .setColor(0xd63c3c)
+    .setTitle("❌ Moderációs döntés felülvizsgálva")
+    .setDescription("A korábbi AI moderációs döntés felülvizsgálatra került, és hibásnak lett megjelölve.")
+    .addFields({
+      name: "📝 Üzenet",
+      value: trimField(customReason || "Sajnáljuk, az automatikus rendszer ebben az esetben hibás döntést hozott. Köszönjük a türelmedet.", 1024),
+      inline: false,
+    })
+    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
+    .setTimestamp(new Date());
+
+  return notifyUserDM(user, embed);
+}
+
+async function sendApologyDM(user, customReason = "") {
+  const embed = new EmbedBuilder()
+    .setColor(0x1f8b4c)
+    .setTitle("🙏 Elnézést kérünk")
+    .setDescription("A szerver automatikus moderációs rendszere hibás döntést hozott.")
+    .addFields({
+      name: "📝 Üzenet",
+      value: trimField(
+        customReason ||
+          "Elnézést kérünk a kellemetlenségért. Az ügyedet felülvizsgáltuk, és a hibás döntést jeleztük a rendszer felé.",
+        1024
+      ),
+      inline: false,
+    })
+    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
+    .setTimestamp(new Date());
+
+  return notifyUserDM(user, embed);
+}
+
 async function handleInteraction(client, interaction) {
   try {
     if (interaction.isButton()) {
@@ -1379,12 +1504,51 @@ async function handleInteraction(client, interaction) {
       const userId = parts[2];
 
       if (action === "unban") {
-        return interaction.showModal(buildUnbanModal(userId));
+        return interaction.showModal(
+          buildReasonModal(
+            `aimod:unban_modal:${userId}`,
+            "Feloldás / Unban",
+            "Unban indoklás",
+            "Opcionális indoklás..."
+          )
+        );
+      }
+
+      if (action === "mistake") {
+        return interaction.showModal(
+          buildReasonModal(
+            `aimod:mistake_modal:${userId}`,
+            "AI tévedett",
+            "Felülvizsgálati indoklás",
+            "Opcionális indoklás..."
+          )
+        );
+      }
+
+      if (action === "apology") {
+        return interaction.showModal(
+          buildReasonModal(
+            `aimod:apology_modal:${userId}`,
+            "Bocsánatkérés küldése",
+            "Bocsánatkérés szövege",
+            "Opcionális személyes üzenet..."
+          )
+        );
       }
 
       if (action === "reviewok") {
+        await logModerationAction(
+          client,
+          userId,
+          "✅ Moderációs döntés helyesként megjelölve",
+          0x1f8b4c,
+          "Jól döntött",
+          "Egy staff tag helyesnek jelölte az AI döntését.",
+          interaction.user.id
+        );
+
         return interaction.reply({
-          content: "✅ A döntés helyesként lett megjelölve.",
+          content: "✅ Visszajelzés elküldve.",
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -1396,7 +1560,7 @@ async function handleInteraction(client, interaction) {
     }
 
     if (interaction.isModalSubmit()) {
-      if (!interaction.customId.startsWith("aimod:unban_modal:")) return;
+      if (!interaction.customId.startsWith("aimod:")) return;
 
       if (!hasStaffPermission(interaction)) {
         return interaction.reply({
@@ -1405,49 +1569,83 @@ async function handleInteraction(client, interaction) {
         });
       }
 
-      const userId = interaction.customId.split(":")[2];
-      const reason = cleanText(interaction.fields.getTextInputValue("reason") || "Nincs megadva", 700);
-
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      const guild = interaction.guild;
-      if (!guild) {
-        return interaction.editReply("Ez csak szerveren használható.");
+      const parts = interaction.customId.split(":");
+      const action = parts[1];
+      const userId = parts[2];
+      const reason = cleanText(interaction.fields.getTextInputValue("reason") || "Nincs megadva", 700);
+
+      if (action === "unban_modal") {
+        const guild = interaction.guild;
+        if (!guild) {
+          return interaction.editReply("Ez csak szerveren használható.");
+        }
+
+        try {
+          await guild.members.unban(userId, `[AI Moderation Unban] ${reason}`);
+        } catch (error) {
+          console.error("[AIMOD] unban hiba:", error);
+          return interaction.editReply("❌ Nem sikerült az unban.");
+        }
+
+        delete store.bannedUsers[userId];
+        saveStore();
+
+        await logModerationAction(
+          client,
+          userId,
+          "🔓 Feloldás / unban végrehajtva",
+          0x1f8b4c,
+          "Feloldás / unban",
+          reason,
+          interaction.user.id
+        );
+
+        return interaction.editReply("✅ Unban elküldve.");
       }
 
-      try {
-        await guild.members.unban(userId, `[AI Moderation Unban] ${reason}`);
-      } catch (error) {
-        console.error("[AIMOD] unban hiba:", error);
-        return interaction.editReply("❌ Nem sikerült az unban.");
+      if (action === "mistake_modal") {
+        const user =
+          interaction.client.users.cache.get(userId) ||
+          await interaction.client.users.fetch(userId).catch(() => null);
+
+        const sent = await sendMistakeDM(user, reason);
+
+        await logModerationAction(
+          client,
+          userId,
+          "❌ AI tévedett visszajelzés",
+          0xd63c3c,
+          "AI tévedett",
+          `${reason}\nDM küldve: ${sent ? "igen" : "nem"}`,
+          interaction.user.id
+        );
+
+        return interaction.editReply(`✅ Visszajelzés elküldve.${sent ? " A felhasználó DM-et is kapott." : " A felhasználónak nem sikerült DM-et küldeni."}`);
       }
 
-      delete store.bannedUsers[userId];
-      saveStore();
+      if (action === "apology_modal") {
+        const user =
+          interaction.client.users.cache.get(userId) ||
+          await interaction.client.users.fetch(userId).catch(() => null);
 
-      const logChannel = getLogChannel(client);
-      if (logChannel) {
-        const embed = new EmbedBuilder()
-          .setColor(0x1f8b4c)
-          .setTitle("🔓 Unban végrehajtva")
-          .setDescription(
-            [
-              `**Felhasználó:** ${safeMentionUser(userId)}`,
-              `**Feloldotta:** ${safeMentionUser(interaction.user.id)}`
-            ].join("\n")
-          )
-          .addFields({
-            name: "📝 Indok",
-            value: trimField(reason, 1024),
-            inline: false,
-          })
-          .setFooter({ text: `AI Moderation Unban • ${CONFIG.SERVER_NAME}` })
-          .setTimestamp(new Date());
+        const sent = await sendApologyDM(user, reason);
 
-        await logChannel.send({ embeds: [embed] }).catch(() => null);
+        await logModerationAction(
+          client,
+          userId,
+          "🙏 Bocsánatkérés elküldve",
+          0x1f8b4c,
+          "Bocsánatkérés",
+          `${reason}\nDM küldve: ${sent ? "igen" : "nem"}`,
+          interaction.user.id
+        );
+
+        return interaction.editReply(`✅ Bocsánatkérés elküldve.${sent ? " A felhasználó DM-et is kapott." : " A felhasználónak nem sikerült DM-et küldeni."}`);
       }
 
-      return interaction.editReply("✅ A felhasználó unbanolva lett.");
+      return interaction.editReply("Ismeretlen művelet.");
     }
   } catch (error) {
     console.error("[AIMOD] interaction hiba:", error);

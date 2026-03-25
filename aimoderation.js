@@ -45,15 +45,17 @@ const CONFIG = {
   MAX_LAST_MESSAGES_PER_USER: 20,
   MAX_PREVIOUS_PROBLEM_MESSAGES: 5,
 
-  WATCH_THRESHOLD: 28,
-  HIGH_RISK_THRESHOLD: 48,
-  KICK_NEAR_THRESHOLD: 74,
-  BAN_NEAR_THRESHOLD: 90,
-  AUTO_BAN_READY_THRESHOLD: 100,
+ // Kockázat %
+WATCH_THRESHOLD: 35,
+HIGH_RISK_THRESHOLD: 55,
+KICK_NEAR_THRESHOLD: 82,
+BAN_NEAR_THRESHOLD: 95,
+AUTO_BAN_READY_THRESHOLD: 100,
 
-  MIN_AI_CONFIDENCE_FOR_TIMEOUT: 48,
-  MIN_AI_CONFIDENCE_FOR_KICK: 66,
-  MIN_AI_CONFIDENCE_FOR_BAN: 83,
+// AI küszöbök - óvatosabb, de nem buta
+MIN_AI_CONFIDENCE_FOR_TIMEOUT: 52,
+MIN_AI_CONFIDENCE_FOR_KICK: 68,
+MIN_AI_CONFIDENCE_FOR_BAN: 86,
 
   TIMEOUT_MINUTES_LOW: 15,
   TIMEOUT_MINUTES_MEDIUM: 60,
@@ -590,10 +592,7 @@ function extractJson(text) {
 
 const REGEX = {
   invite: /(discord\.gg\/|discord\.com\/invite\/)/i,
-  oocTradeGeneric:
-    /\b(ooc ker|ooc keresked[eé]s|ooc trade|érdekel valakit|item elad[oó]|elad[oó] ig vagyon|ig vagyon elad[oó])\b/i,
-  oocTradeHard:
-    /\b(val[óo]s ?p[eé]nz|forint|ft\b|eur[oó]|paypal|revolut|utal(ok|ás)?|bankk[aá]rtya|nitro|steam gift|giftcard|account elad[oó]|accountot eladom|veszek accountot|p[eé]nz[ée]rt adom|p[eé]nz[ée]rt veszem|ig vagyonért|accountért|itemért|irl)\b/i,
+
   doxxing:
     /\b(facebook|fb profil|insta|instagram|telefonsz[aá]m|lakc[ií]m|c[ií]m[e]?|szem[eé]lyi|anyja neve|ad[óo]sz[aá]m|taj|priv[aá]t k[eé]p|nem publikus k[eé]p|kirakom a k[eé]p[eé]t|kirakom a facebookj[aá]t)\b/i,
   threat:
@@ -616,7 +615,31 @@ const REGEX = {
   emoji: /<a?:\w+:\d+>|[\u{1F300}-\u{1FAFF}]/gu,
   repeatChars: /(.)\1{9,}/i,
 };
+const INSULT_WORDS = [
+  "szar", "szarok", "fos", "szarházi", "retkes", "nyomorék",
+  "idióta", "hülye", "hülyék", "szánalmas", "nevetséges",
+  "bohóc", "szutyok", "szenny", "semmirekellő", "csicska"
+];
 
+const TARGET_WORDS = [
+  "szerver", "admin", "adminok", "moderátor", "moderátorok",
+  "staff", "vezetőség", "fejlesztő", "fejlesztők",
+  "közösség", "játékos", "játékosok"
+];
+
+function includesAnyWord(text, words) {
+  return words.some((word) => text.includes(word));
+}
+
+function isTargetedInsult(content) {
+  const lower = String(content || "").toLowerCase();
+  return includesAnyWord(lower, INSULT_WORDS) && includesAnyWord(lower, TARGET_WORDS);
+}
+
+function isStrongDirectAbuse(content) {
+  const lower = String(content || "").toLowerCase();
+  return /(kurva any[aá]d|bazdmeg te|rohadj meg|dögölj meg|nyomorék geci|retkes szar)/i.test(lower);
+}
 function scanRules(message, recentSameUser = []) {
   const content = String(message.content || "");
   const lower = content.toLowerCase();
@@ -626,101 +649,144 @@ function scanRules(message, recentSameUser = []) {
 
   if (!content.trim()) return { hits, score };
 
-  if (REGEX.invite.test(content)) {
-    hits.push({ key: "ad_server", points: 36, label: "Discord invite / reklám" });
-    score += 36;
-  }
-
-  const hasTradeGeneric = REGEX.oocTradeGeneric.test(content);
-  const hasTradeHard = REGEX.oocTradeHard.test(content);
-
-  if (hasTradeGeneric || hasTradeHard) {
-    const points = hasTradeHard ? 82 : 42;
-    hits.push({
-      key: "ooc_trade",
-      points,
-      label: hasTradeHard
-        ? "Súlyos OOC kereskedelem / valós pénzes utalás gyanú"
-        : "OOC kereskedelem gyanú",
-      hard: hasTradeHard,
-    });
-    score += points;
-  }
-
+  // 1) Súlyos, konkrét szabálysértések
   if (REGEX.doxxing.test(content)) {
-    hits.push({ key: "doxxing", points: 80, label: "Privát adat / doxxing gyanú" });
+    hits.push({
+      key: "doxxing",
+      points: 80,
+      label: "Privát adat / doxxing gyanú",
+    });
     score += 80;
   }
 
   if (REGEX.threat.test(content)) {
-    hits.push({ key: "threat", points: 68, label: "Fenyegetés gyanú" });
+    hits.push({
+      key: "threat",
+      points: 68,
+      label: "Fenyegetés gyanú",
+    });
     score += 68;
   }
 
-  if (REGEX.staffAbuse.test(content)) {
-    hits.push({ key: "staff_abuse", points: 58, label: "Staff / szerver obszcén szidalmazása" });
-    score += 58;
+  if (REGEX.scam.test(content)) {
+    hits.push({
+      key: "scam",
+      points: 95,
+      label: "Scam / átverés gyanú",
+    });
+    score += 95;
   }
 
-  if (REGEX.harassment.test(content)) {
-    hits.push({ key: "harassment", points: 40, label: "Célzott sértegetés / zaklatás gyanú" });
-    score += 40;
+  if (REGEX.vpnBanEvade.test(content)) {
+    hits.push({
+      key: "ban_evasion",
+      points: 84,
+      label: "VPN / ban evasion gyanú",
+    });
+    score += 84;
   }
 
-  if (REGEX.adServer.test(content)) {
-    hits.push({ key: "ad_server", points: 62, label: "Más szerver reklám / uszítás" });
+  if (REGEX.adServer.test(content) || REGEX.invite.test(content)) {
+    hits.push({
+      key: "ad_server",
+      points: 62,
+      label: "Más szerver reklám / uszítás",
+    });
     score += 62;
   }
 
   if (REGEX.nsfw.test(content)) {
-    hits.push({ key: "nsfw", points: 58, label: "NSFW / obszcén tartalom gyanú" });
+    hits.push({
+      key: "nsfw",
+      points: 58,
+      label: "NSFW / obszcén tartalom gyanú",
+    });
     score += 58;
   }
 
   if (REGEX.politics.test(content)) {
-    hits.push({ key: "politics_sensitive", points: 22, label: "Tiltott érzékeny tartalom" });
+    hits.push({
+      key: "politics_sensitive",
+      points: 22,
+      label: "Tiltott érzékeny tartalom",
+    });
     score += 22;
   }
 
-  if (REGEX.vpnBanEvade.test(content)) {
-    hits.push({ key: "ban_evasion", points: 84, label: "VPN / ban evasion gyanú" });
-    score += 84;
+  // 2) Sértés / minősítés - csak EGY fő ág pontozzon
+  if (REGEX.staffAbuse.test(content)) {
+    hits.push({
+      key: "staff_abuse",
+      points: 68,
+      label: "Staff / szerver obszcén szidalmazása",
+    });
+    score += 68;
+  } else if (isTargetedInsult(content)) {
+    hits.push({
+      key: "staff_abuse",
+      points: 52,
+      label: "Célzott minősítés / sértegetés",
+    });
+    score += 52;
+  } else if (REGEX.harassment.test(content) || isStrongDirectAbuse(content)) {
+    hits.push({
+      key: "harassment",
+      points: 44,
+      label: "Célzott sértegetés / zaklatás gyanú",
+    });
+    score += 44;
   }
 
-  if (REGEX.scam.test(content)) {
-    hits.push({ key: "scam", points: 95, label: "Scam / átverés gyanú" });
-    score += 95;
-  }
-
+  // 3) Tömeges tagelés
   const mentionCount = (content.match(REGEX.mentionAbuse) || []).length;
   if (mentionCount >= CONFIG.MASS_MENTION_COUNT) {
-    hits.push({ key: "spam", points: 20, label: "Indokolatlan tömeges tagelés" });
+    hits.push({
+      key: "spam",
+      points: 20,
+      label: "Indokolatlan tömeges tagelés",
+    });
     score += 20;
   }
 
+  // 4) Emoji / karakter spam
   const emojiCount = (content.match(REGEX.emoji) || []).length;
   if (emojiCount >= CONFIG.EMOJI_SPAM_THRESHOLD) {
-    hits.push({ key: "spam", points: 12, label: "Emoji / GIF spam gyanú" });
+    hits.push({
+      key: "spam",
+      points: 12,
+      label: "Emoji / GIF spam gyanú",
+    });
     score += 12;
   }
 
   if (REGEX.repeatChars.test(content)) {
-    hits.push({ key: "spam", points: 10, label: "Karakter spam" });
+    hits.push({
+      key: "spam",
+      points: 10,
+      label: "Karakter spam",
+    });
     score += 10;
   }
 
+  // 5) Caps spam
   if (content.length >= CONFIG.CAPS_MIN_LENGTH) {
     const letters = content.replace(/[^a-zA-ZÁÉÍÓÖŐÚÜŰáéíóöőúüű]/g, "");
     if (letters.length >= CONFIG.CAPS_MIN_LENGTH) {
       const upper = letters.replace(/[^A-ZÁÉÍÓÖŐÚÜŰ]/g, "").length;
       const ratio = upper / letters.length;
+
       if (ratio >= CONFIG.CAPS_RATIO_THRESHOLD) {
-        hits.push({ key: "spam", points: 12, label: "Caps spam" });
+        hits.push({
+          key: "spam",
+          points: 12,
+          label: "Caps spam",
+        });
         score += 12;
       }
     }
   }
 
+  // 6) Ismételt ugyanaz az üzenet
   const dupes = recentSameUser.filter(
     (m) =>
       now() - (m.createdAt || 0) <= CONFIG.DUPLICATE_WINDOW_MS &&
@@ -730,16 +796,25 @@ function scanRules(message, recentSameUser = []) {
   ).length;
 
   if (dupes + 1 >= CONFIG.DUPLICATE_MIN_COUNT) {
-    hits.push({ key: "flood", points: 26, label: "Ismételt ugyanaz az üzenet" });
+    hits.push({
+      key: "flood",
+      points: 26,
+      label: "Ismételt ugyanaz az üzenet",
+    });
     score += 26;
   }
 
+  // 7) Gyors üzenetáradat
   const recentWindow = recentSameUser.filter(
     (m) => now() - (m.createdAt || 0) <= CONFIG.FLOOD_WINDOW_MS
   ).length;
 
   if (recentWindow + 1 >= CONFIG.FLOOD_MESSAGE_COUNT) {
-    hits.push({ key: "flood", points: 30, label: "Flood / gyors üzenetáradat" });
+    hits.push({
+      key: "flood",
+      points: 30,
+      label: "Flood / gyors üzenetáradat",
+    });
     score += 30;
   }
 
@@ -748,17 +823,34 @@ function scanRules(message, recentSameUser = []) {
 
 function shouldRunAi(ruleScore, content) {
   if (!content?.trim()) return false;
-  if (ruleScore >= 8) return true;
-
-  const suspiciousWords = [
-    "admin", "moderátor", "szerver", "fenyeget", "megöl", "paypal",
-    "revolut", "account", "pénzért", "discord.gg", "facebook",
-    "telefonszám", "lakcím", "kurva", "nyomorék", "tesztgaming",
-    "gazdagrp", "ooc ker", "ooc kereskedés", "érdekel valakit", "jöjjön mindenki",
-  ];
 
   const lower = content.toLowerCase();
-  return suspiciousWords.some((w) => lower.includes(w));
+
+  // Ha a szabályalapú rész már talált valamit, fusson az AI
+  if (ruleScore >= 8) return true;
+
+  // Célzott minősítés / sértegetés
+  if (isTargetedInsult(lower)) return true;
+
+  // Közvetlen durva anyázás / erős személyeskedés
+  if (isStrongDirectAbuse(lower)) return true;
+
+  return (
+    // Fenyegetés / erőszak
+    /(megöl|kinyírlak|megver|szétszedlek|elkaplak|megtalállak|megkereslek)/i.test(lower) ||
+
+    // Pénz / scam / account jelleg
+    /(paypal|revolut|p[eé]nz|p[eé]nzért|account|elad[oó]|gift link|token|login here|ingyen nitro|free nitro)/i.test(lower) ||
+
+    // Meghívó / reklám
+    /(discord\.gg|discord\.com\/invite|gyertek át|csatlakozzatok|jöjjetek át)/i.test(lower) ||
+
+    // Személyes adat / doxx jelleg
+    /(telefonsz[aá]m|lakc[ií]m|facebook|instagram|ip cím|ip\b|priv[aá]t k[eé]p)/i.test(lower) ||
+
+    // NSFW / obszcén jelleg
+    /(porn[oó]|nsfw|meztelen|nudes?|szexk[eé]p)/i.test(lower)
+  );
 }
 
 async function aiAnalyzeModeration(payload) {
@@ -795,10 +887,11 @@ ${messageContent}
 
 Döntési elvek:
 - Ne bannolj túl könnyen csak egyetlen enyhébb vagy kétértelmű mondat miatt.
-- "ooc ker", "ooc kereskedés", "érdekel valakit" önmagában még NE legyen automatikus ban, hacsak nincs valós pénzes / accountos / konkrét kereskedelmi minta.
+- Ne büntess általános, ártalmatlan kérdéseket vagy hétköznapi beszélgetést.
+- A célzott sértegetést, fenyegetést, scamet, reklámot, doxxingot és visszaeső spamet kezeld 
 - Ban csak egyértelmű, súlyos vagy visszaeső esetben legyen.
 - Delete / timeout / kick skálát használd emberien.
-- Az "analysis" mező legyen 3-4 teljes magyar mondat.
+- Az "analysis" mező legyen max 3 teljes magyar mondat.
 - Az "patternSummary" rövid legyen.
 - Csak JSON-t adj vissza.
 
@@ -810,7 +903,7 @@ Döntési elvek:
   "points": 0,
   "ruleBroken": "rövid magyar szabály-megfogalmazás",
   "reason": "rövid magyar indoklás",
-  "analysis": "3-4 mondatos emberi elemzés",
+  "analysis": "max 3 mondatos emberi elemzés",
   "patternSummary": "rövid visszaesési összegzés",
   "recommendedAction": "ignore | warn | delete | timeout | kick | ban",
   "timeoutMinutes": 0,
@@ -941,76 +1034,154 @@ function finalDecision({ profile, ruleScan, aiResult }) {
   let action = normalizeAction(aiResult.recommendedAction);
   const confidence = Number(aiResult.confidence || 0);
 
-  const tradeHit = ruleScan.hits.find((h) => h.key === "ooc_trade");
-  const hasHardTrade = Boolean(tradeHit?.hard);
   const hasImmediateScam = ruleScan.hits.some((h) => h.key === "scam");
   const hasImmediateDox = ruleScan.hits.some((h) => h.key === "doxxing");
   const hasBanEvasion = ruleScan.hits.some((h) => h.key === "ban_evasion");
   const hasAdServer = ruleScan.hits.some((h) => h.key === "ad_server");
   const severe = ["magas", "kritikus"].includes(severity);
+// csak a tényleg nagyon súlyos, egyértelmű dolgok menjenek azonnali ban felé
+if (hasImmediateScam && confidence >= 70) {
+  action = "ban";
+  points = Math.max(points, 96);
+}
 
-  if (hasHardTrade && confidence >= 72) {
+if (hasImmediateDox && confidence >= 75) {
+  action = "ban";
+  points = Math.max(points, 94);
+}
+
+if (hasBanEvasion && confidence >= 75) {
+  action = "ban";
+  points = Math.max(points, 93);
+}
+
+
+if (hasAdServer && points >= 55 && action === "ignore") {
+  action = "timeout";
+}
+
+const projectedRisk = Math.max(0, Math.min(100, currentRisk + Math.round(points * 0.38)));
+
+// 1) tényleg súlyos kivételek
+if (hasImmediateScam && confidence >= 75) {
+  action = "ban";
+  points = Math.max(points, 96);
+}
+
+if (hasImmediateDox && confidence >= 80) {
+  action = "ban";
+  points = Math.max(points, 94);
+}
+
+if (hasBanEvasion && confidence >= 80) {
+  action = "ban";
+  points = Math.max(points, 93);
+}
+
+// 2) normál lépcsőzetes rendszer
+if (
+  projectedRisk >= CONFIG.AUTO_BAN_READY_THRESHOLD &&
+  severe &&
+  confidence >= CONFIG.MIN_AI_CONFIDENCE_FOR_BAN &&
+  (profile.totals?.kicks || 0) >= 1
+) {
+  action = "ban";
+} else if (
+  projectedRisk >= CONFIG.BAN_NEAR_THRESHOLD &&
+  severe &&
+  confidence >= CONFIG.MIN_AI_CONFIDENCE_FOR_KICK
+) {
+  action = "kick";
+} else if (
+  projectedRisk >= CONFIG.KICK_NEAR_THRESHOLD &&
+  ["ignore", "warn", "delete"].includes(action)
+) {
+  action = "timeout";
+}
+
+// 3) ne lépjen túl hamar túl erős büntetésre
+if (
+  action === "kick" &&
+  (profile.totals?.timeouts || 0) < 1 &&
+  !hasImmediateScam &&
+  !hasImmediateDox &&
+  !hasBanEvasion
+) {
+  action = "timeout";
+}
+
+if (
+  action === "ban" &&
+  (profile.totals?.kicks || 0) < 1 &&
+  !hasImmediateScam &&
+  !hasImmediateDox &&
+  !hasBanEvasion
+) {
+  action = "kick";
+}
+
+// 4) AI bizonytalanság esetén visszaléptetés
+if (action === "ban" && confidence < CONFIG.MIN_AI_CONFIDENCE_FOR_BAN) {
+  action = "kick";
+}
+
+if (action === "kick" && confidence < CONFIG.MIN_AI_CONFIDENCE_FOR_KICK) {
+  action = "timeout";
+}
+
+if (
+  action === "timeout" &&
+  confidence < CONFIG.MIN_AI_CONFIDENCE_FOR_TIMEOUT &&
+  projectedRisk < CONFIG.KICK_NEAR_THRESHOLD
+) {
+  action = "delete";
+}
+
+// 5) alap erősítések
+if (ruleScan.score >= 25 && action === "ignore") {
+  action = "delete";
+}
+
+if (ruleScan.score >= 55 && ["ignore", "warn", "delete"].includes(action)) {
+  action = "timeout";
+}
+
+// 6) visszaesés-alapú lépcső
+if (
+  recentCounts.serious7d >= 3 &&
+  ["ignore", "warn", "delete"].includes(action)
+) {
+  action = "timeout";
+}
+
+if (
+  recentCounts.serious30d >= 5 &&
+  ["ignore", "warn", "delete", "timeout"].includes(action)
+) {
+  action = "kick";
+}
+
+if (
+  recentCounts.serious30d >= 7 &&
+  (profile.totals?.timeouts || 0) >= 2 &&
+  (profile.totals?.kicks || 0) >= 1 &&
+  severe &&
+  confidence >= CONFIG.MIN_AI_CONFIDENCE_FOR_BAN
+) {
+  action = "ban";
+}
+if (
+  currentRisk >= 100 ||
+  projectedRisk >= CONFIG.AUTO_BAN_READY_THRESHOLD
+) {
+  if ((profile.totals?.kicks || 0) >= 1 && confidence >= CONFIG.MIN_AI_CONFIDENCE_FOR_BAN) {
     action = "ban";
-    points = Math.max(points, 92);
-  } else if (tradeHit && action === "ban") {
-    action = "timeout";
-    points = Math.max(points, 48);
-  }
-
-  if (hasImmediateScam && confidence >= 60) {
-    action = "ban";
-    points = Math.max(points, 96);
-  }
-
-  if (hasImmediateDox && confidence >= 68) {
-    action = "ban";
-    points = Math.max(points, 94);
-  }
-
-  if (hasBanEvasion && confidence >= 65) {
-    action = "ban";
-    points = Math.max(points, 93);
-  }
-
-  if (hasAdServer && points >= 55 && action === "ignore") {
+  } else if ((profile.totals?.timeouts || 0) >= 1) {
+    action = "kick";
+  } else {
     action = "timeout";
   }
-
-  const projectedRisk = Math.max(0, Math.min(100, currentRisk + Math.round(points * 0.55)));
-
-  if (projectedRisk >= CONFIG.AUTO_BAN_READY_THRESHOLD && severe && (hasHardTrade || hasImmediateScam || hasImmediateDox || hasBanEvasion || confidence >= 90)) {
-    action = "ban";
-  } else if (projectedRisk >= CONFIG.BAN_NEAR_THRESHOLD && severe && confidence >= 78) {
-    action = action === "ban" ? "ban" : "kick";
-  } else if (projectedRisk >= CONFIG.KICK_NEAR_THRESHOLD && ["ignore", "warn", "delete"].includes(action)) {
-    action = "timeout";
-  }
-
-  if (action === "ban" && !hasHardTrade && !hasImmediateScam && !hasImmediateDox && !hasBanEvasion) {
-    if (confidence < CONFIG.MIN_AI_CONFIDENCE_FOR_BAN || projectedRisk < CONFIG.BAN_NEAR_THRESHOLD) {
-      action = projectedRisk >= CONFIG.BAN_NEAR_THRESHOLD ? "kick" : "timeout";
-    }
-  }
-
-  if (action === "kick" && confidence < CONFIG.MIN_AI_CONFIDENCE_FOR_KICK && projectedRisk < CONFIG.BAN_NEAR_THRESHOLD) {
-    action = "timeout";
-  }
-
-  if (action === "timeout" && confidence < CONFIG.MIN_AI_CONFIDENCE_FOR_TIMEOUT && projectedRisk < CONFIG.KICK_NEAR_THRESHOLD) {
-    action = "delete";
-  }
-
-  if (ruleScan.score >= 25 && action === "ignore") {
-    action = "delete";
-  }
-
-  if (ruleScan.score >= 55 && ["ignore", "warn", "delete"].includes(action)) {
-    action = "timeout";
-  }
-
-  if (points < 10 && confidence < 40) {
-    action = "ignore";
-  }
+}
 
   return {
     action,

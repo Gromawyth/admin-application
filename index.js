@@ -511,6 +511,24 @@ function buildTicketModal(typeKey) {
 
 async function registerCommands() {
   const commands = [
+
+    new SlashCommandBuilder()
+  .setName("delaiwarn")
+  .setDescription("Lenullázza egy játékos AI kockázatát/statisztikáját.")
+  .addStringOption(option =>
+    option
+      .setName("nev")
+      .setDescription("A játékos neve, pl. gromawyth")
+      .setRequired(false)
+  )
+  .addUserOption(option =>
+    option
+      .setName("felhasznalo")
+      .setDescription("A Discord felhasználó")
+      .setRequired(false)
+  )
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
 new SlashCommandBuilder()
   .setName("discordstats")
   .setDescription("Elküldi az aktuális statisztikát a statisztika csatornába.")
@@ -1053,6 +1071,11 @@ client.on("interactionCreate", async (interaction) => {
         return;
       }
 
+      if (interaction.commandName === "delaiwarn") {
+        await aiModeration.handleSlashCommand(client, interaction);
+        return;
+      }
+      
       if (interaction.commandName === "adminreset") {
         await adminFeedback.resetData(interaction);
         return;

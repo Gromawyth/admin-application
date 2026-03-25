@@ -142,6 +142,145 @@ function loadStore() {
 
 let store = loadStore();
 
+async function findGuildMemberByName(guild, input) {
+  const query = cleanText(input || "", 100).toLowerCase();
+  if (!guild || !query) return null;
+
+  await guild.members.fetch().catch(() => null);
+
+  const exact = guild.members.cache.find((member) => {
+    const username = (member.user?.username || "").toLowerCase();
+    const tag = (member.user?.tag || "").toLowerCase();
+    const displayName = (member.displayName || "").toLowerCase();
+    const globalName = (member.user?.globalName || "").toLowerCase();
+
+    return (
+      username === query ||
+      tag === query ||
+      displayName === query ||
+      globalName === query
+    );
+  });
+
+  if (exact) return exact;
+
+  const partial = guild.members.cache.find((member) => {
+    const username = (member.user?.username || "").toLowerCase();
+    const tag = (member.user?.tag || "").toLowerCase();
+    const displayName = (member.displayName || "").toLowerCase();
+    const globalName = (member.user?.globalName || "").toLowerCase();
+
+    return (
+      username.includes(query) ||
+      tag.includes(query) ||
+      displayName.includes(query) ||
+      globalName.includes(query)
+    );
+  });
+
+  return partial || null;
+}
+
+function resetAiRiskProfile(userId) {
+  const oldProfile = getUserProfile(userId);
+
+  store.users[userId] = {
+    incidents: [],
+    recentMessages: [],
+    lastCaseAt: 0,
+    activeCase: {
+      lastAction: "AI kockázat törölve",
+      lastReason: "Staff kézzel lenullázta a kockázatot.",
+      lastCategory: "Manuális törlés",
+      lastSeverity: "enyhe",
+      lastAnalysis: "A felhasználó AI moderációs előzményei és kockázati profilja kézzel lenullázásra kerültek.",
+      lastPatternSummary: "A korábbi AI incidensek törölve lettek.",
+      lastMessageContent: "",
+      lastUpdatedAt: Date.now(),
+      currentStatus: "Kockázat lenullázva",
+    },
+    totals: {
+      warnings: 0,
+      deletions: 0,
+      timeouts: 0,
+      kicks: 0,
+      bans: 0,
+      unbans: 0,
+    },
+  };
+
+  return oldProfile;
+}
+
+async function handleDelAiWarnCommand(client, interaction) {
+  if (!interaction.guild) {
+    await interaction.reply({
+      content: "Ez a parancs csak szerveren használható.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (!hasStaffPermission(interaction)) {
+    await interaction.reply({
+      content: "Ehhez staff jogosultság kell.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral,
+  });
+
+  const userOption = interaction.options.getUser("felhasznalo");
+  const nameOption = cleanText(interaction.options.getString("nev") || "", 100);
+
+  let member = null;
+
+  if (userOption) {
+    member =
+      interaction.guild.members.cache.get(userOption.id) ||
+      await interaction.guild.members.fetch(userOption.id).catch(() => null);
+  } else if (nameOption) {
+    member = await findGuildMemberByName(interaction.guild, nameOption);
+  }
+
+  if (!member) {
+    await interaction.editReply({
+      content: "❌ Nem találtam ilyen játékost a szerveren. Add meg a pontos nevet vagy használd a felhasználó opciót.",
+    });
+    return;
+  }
+
+  const beforeProfile = getUserProfile(member.id);
+  const beforeRisk = getRiskPercent(beforeProfile);
+
+  resetAiRiskProfile(member.id);
+
+  const profile = getUserProfile(member.id);
+  saveStore();
+
+  await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+
+  await interaction.editReply({
+    content:
+      `✅ Az AI kockázat törölve lett ennél a játékosnál: ${member.user.tag}\n` +
+      `📉 Előző kockázat: **${beforeRisk}%**\n` +
+      `📊 Új kockázat: **${getRiskPercent(profile)}%**`,
+  });
+}
+
+async function handleSlashCommand(client, interaction) {
+  if (!interaction.isChatInputCommand()) return false;
+
+  if (interaction.commandName === "delaiwarn") {
+    await handleDelAiWarnCommand(client, interaction);
+    return true;
+  }
+
+  return false;
+}
 function saveStore() {
   try {
     fs.writeFileSync(CONFIG.DATA_FILE, JSON.stringify(store, null, 2), "utf8");
@@ -1821,4 +1960,5 @@ function registerAiModeration(client) {
 
 module.exports = {
   registerAiModeration,
+  handleSlashCommand,
 };

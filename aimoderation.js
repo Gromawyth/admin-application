@@ -22,11 +22,14 @@ const openai = new OpenAI({
 const CONFIG = {
   SERVER_NAME: "internalGaming",
 
-  MOD_LOG_CHANNEL_ID: "1485721532297908355",
+  // =========================
+  // IDE ÍRD A SAJÁT ID-KAT
+  // =========================
+  MOD_LOG_CHANNEL_ID: "IDE_IRD_A_MOD_LOG_CSATORNA_IDT",
 
   STAFF_ROLE_IDS: [
-    "1403403484090470564",
-    "1322545317995876397"
+    "IDE_IRD_A_STAFF_ROLE_IDT",
+    "IDE_IRD_A_MAGASABB_STAFF_ROLE_IDT",
   ],
 
   EXEMPT_ROLE_IDS: [],
@@ -41,19 +44,21 @@ const CONFIG = {
   AI_MODEL: "gpt-5-mini",
 
   MAX_CONTEXT_MESSAGES: 8,
-  MAX_PROFILE_INCIDENTS: 160,
+  MAX_PROFILE_INCIDENTS: 180,
   MAX_LAST_MESSAGES_PER_USER: 20,
-  MAX_PREVIOUS_PROBLEM_MESSAGES: 4,
+  MAX_PREVIOUS_PROBLEM_MESSAGES: 5,
 
-  WATCH_THRESHOLD: 32,
-  HIGH_RISK_THRESHOLD: 52,
+  // Kockázat %
+  WATCH_THRESHOLD: 30,
+  HIGH_RISK_THRESHOLD: 50,
   KICK_NEAR_THRESHOLD: 72,
   BAN_NEAR_THRESHOLD: 88,
   AUTO_BAN_READY_THRESHOLD: 100,
 
-  MIN_AI_CONFIDENCE_FOR_TIMEOUT: 50,
-  MIN_AI_CONFIDENCE_FOR_KICK: 63,
-  MIN_AI_CONFIDENCE_FOR_BAN: 78,
+  // AI küszöbök - bátrabb
+  MIN_AI_CONFIDENCE_FOR_TIMEOUT: 45,
+  MIN_AI_CONFIDENCE_FOR_KICK: 58,
+  MIN_AI_CONFIDENCE_FOR_BAN: 72,
 
   TIMEOUT_MINUTES_LOW: 15,
   TIMEOUT_MINUTES_MEDIUM: 60,
@@ -71,9 +76,7 @@ const CONFIG = {
   REPEAT_CHAR_THRESHOLD: 10,
 
   MIN_INCIDENT_SCORE_FOR_LOG: 20,
-  USER_ALERT_COOLDOWN_MS: 45 * 60 * 1000,
-  USER_INCIDENT_LOG_COOLDOWN_MS: 45 * 1000,
-  DEDUPE_SIMILAR_WINDOW_MS: 2 * 60 * 1000,
+  USER_CASE_COOLDOWN_MS: 15 * 1000,
 
   DECAY_DAYS_STRONG: 7,
   DECAY_DAYS_MEDIUM: 30,
@@ -106,13 +109,12 @@ const CONFIG = {
 function getDefaultStore() {
   return {
     users: {},
-    lastLogs: {},
-    alertMessages: {},
     bannedUsers: {},
     feedback: {
       reviewOk: {},
       mistake: {},
     },
+    caseMessages: {}, // userId -> messageId
   };
 }
 
@@ -129,10 +131,9 @@ function loadStore() {
     const parsed = JSON.parse(raw);
     return {
       users: parsed.users || {},
-      lastLogs: parsed.lastLogs || {},
-      alertMessages: parsed.alertMessages || {},
       bannedUsers: parsed.bannedUsers || {},
       feedback: parsed.feedback || { reviewOk: {}, mistake: {} },
+      caseMessages: parsed.caseMessages || {},
     };
   } catch (error) {
     console.error("[AIMOD] loadStore hiba:", error);
@@ -247,15 +248,25 @@ function getUserProfile(userId) {
     store.users[userId] = {
       incidents: [],
       recentMessages: [],
-      lastAlertLevel: null,
-      lastAlertAt: 0,
-      lastIncidentLogAt: 0,
+      lastCaseAt: 0,
+      activeCase: {
+        lastAction: "Nincs",
+        lastReason: "",
+        lastCategory: "",
+        lastSeverity: "",
+        lastAnalysis: "",
+        lastPatternSummary: "",
+        lastMessageContent: "",
+        lastUpdatedAt: 0,
+        currentStatus: "Megfigyelés",
+      },
       totals: {
         warnings: 0,
         deletions: 0,
         timeouts: 0,
         kicks: 0,
         bans: 0,
+        unbans: 0,
       },
     };
   }
@@ -318,11 +329,6 @@ function getRiskPercent(profile) {
   return Math.max(0, Math.min(100, Math.round(raw)));
 }
 
-function getProjectedRiskPercent(profile, extraPoints = 0) {
-  const raw = getRawRiskValue(profile) + extraPoints;
-  return Math.max(0, Math.min(100, Math.round(raw)));
-}
-
 function getRecentIncidentCounts(profile) {
   const current = now();
   let last7d = 0;
@@ -346,26 +352,6 @@ function getRecentIncidentCounts(profile) {
   }
 
   return { last7d, last30d, serious7d, serious30d };
-}
-
-function riskStage(risk) {
-  if (risk >= CONFIG.AUTO_BAN_READY_THRESHOLD) return "auto_ban_ready";
-  if (risk >= CONFIG.BAN_NEAR_THRESHOLD) return "ban_near";
-  if (risk >= CONFIG.KICK_NEAR_THRESHOLD) return "kick_near";
-  if (risk >= CONFIG.HIGH_RISK_THRESHOLD) return "high_risk";
-  if (risk >= CONFIG.WATCH_THRESHOLD) return "watch";
-  return "normal";
-}
-
-function stageLabel(stage) {
-  switch (stage) {
-    case "watch": return "Figyelendő";
-    case "high_risk": return "Magas kockázat";
-    case "kick_near": return "Kick közelében";
-    case "ban_near": return "Ban közelében";
-    case "auto_ban_ready": return "Automata ban küszöb";
-    default: return "Normál";
-  }
 }
 
 function actionToLabel(action) {
@@ -400,10 +386,6 @@ function canModerateTarget(member) {
 
 function buildRulesText() {
   return CONFIG.RULES.map((r, i) => `${i + 1}. ${r}`).join("\n");
-}
-
-function similarityKey(category, reason, content) {
-  return `${category || "other"}|${cleanText(reason || "", 120)}|${cleanText(content || "", 140)}`;
 }
 
 const REGEX = {
@@ -443,7 +425,7 @@ function scanRules(message, recentSameUser = []) {
   if (!content.trim()) return { hits, score };
 
   if (REGEX.invite.test(content)) {
-    hits.push({ key: "invite", points: 36, label: "Discord invite / reklám" });
+    hits.push({ key: "ad_server", points: 36, label: "Discord invite / reklám" });
     score += 36;
   }
 
@@ -458,23 +440,23 @@ function scanRules(message, recentSameUser = []) {
   }
 
   if (REGEX.threat.test(content)) {
-    hits.push({ key: "threat", points: 66, label: "Fenyegetés gyanú" });
-    score += 66;
+    hits.push({ key: "threat", points: 68, label: "Fenyegetés gyanú" });
+    score += 68;
   }
 
   if (REGEX.staffAbuse.test(content)) {
-    hits.push({ key: "staff_abuse", points: 55, label: "Staff / szerver obszcén szidalmazása" });
-    score += 55;
+    hits.push({ key: "staff_abuse", points: 58, label: "Staff / szerver obszcén szidalmazása" });
+    score += 58;
   }
 
   if (REGEX.harassment.test(content)) {
-    hits.push({ key: "harassment", points: 38, label: "Célzott sértegetés / zaklatás gyanú" });
-    score += 38;
+    hits.push({ key: "harassment", points: 40, label: "Célzott sértegetés / zaklatás gyanú" });
+    score += 40;
   }
 
   if (REGEX.adServer.test(content)) {
-    hits.push({ key: "ad_server", points: 60, label: "Más szerver reklám / uszítás" });
-    score += 60;
+    hits.push({ key: "ad_server", points: 62, label: "Más szerver reklám / uszítás" });
+    score += 62;
   }
 
   if (REGEX.nsfw.test(content)) {
@@ -488,13 +470,13 @@ function scanRules(message, recentSameUser = []) {
   }
 
   if (REGEX.vpnBanEvade.test(content)) {
-    hits.push({ key: "ban_evasion", points: 82, label: "VPN / ban evasion gyanú" });
-    score += 82;
+    hits.push({ key: "ban_evasion", points: 84, label: "VPN / ban evasion gyanú" });
+    score += 84;
   }
 
   if (REGEX.scam.test(content)) {
-    hits.push({ key: "scam", points: 94, label: "Scam / átverés gyanú" });
-    score += 94;
+    hits.push({ key: "scam", points: 95, label: "Scam / átverés gyanú" });
+    score += 95;
   }
 
   const mentionCount = (content.match(REGEX.mentionAbuse) || []).length;
@@ -610,12 +592,6 @@ async function aiAnalyzeModeration(payload) {
   const prompt = `
 Te egy nagyon szigorú, bátor, emberi stílusú, kontextusérzékeny Discord moderációs AI vagy a(z) ${CONFIG.SERVER_NAME} szerveren.
 
-Nagyon fontos:
-- Ne légy gyáva a szankcionálásban.
-- Ha a tartalom egyértelműen szabályszegő, merj timeoutot, kicket vagy bant javasolni.
-- Különösen vedd komolyan a visszaesést.
-- Ha valakinél már látszik a minta, azt írd le emberien, 3-4 mondatban.
-
 Szabályok:
 ${buildRulesText()}
 
@@ -634,32 +610,28 @@ ${JSON.stringify(contextMessages, null, 2)}
 Aktuális üzenet:
 ${messageContent}
 
-Speciális elvárások:
-- "ooc kereskedés", "érdekel valakit", "valós pénz", "paypal", "revolut", "account", "itemért pénz", "IG vagyonért pénz" -> erősen gyanús vagy tiltott OOC trade.
-- "gyertek", "jöjjön mindenki", "gyertek át", más szervernév említése, "senki ne legyen ezen a szerveren", átcsalogatás -> reklám / uszítás.
-- Staff vagy szerver obszcén minősítése -> komoly szabálysértés.
-- Több kisebb szabálysértést is kezelj komolyabban, ha együtt problémás mintát adnak.
+Nagyon fontos:
+- Légy bátrabb timeout, kick és ban javaslatnál.
+- OOC kereskedelemnél a szándék is elég lehet.
+- Más szerverre csalogatásnál ne légy enyhe.
+- Visszaeső mintánál emeld a súlyosságot.
 - Az "analysis" mező legyen 3-4 teljes magyar mondat.
-- Az "patternSummary" mező röviden foglalja össze, milyen visszaeső minta látszik.
-- A kategória magyarul is legyen visszaadva.
+- Az "patternSummary" mező röviden foglalja össze, milyen ismétlődő viselkedés látszik.
+- A válasz legyen természetes, emberi, de szigorú.
 
-Kizárólag JSON-t adj vissza.
-JSON séma:
+Csak JSON:
 {
   "category": "harassment | threat | staff_abuse | doxxing | nsfw | ad_server | spam | flood | ooc_trade | scam | ban_evasion | politics_sensitive | clean | other",
   "categoryHu": "Zaklatás / sértegetés",
   "severity": "enyhe | közepes | magas | kritikus",
   "confidence": 0,
   "points": 0,
-  "targeted": false,
-  "repeatOffenderWeight": 0,
   "ruleBroken": "rövid magyar szabály-megfogalmazás",
   "reason": "rövid magyar indoklás",
   "analysis": "3-4 mondatos emberi elemzés",
   "patternSummary": "rövid visszaesési összegzés",
   "recommendedAction": "ignore | warn | delete | timeout | kick | ban",
   "timeoutMinutes": 0,
-  "shouldImmediateBan": false,
   "shouldNotifyStaff": true
 }
 `;
@@ -695,15 +667,12 @@ JSON séma:
       severity: "enyhe",
       confidence: 25,
       points: 0,
-      targeted: false,
-      repeatOffenderWeight: 0,
       ruleBroken: "Nem sikerült biztosan azonosítani.",
       reason: "Az AI válasza nem volt biztonságosan feldolgozható.",
-      analysis: "Az automatikus elemzés nem tudott megbízható eredményt adni, ezért a rendszer óvatosabb fallback logikát használt.",
+      analysis: "Az automatikus elemzés nem tudott megbízható eredményt adni, ezért a rendszer szabályalapú fallback logikát használt. A tartalom ettől még problémás lehet, csak az AI válasza nem volt jól feldolgozható. Ilyenkor a rendszer óvatosabb, de a visszaeső mintákat továbbra is figyelembe veszi.",
       patternSummary: "Nem áll rendelkezésre biztos AI összegzés.",
       recommendedAction: "ignore",
       timeoutMinutes: 0,
-      shouldImmediateBan: false,
       shouldNotifyStaff: false,
     };
   }
@@ -723,17 +692,12 @@ Feladat:
 - ne használj felsorolást
 - ha a staff szövege üres, akkor magadtól írj korrekt, rövid szöveget
 - ha a staff szövege meg van adva, fogalmazd át természetesebbre
-- ne írd bele, hogy "Nincs megadva"
-- a válasz csak maga a szöveg legyen
+- soha ne írd azt, hogy "Nincs megadva"
+- a válasz csak maga a kész szöveg legyen
 
 Mód: ${mode}
 Kontextus: ${safeContext || "nincs"}
 Staff szöveg: ${safeStaffText || "nincs"}
-
-Szabályok:
-- "apology" módban kérj bocsánatot a hibás automatikus döntésért.
-- "mistake" módban jelezd röviden, hogy az automatikus döntés hibásnak lett jelölve.
-- "unban" módban közöld, hogy a kitiltás / korlátozás feloldásra került.
 `;
 
   try {
@@ -770,7 +734,7 @@ function summarizeIncidents(profile) {
   return {
     seven: `Összes incidens: ${counts.last7d}\nKomoly incidens: ${counts.serious7d}`,
     thirty: `Összes incidens: ${counts.last30d}\nKomoly incidens: ${counts.serious30d}`,
-    actions: `Timeout: ${totals.timeouts || 0}\nKick: ${totals.kicks || 0}\nBan: ${totals.bans || 0}`,
+    actions: `Timeout: ${totals.timeouts || 0}\nKick: ${totals.kicks || 0}\nBan: ${totals.bans || 0}\nUnban: ${totals.unbans || 0}`,
   };
 }
 
@@ -803,8 +767,6 @@ function finalDecision({ profile, ruleScan, aiResult }) {
     Number(highestRule?.points || 0)
   );
 
-  points += Math.min(Number(aiResult.repeatOffenderWeight || 0), 50);
-
   const recentCounts = getRecentIncidentCounts(profile);
   if (recentCounts.serious7d >= 2) points += 20;
   if (recentCounts.serious30d >= 4) points += 26;
@@ -826,17 +788,17 @@ function finalDecision({ profile, ruleScan, aiResult }) {
     points = Math.max(points, 100);
   }
 
-  if (hasImmediateScam && confidence >= 65) {
+  if (hasImmediateScam && confidence >= 60) {
     action = "ban";
     points = Math.max(points, 96);
   }
 
-  if (hasImmediateDox && confidence >= 72) {
+  if (hasImmediateDox && confidence >= 68) {
     action = "ban";
     points = Math.max(points, 94);
   }
 
-  if (hasBanEvasion && confidence >= 70) {
+  if (hasBanEvasion && confidence >= 65) {
     action = "ban";
     points = Math.max(points, 93);
   }
@@ -912,8 +874,12 @@ function finalDecision({ profile, ruleScan, aiResult }) {
   };
 }
 
-function buildFeedbackButtons(userId, actionType) {
-  if (!["timeout", "kick", "ban", "unban"].includes(actionType)) return [];
+function shouldShowButtons(action) {
+  return ["timeout", "kick", "ban", "unban"].includes(action);
+}
+
+function buildButtons(userId, action) {
+  if (!shouldShowButtons(action)) return [];
 
   return [
     new ActionRowBuilder().addComponents(
@@ -942,61 +908,62 @@ function buildFeedbackButtons(userId, actionType) {
 
 function updateSingleButtonState(rows, targetCustomId, newLabel) {
   return rows.map((row) => {
-    const newRow = ActionRowBuilder.from(row);
-    newRow.components = row.components.map((component) => {
-      if (!component?.data?.custom_id) return component;
+    const newRow = new ActionRowBuilder();
+    for (const component of row.components) {
       const btn = ButtonBuilder.from(component);
       if (component.data.custom_id === targetCustomId) {
         btn.setLabel(newLabel);
         btn.setDisabled(true);
       }
-      return btn;
-    });
+      newRow.addComponents(btn);
+    }
     return newRow;
   });
 }
 
-function buildIncidentEmbed({ message, member, final, profile, crossedStage }) {
+function buildUnifiedEmbed({ member, profile }) {
   const currentRisk = getRiskPercent(profile);
   const summaries = summarizeIncidents(profile);
-  const previousMessages = getPreviousProblemMessages(profile, message?.id);
+  const previousMessages = getPreviousProblemMessages(profile, profile.activeCase?.lastMessageId || null);
   const repeated =
     ((profile.totals?.timeouts || 0) > 0 ||
       (profile.totals?.kicks || 0) > 0 ||
       (profile.incidents?.length || 0) >= 3);
 
+  const active = profile.activeCase || {};
+
   return new EmbedBuilder()
-    .setColor(colorBySeverity(final.severity))
-    .setTitle(`${emojiBySeverity(final.severity)} AI moderációs incidens`)
+    .setColor(colorBySeverity(active.lastSeverity || "enyhe"))
+    .setTitle(`${emojiBySeverity(active.lastSeverity || "enyhe")} AI moderációs ügy`)
     .setDescription(
       [
         `**Felhasználó:** ${safeMentionUser(member?.id)}`,
         `**Név:** ${trimField(member?.user?.tag || member?.user?.username || "Ismeretlen", 256)}`,
-        `**Csatorna:** ${message?.channel ? `${message.channel}` : "-"}`,
-        `**Végrehajtott művelet:** **${actionToLabel(final.action)}**`,
-        `**Súlyosság:** **${final.severity}**`,
-        `**Kategória:** **${trimField(final.categoryHu, 128)}**`,
+        `**Aktuális állapot:** **${trimField(active.currentStatus || "Megfigyelés", 128)}**`,
+        `**Utolsó művelet:** **${trimField(active.lastAction || "Nincs", 128)}**`,
+        `**Súlyosság:** **${trimField(active.lastSeverity || "enyhe", 64)}**`,
+        `**Kategória:** **${trimField(active.lastCategory || "Egyéb szabálysértés", 128)}**`,
       ].join("\n")
     )
     .addFields(
       {
         name: "🧠 AI elemzés",
-        value: trimField(final.analysis, 1024),
+        value: trimField(active.lastAnalysis || "Még nincs részletes elemzés.", 1024),
         inline: false,
       },
       {
         name: "📌 Visszaesési minta",
-        value: trimField(final.patternSummary, 1024),
+        value: trimField(active.lastPatternSummary || "Jelenleg nincs külön kiemelt mintázat.", 1024),
         inline: false,
       },
       {
         name: "📜 Érintett szabály",
-        value: trimField(final.ruleBroken, 1024),
+        value: trimField(active.lastRuleBroken || "Nincs megadva.", 1024),
         inline: false,
       },
       {
         name: "💬 Vizsgált üzenet",
-        value: trimField(message?.content || "(nem szöveges vagy üres üzenet)", 1024),
+        value: trimField(active.lastMessageContent || "Nincs vizsgált üzenet eltárolva.", 1024),
         inline: false,
       },
       {
@@ -1005,18 +972,8 @@ function buildIncidentEmbed({ message, member, final, profile, crossedStage }) {
         inline: false,
       },
       {
-        name: "📉 Jelenlegi kockázat",
-        value: `**${currentRisk}%**`,
-        inline: true,
-      },
-      {
-        name: "📈 Becsült kockázat az incidens után",
-        value: `**${final.projectedRisk}%**`,
-        inline: true,
-      },
-      {
-        name: "🚦 Állapot",
-        value: crossedStage ? `**${stageLabel(crossedStage)}**` : `**${stageLabel(riskStage(currentRisk))}**`,
+        name: "📊 Jelenlegi állapot",
+        value: `Kockázat: **${currentRisk}%**\nMűvelet: **${trimField(active.lastAction || "Nincs", 128)}**`,
         inline: true,
       },
       {
@@ -1043,135 +1000,31 @@ function buildIncidentEmbed({ message, member, final, profile, crossedStage }) {
       }
     )
     .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
-    .setTimestamp(new Date());
+    .setTimestamp(new Date(active.lastUpdatedAt || Date.now()));
 }
 
-function buildThresholdEmbed({ member, profile, stage, reasonText }) {
-  const risk = getRiskPercent(profile);
-  const severity =
-    stage === "ban_near" || stage === "auto_ban_ready" ? "kritikus"
-      : stage === "kick_near" ? "magas"
-      : "közepes";
-
-  const summaries = summarizeIncidents(profile);
-
-  return new EmbedBuilder()
-    .setColor(colorBySeverity(severity))
-    .setTitle(`${emojiBySeverity(severity)} AI kockázati figyelmeztetés`)
-    .setDescription(
-      [
-        `**Felhasználó:** ${safeMentionUser(member?.id)}`,
-        `**Név:** ${trimField(member?.user?.tag || member?.user?.username || "Ismeretlen", 256)}`,
-        `**Állapot:** **${stageLabel(stage)}**`,
-        `**Jelenlegi kockázat:** **${risk}%**`,
-      ].join("\n")
-    )
-    .addFields(
-      {
-        name: "📌 Miért kapta ezt az állapotot?",
-        value: trimField(reasonText || "Az AI szerint a felhasználónál ismétlődő vagy fokozódó szabálysértési minta látható.", 1024),
-        inline: false,
-      },
-      {
-        name: "🗓️ Előzmények - 7 nap",
-        value: trimField(summaries.seven, 1024),
-        inline: true,
-      },
-      {
-        name: "🗓️ Előzmények - 30 nap",
-        value: trimField(summaries.thirty, 1024),
-        inline: true,
-      },
-      {
-        name: "🔨 Korábbi műveletek",
-        value: trimField(summaries.actions, 1024),
-        inline: true,
-      }
-    )
-    .setFooter({ text: `AI Risk Alert • ${CONFIG.SERVER_NAME}` })
-    .setTimestamp(new Date());
-}
-
-function buildActionEmbed({ title, color, userId, actionLabel, reason, moderatorId = null }) {
-  return new EmbedBuilder()
-    .setColor(color)
-    .setTitle(title)
-    .setDescription(
-      [
-        `**Felhasználó:** ${safeMentionUser(userId)}`,
-        `**Művelet:** **${actionLabel}**`,
-        moderatorId ? `**Kezelte:** ${safeMentionUser(moderatorId)}` : `**Kezelte:** AI Moderation`,
-      ].filter(Boolean).join("\n")
-    )
-    .addFields({
-      name: "📝 Indoklás",
-      value: trimField(reason, 1024),
-      inline: false,
-    })
-    .setFooter({ text: `AI Moderation Action • ${CONFIG.SERVER_NAME}` })
-    .setTimestamp(new Date());
-}
-
-function buildReasonModal(customId, title, label, placeholder) {
-  const input = new TextInputBuilder()
-    .setCustomId("reason")
-    .setLabel(label)
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(false)
-    .setMaxLength(700)
-    .setPlaceholder(placeholder || "Opcionális indoklás...");
-
-  return new ModalBuilder()
-    .setCustomId(customId)
-    .setTitle(title)
-    .addComponents(new ActionRowBuilder().addComponents(input));
-}
-
-async function deleteAndResendAlertMessage(client, key, embed) {
+async function resendUnifiedCaseMessage(client, member, profile) {
   const logChannel = getLogChannel(client);
-  if (!logChannel) return null;
+  if (!logChannel || !member) return null;
 
-  const existingId = store.alertMessages[key];
-  if (existingId) {
-    const existing = await logChannel.messages.fetch(existingId).catch(() => null);
-    if (existing) {
-      await existing.delete().catch(() => null);
-    }
-  }
-
-  const msg = await logChannel.send({ embeds: [embed] }).catch(() => null);
-  if (msg) {
-    store.alertMessages[key] = msg.id;
-    saveStore();
-  }
-  return msg;
-}
-
-async function logIncident(client, payload) {
-  const { userId, key, embed, actionType = null } = payload;
-  const logChannel = getLogChannel(client);
-  if (!logChannel) return null;
-
-  const dedupeKey = `${userId}:${key}`;
-  const last = store.lastLogs[dedupeKey];
-
-  if (last && now() - last.at <= CONFIG.DEDUPE_SIMILAR_WINDOW_MS) {
-    const oldMsg = await logChannel.messages.fetch(last.messageId).catch(() => null);
+  const oldMessageId = store.caseMessages[member.id];
+  if (oldMessageId) {
+    const oldMsg = await logChannel.messages.fetch(oldMessageId).catch(() => null);
     if (oldMsg) {
       await oldMsg.delete().catch(() => null);
     }
   }
 
+  const embed = buildUnifiedEmbed({ member, profile });
+  const components = buildButtons(member.id, profile.activeCase?.lastActionRaw || "");
+
   const msg = await logChannel.send({
     embeds: [embed],
-    components: buildFeedbackButtons(userId, actionType),
+    components,
   }).catch(() => null);
 
   if (msg) {
-    store.lastLogs[dedupeKey] = {
-      at: now(),
-      messageId: msg.id,
-    };
+    store.caseMessages[member.id] = msg.id;
     saveStore();
   }
 
@@ -1236,23 +1089,50 @@ async function notifyUserDM(user, embed) {
   }
 }
 
-async function logModerationAction(client, userId, title, color, actionLabel, reason, moderatorId = null, addButtons = true) {
-  const logChannel = getLogChannel(client);
-  if (!logChannel) return null;
-
-  const embed = buildActionEmbed({
-    title,
-    color,
-    userId,
-    actionLabel,
-    reason,
-    moderatorId,
+async function sendApologyDM(user, customReason = "") {
+  const text = await aiWriteUserFacingMessage({
+    mode: "apology",
+    staffText: customReason,
+    context: "Az automatikus moderáció téves döntést hozott, ezért a felhasználó bocsánatkérő üzenetet kap.",
   });
 
-  return logChannel.send({
-    embeds: [embed],
-    components: addButtons ? buildFeedbackButtons(userId, actionLabel === "Feloldás / unban" ? "unban" : actionLabel.toLowerCase().includes("kick") ? "kick" : actionLabel.toLowerCase().includes("ban") ? "ban" : "timeout") : [],
-  }).catch(() => null);
+  const embed = new EmbedBuilder()
+    .setColor(0x1f8b4c)
+    .setTitle("🙏 Elnézést kérünk")
+    .setDescription(text)
+    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
+    .setTimestamp(new Date());
+
+  return notifyUserDM(user, embed);
+}
+
+async function sendUnbanDM(user, customReason = "") {
+  const text = await aiWriteUserFacingMessage({
+    mode: "unban",
+    staffText: customReason,
+    context: "A korábbi korlátozás feloldásra került.",
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0x1f8b4c)
+    .setTitle("🔓 Feloldás")
+    .setDescription(text)
+    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
+    .setTimestamp(new Date());
+
+  return notifyUserDM(user, embed);
+}
+
+async function getTargetUser(client, userId) {
+  return client.users.cache.get(userId) || await client.users.fetch(userId).catch(() => null);
+}
+
+function setActiveCase(profile, patch) {
+  profile.activeCase = {
+    ...profile.activeCase,
+    ...patch,
+    lastUpdatedAt: Date.now(),
+  };
 }
 
 async function applyDecision(client, message, member, final, profile) {
@@ -1273,18 +1153,6 @@ async function applyDecision(client, message, member, final, profile) {
     if (ok) {
       profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
       executedAction = "timeout";
-
-      await logModerationAction(
-        client,
-        member.id,
-        "🔇 Automata timeout végrehajtva",
-        0xff8a00,
-        "Timeout / mute",
-        `${final.reason}\nIdőtartam: ${final.timeoutMinutes} perc`,
-        null,
-        true
-      );
-
       return { executedAction, deleteDone };
     }
   }
@@ -1294,18 +1162,6 @@ async function applyDecision(client, message, member, final, profile) {
     if (ok) {
       profile.totals.kicks = (profile.totals.kicks || 0) + 1;
       executedAction = "kick";
-
-      await logModerationAction(
-        client,
-        member.id,
-        "👢 Automata kick végrehajtva",
-        0xd63c3c,
-        "Kick",
-        final.reason,
-        null,
-        true
-      );
-
       return { executedAction, deleteDone };
     }
   }
@@ -1325,17 +1181,6 @@ async function applyDecision(client, message, member, final, profile) {
         by: "AI Moderation",
       };
       saveStore();
-
-      await logModerationAction(
-        client,
-        member.id,
-        "🛑 Automata ban végrehajtva",
-        0xaa0000,
-        "Ban",
-        final.reason,
-        null,
-        true
-      );
 
       return { executedAction, deleteDone };
     }
@@ -1388,41 +1233,27 @@ async function handleMemberNameCheck(client, member, source = "memberAdd") {
       category: "name_profile",
       severity: "közepes",
       points,
-      confidence: 90,
-      reason: hits.join(", "),
       ruleBroken: "Tiltott, sértő vagy megtévesztő név/profil",
+      content: `${member.user?.username || ""} | ${member.displayName || ""}`,
       createdAt: now(),
       source,
     });
 
+    setActiveCase(profile, {
+      lastAction: "Megfigyelés",
+      lastActionRaw: "ignore",
+      lastSeverity: "közepes",
+      lastCategory: "Tiltott név / profil",
+      lastRuleBroken: "Tiltott, sértő vagy megtévesztő név/profil",
+      lastAnalysis: "A rendszer a felhasználó neve vagy megjelenített neve alapján problémás mintát észlelt. A név megtévesztő, sértő vagy a staff / szerver nevéhez túl hasonló lehet. Ez önmagában is szabályszegésre utalhat, ezért a rendszer eltárolta és staff figyelemre jelölte.",
+      lastPatternSummary: "Névvel vagy profillal kapcsolatos szabálysértési gyanú került rögzítésre.",
+      lastMessageContent: `${member.user?.username || ""} | ${member.displayName || ""}`,
+      currentStatus: "Megfigyelés",
+      lastMessageId: null,
+    });
+
     saveStore();
-
-    const embed = new EmbedBuilder()
-      .setColor(0xff8a00)
-      .setTitle("⚠️ Név / profil gyanú")
-      .setDescription(
-        [
-          `**Felhasználó:** ${safeMentionUser(member.id)}`,
-          `**Username:** ${trimField(member.user?.username || "-", 256)}`,
-          `**Display név:** ${trimField(member.displayName || "-", 256)}`
-        ].join("\n")
-      )
-      .addFields(
-        {
-          name: "📜 Gyanú oka",
-          value: trimField(hits.join(", "), 1024),
-          inline: false,
-        },
-        {
-          name: "📉 Jelenlegi kockázat",
-          value: `${getRiskPercent(profile)}%`,
-          inline: true,
-        }
-      )
-      .setFooter({ text: `AI Name Check • ${CONFIG.SERVER_NAME}` })
-      .setTimestamp(new Date());
-
-    await deleteAndResendAlertMessage(client, `name_${member.id}`, embed);
+    await resendUnifiedCaseMessage(client, member, profile);
   } catch (error) {
     console.error("[AIMOD] handleMemberNameCheck hiba:", error);
   }
@@ -1470,19 +1301,16 @@ async function processMessage(client, message) {
     severity: ruleScan.score >= 60 ? "magas" : ruleScan.score >= 20 ? "közepes" : "enyhe",
     confidence: Math.min(96, Math.max(40, ruleScan.score)),
     points: ruleScan.score,
-    targeted: false,
-    repeatOffenderWeight: 0,
     ruleBroken: pickHighestRuleHit(ruleScan.hits)?.label || "Szabályszegés gyanú",
     reason: pickHighestRuleHit(ruleScan.hits)?.label || "Szabályalapú találat alapján problémás tartalom.",
-    analysis: "Az üzenet és a közelmúltbeli mintázat alapján a rendszer szabálysértésre utaló viselkedést érzékelt, ezért automatikus moderációs lépést javasolt.",
-    patternSummary: "A rendszer szerint a felhasználónál visszaeső vagy emelkedő kockázatú viselkedés figyelhető meg.",
+    analysis: "Az üzenet és a közelmúltbeli mintázat alapján a rendszer szabálysértésre utaló viselkedést érzékelt. A tartalom problémásnak tűnik, ezért a rendszer automatikus moderációs lépést mérlegelt. A visszaeső minták a döntést súlyosabb irányba tolhatják.",
+    patternSummary: "A rendszer szerint emelkedő kockázatú viselkedés figyelhető meg.",
     recommendedAction:
       ruleScan.score >= 85 ? "ban" :
       ruleScan.score >= 55 ? "timeout" :
       ruleScan.score >= 25 ? "delete" :
       "ignore",
     timeoutMinutes: 60,
-    shouldImmediateBan: false,
     shouldNotifyStaff: ruleScan.score >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG,
   };
 
@@ -1500,7 +1328,6 @@ async function processMessage(client, message) {
     console.error("[AIMOD] aiAnalyzeModeration hiba:", error);
   }
 
-  const beforeStage = riskStage(currentRisk);
   const final = finalDecision({ profile, ruleScan, aiResult });
 
   addIncident(member.id, {
@@ -1519,57 +1346,42 @@ async function processMessage(client, message) {
   const actionResult = await applyDecision(client, message, member, final, profile);
   final.action = actionResult.executedAction || final.action;
 
-  const newRisk = getRiskPercent(profile);
-  const afterStage = riskStage(newRisk);
-  const crossedStage = beforeStage !== afterStage ? afterStage : null;
+  let currentStatus = "Megfigyelés";
+  if (final.action === "timeout") currentStatus = "Timeout végrehajtva";
+  else if (final.action === "kick") currentStatus = "Kick végrehajtva";
+  else if (final.action === "ban") currentStatus = "Ban végrehajtva";
+  else if (final.projectedRisk >= CONFIG.BAN_NEAR_THRESHOLD) currentStatus = "Ban közelében";
+  else if (final.projectedRisk >= CONFIG.KICK_NEAR_THRESHOLD) currentStatus = "Kick közelében";
+  else if (final.projectedRisk >= CONFIG.HIGH_RISK_THRESHOLD) currentStatus = "Magas kockázat";
+  else currentStatus = "Megfigyelés";
+
+  setActiveCase(profile, {
+    lastAction: actionToLabel(final.action),
+    lastActionRaw: final.action,
+    lastSeverity: final.severity,
+    lastCategory: final.categoryHu,
+    lastRuleBroken: final.ruleBroken,
+    lastAnalysis: final.analysis,
+    lastPatternSummary: final.patternSummary,
+    lastMessageContent: cleanText(message.content, 1024),
+    currentStatus,
+    lastMessageId: message.id,
+  });
 
   saveStore();
 
-  const shouldIncidentLog =
+  const shouldCaseRefresh =
     final.shouldNotifyStaff &&
     (
       final.points >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG ||
-      ["delete", "timeout", "kick", "ban"].includes(final.action)
+      ["delete", "timeout", "kick", "ban"].includes(final.action) ||
+      now() - (profile.lastCaseAt || 0) >= CONFIG.USER_CASE_COOLDOWN_MS
     );
 
-  if (shouldIncidentLog) {
-    if (!profile.lastIncidentLogAt || now() - profile.lastIncidentLogAt >= CONFIG.USER_INCIDENT_LOG_COOLDOWN_MS) {
-      const embed = buildIncidentEmbed({
-        message,
-        member,
-        final,
-        profile,
-        crossedStage,
-      });
-
-      const key = similarityKey(final.category, final.reason, message.content);
-
-      await logIncident(client, {
-        userId: member.id,
-        key,
-        embed,
-        actionType: final.action,
-      });
-
-      profile.lastIncidentLogAt = now();
-      saveStore();
-    }
-  }
-
-  if (crossedStage && ["watch", "high_risk", "kick_near", "ban_near", "auto_ban_ready"].includes(crossedStage)) {
-    if (!profile.lastAlertAt || now() - profile.lastAlertAt >= CONFIG.USER_ALERT_COOLDOWN_MS || profile.lastAlertLevel !== crossedStage) {
-      const alertEmbed = buildThresholdEmbed({
-        member,
-        profile,
-        stage: crossedStage,
-        reasonText: final.analysis || final.reason,
-      });
-
-      await deleteAndResendAlertMessage(client, member.id, alertEmbed);
-      profile.lastAlertAt = now();
-      profile.lastAlertLevel = crossedStage;
-      saveStore();
-    }
+  if (shouldCaseRefresh) {
+    await resendUnifiedCaseMessage(client, member, profile);
+    profile.lastCaseAt = now();
+    saveStore();
   }
 }
 
@@ -1586,74 +1398,25 @@ function hasStaffPermission(interaction) {
   return Boolean(hasRole || hasAdmin || hasBanPerm);
 }
 
-async function sendMistakeDM(user, customReason = "") {
-  const text = await aiWriteUserFacingMessage({
-    mode: "mistake",
-    staffText: customReason,
-    context: "A korábbi AI moderációs döntés hibásnak lett megjelölve.",
-  });
-
-  const embed = new EmbedBuilder()
-    .setColor(0xd63c3c)
-    .setTitle("❌ Moderációs döntés felülvizsgálva")
-    .setDescription(text)
-    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
-    .setTimestamp(new Date());
-
-  return notifyUserDM(user, embed);
+async function handleButtonLabelSwap(interaction, newLabel) {
+  const rows = interaction.message.components || [];
+  const updated = updateSingleButtonState(rows, interaction.customId, newLabel);
+  await interaction.update({ components: updated });
 }
 
-async function sendApologyDM(user, customReason = "") {
-  const text = await aiWriteUserFacingMessage({
-    mode: "apology",
-    staffText: customReason,
-    context: "Az automatikus moderáció téves döntést hozott, ezért a felhasználó bocsánatkérő üzenetet kap.",
-  });
+function buildReasonModal(customId, title, label, placeholder) {
+  const input = new TextInputBuilder()
+    .setCustomId("reason")
+    .setLabel(label)
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMaxLength(700)
+    .setPlaceholder(placeholder || "Opcionális szöveg...");
 
-  const embed = new EmbedBuilder()
-    .setColor(0x1f8b4c)
-    .setTitle("🙏 Elnézést kérünk")
-    .setDescription(text)
-    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
-    .setTimestamp(new Date());
-
-  return notifyUserDM(user, embed);
-}
-
-async function sendUnbanDM(user, customReason = "") {
-  const text = await aiWriteUserFacingMessage({
-    mode: "unban",
-    staffText: customReason,
-    context: "A korábbi korlátozás feloldásra került.",
-  });
-
-  const embed = new EmbedBuilder()
-    .setColor(0x1f8b4c)
-    .setTitle("🔓 Feloldás")
-    .setDescription(text)
-    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
-    .setTimestamp(new Date());
-
-  return notifyUserDM(user, embed);
-}
-
-async function getTargetUser(client, userId) {
-  return client.users.cache.get(userId) || await client.users.fetch(userId).catch(() => null);
-}
-
-async function applyButtonSentState(interaction, sentLabel) {
-  try {
-    const rows = interaction.message.components || [];
-    const newRows = updateSingleButtonState(rows, interaction.customId, sentLabel);
-    await interaction.update({ components: newRows });
-  } catch (error) {
-    console.error("[AIMOD] applyButtonSentState hiba:", error);
-    if (!interaction.deferred && !interaction.replied) {
-      try {
-        await interaction.deferUpdate();
-      } catch {}
-    }
-  }
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(title)
+    .addComponents(new ActionRowBuilder().addComponents(input));
 }
 
 async function handleInteraction(client, interaction) {
@@ -1675,13 +1438,13 @@ async function handleInteraction(client, interaction) {
       if (action === "reviewok") {
         store.feedback.reviewOk[userId] = (store.feedback.reviewOk[userId] || 0) + 1;
         saveStore();
-        return applyButtonSentState(interaction, "Elküldve - Jól döntött");
+        return handleButtonLabelSwap(interaction, "Elküldve - Jól döntött");
       }
 
       if (action === "mistake") {
         store.feedback.mistake[userId] = (store.feedback.mistake[userId] || 0) + 1;
         saveStore();
-        return applyButtonSentState(interaction, "Elküldve - AI tévedett");
+        return handleButtonLabelSwap(interaction, "Elküldve - AI tévedett");
       }
 
       if (action === "apology") {
@@ -1690,7 +1453,7 @@ async function handleInteraction(client, interaction) {
             `aimod:apology_modal:${userId}`,
             "Bocsánatkérés küldése",
             "Bocsánatkérés szövege",
-            "Opcionális szöveg. Ha üresen hagyod, az AI írja meg."
+            "Ha üresen hagyod, az AI írja meg."
           )
         );
       }
@@ -1701,7 +1464,7 @@ async function handleInteraction(client, interaction) {
             `aimod:unban_modal:${userId}`,
             "Feloldás / Unban",
             "Feloldás indoklása",
-            "Opcionális szöveg. Ha üresen hagyod, az AI írja meg."
+            "Ha üresen hagyod, az AI írja meg."
           )
         );
       }
@@ -1726,24 +1489,29 @@ async function handleInteraction(client, interaction) {
       const action = parts[1];
       const userId = parts[2];
       const reason = cleanText(interaction.fields.getTextInputValue("reason") || "", 700);
+      const profile = getUserProfile(userId);
 
       if (action === "apology_modal") {
         const user = await getTargetUser(client, userId);
         const sent = await sendApologyDM(user, reason);
 
-        await logModerationAction(
-          client,
-          userId,
-          "🙏 Bocsánatkérés elküldve",
-          0x1f8b4c,
-          "Bocsánatkérés",
-          `${reason ? reason : "AI által generált bocsánatkérés került kiküldésre."}\nDM küldve: ${sent ? "igen" : "nem"}`,
-          interaction.user.id,
-          false
-        );
+        setActiveCase(profile, {
+          lastAction: "Bocsánatkérés kiküldve",
+          lastActionRaw: profile.activeCase?.lastActionRaw || "timeout",
+          currentStatus: "Bocsánatkérés elküldve",
+        });
+        saveStore();
+
+        const member =
+          interaction.guild?.members?.cache?.get(userId) ||
+          await interaction.guild?.members.fetch(userId).catch(() => null);
+
+        if (member) {
+          await resendUnifiedCaseMessage(client, member, profile);
+        }
 
         return interaction.reply({
-          content: `✅ Elküdve - Bocsánatkérés küldése${sent ? "" : " (DM nem ment ki)"}`,
+          content: `✅ Elküldve - Bocsánatkérés küldése${sent ? "" : " (DM nem ment ki)"}`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -1768,24 +1536,34 @@ async function handleInteraction(client, interaction) {
         }
 
         delete store.bannedUsers[userId];
-        saveStore();
 
         const user = await getTargetUser(client, userId);
         const sent = await sendUnbanDM(user, reason);
 
-        await logModerationAction(
-          client,
-          userId,
-          "🔓 Feloldás / unban végrehajtva",
-          0x1f8b4c,
-          "Feloldás / unban",
-          `${reason ? reason : "AI által megfogalmazott feloldási üzenet került kiküldésre."}\nDM küldve: ${sent ? "igen" : "nem"}`,
-          interaction.user.id,
-          true
-        );
+        const profile = getUserProfile(userId);
+        profile.totals.unbans = (profile.totals.unbans || 0) + 1;
+
+        setActiveCase(profile, {
+          lastAction: "Feloldás / unban",
+          lastActionRaw: "unban",
+          lastSeverity: profile.activeCase?.lastSeverity || "közepes",
+          lastCategory: profile.activeCase?.lastCategory || "Egyéb szabálysértés",
+          lastRuleBroken: profile.activeCase?.lastRuleBroken || "Korábbi korlátozás feloldva.",
+          lastAnalysis: "A korábbi korlátozás staff döntés alapján feloldásra került. A rendszer az ügyet frissítette, és az aktuális állapotot már feloldottként kezeli. A korábbi szabálysértési előzmények ettől még eltárolva maradnak, de az aktív szankció megszűnt.",
+          lastPatternSummary: "A korábbi szankció feloldásra került.",
+          currentStatus: "Feloldva",
+        });
+
+        saveStore();
+
+        const member =
+          interaction.guild?.members?.cache?.get(userId) ||
+          null;
+
+        await resendUnifiedCaseMessage(client, member || { id: userId, user }, profile);
 
         return interaction.reply({
-          content: `✅ Elküdve - Feloldás / Unban${sent ? "" : " (DM nem ment ki)"}`,
+          content: `✅ Elküldve - Feloldás / Unban${sent ? "" : " (DM nem ment ki)"}`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -1794,9 +1572,7 @@ async function handleInteraction(client, interaction) {
     console.error("[AIMOD] interaction hiba:", error);
 
     try {
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply("Hiba történt a művelet közben.");
-      } else if (interaction.isRepliable()) {
+      if (!interaction.replied && !interaction.deferred && interaction.isRepliable()) {
         await interaction.reply({
           content: "Hiba történt a művelet közben.",
           flags: MessageFlags.Ephemeral,

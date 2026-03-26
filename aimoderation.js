@@ -1900,7 +1900,7 @@ async function processMessage(client, message) {
   else if (final.action === "delete") currentStatus = "Üzenet törölve";
   else if (final.action === "ignore") currentStatus = "Nem történt szankció";
 
-  upsertActiveCase(member.id, {
+  setActiveCase(profile, {
     userId: member.id,
     username: member.user?.tag || member.user?.username || "Ismeretlen",
     displayName: member.displayName || member.user?.username || "Ismeretlen",

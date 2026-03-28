@@ -5,7 +5,7 @@ const {
   PermissionsBitField,
   MessageFlags
 } = require("discord.js");
-
+const { getState } = require("./systempanel");
 /**
  * =========================
  *        BEÁLLÍTÁSOK
@@ -245,6 +245,13 @@ function celCsatornaId(kulcs) {
 }
 
 async function kuldEmbed(client, logTipus, embed) {
+    if (!getState("logs_enabled") && logTipus !== "stat") return;
+  if (logTipus === "stat" && !getState("logs_daily_stats")) return;
+
+  if (logTipus === "uzenet" && !getState("logs_message")) return;
+  if (logTipus === "voice" && !getState("logs_voice")) return;
+  if (logTipus === "ticket" && !getState("logs_ticket")) return;
+  if (logTipus === "mod" && !getState("logs_moderation")) return;
   try {
     const csatornaId = celCsatornaId(logTipus);
     const ch = await csatornaBetolt(client, csatornaId);
@@ -429,11 +436,36 @@ function msEjfelig() {
   return kov.getTime() - most.getTime();
 }
 
-function napiStatIdozites(client) {
-  setTimeout(() => {
-    napiStatKuldes(client).catch(console.error);
+let napiStatTimeout = null;
+let napiStatInterval = null;
 
-    setInterval(() => {
+function napiStatLeallitas() {
+  if (napiStatTimeout) {
+    clearTimeout(napiStatTimeout);
+    napiStatTimeout = null;
+  }
+
+  if (napiStatInterval) {
+    clearInterval(napiStatInterval);
+    napiStatInterval = null;
+  }
+}
+
+function napiStatIdozites(client) {
+  napiStatLeallitas();
+
+  if (!getState("logs_daily_stats")) {
+    console.log("[LOG] A napi statisztika rendszer jelenleg ki van kapcsolva.");
+    return;
+  }
+
+  napiStatTimeout = setTimeout(() => {
+    if (getState("logs_daily_stats")) {
+      napiStatKuldes(client).catch(console.error);
+    }
+
+    napiStatInterval = setInterval(() => {
+      if (!getState("logs_daily_stats")) return;
       napiStatKuldes(client).catch(console.error);
     }, 24 * 60 * 60 * 1000);
   }, msEjfelig());
@@ -446,10 +478,32 @@ function napiStatIdozites(client) {
  */
 module.exports = function registerLogs(client) {
   client.once("ready", () => {
-    napiStatIdozites(client);
-    console.log("[LOG] internalGaming naplózási rendszer elindult.");
-  });
+    if (getState("logs_enabled")) {
+      console.log("[LOG] internalGaming naplózási rendszer elindult.");
+    } else {
+      console.log("[LOG] A log rendszer jelenleg ki van kapcsolva.");
+    }
 
+    napiStatIdozites(client);
+  });
+  client.on("systempanel:sendManualStats", async (interaction) => {
+    try {
+      if (!interaction.guild) return;
+      if (!getState("logs_daily_stats")) return;
+
+      const stat = guildStat(interaction.guild.id);
+      const embed = buildStatEmbed(
+        interaction.guild,
+        stat,
+        "Kézi szerverstatisztika",
+        "A vezérlőpultból kézzel lekért aktuális statisztika."
+      );
+
+      await kuldEmbed(client, "stat", embed);
+    } catch (error) {
+      console.error("[LOG] systempanel:sendManualStats hiba:", error);
+    }
+  });
   /**
    * ÜZENET CACHE
    */
@@ -643,6 +697,13 @@ module.exports = function registerLogs(client) {
   client.on("interactionCreate", async (interaction) => {
     try {
       if (interaction.isChatInputCommand() && interaction.commandName === "discordstats") {
+                if (!getState("logs_daily_stats")) {
+          await interaction.reply({
+            content: "❌ A napi statisztika rendszer jelenleg ki van kapcsolva.",
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
         if (!interaction.guild) {
           await interaction.reply({
             content: "Ez a parancs csak szerveren használható.",

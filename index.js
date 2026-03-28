@@ -72,6 +72,9 @@ const registerLogs = require("./logs");
 const bugReport = require("./bugreport");
 const ideaSystem = require("./otletek");
 const aiModeration = require("./aimoderation");
+const systemPanel = require("./systempanel");
+const { getState } = require("./systempanel");
+systemPanel.registerSystemPanel(client);
 bugReport.registerBugReport(client);
 ideaSystem.registerIdeaSystem(client);
 aiModeration.registerAiModeration(client);
@@ -512,6 +515,37 @@ function buildTicketModal(typeKey) {
 async function registerCommands() {
   const commands = [
 
+new SlashCommandBuilder()
+  .setName("systempanel")
+  .setDescription("Központi staff rendszervezérlőpult")
+  .addSubcommand((sub) =>
+    sub
+      .setName("send")
+      .setDescription("A vezérlőpult kiküldése")
+      .addChannelOption((opt) =>
+        opt
+          .setName("panelcsatorna")
+          .setDescription("A csatorna, ahová a vezérlőpult kerül")
+          .setRequired(true)
+      )
+      .addChannelOption((opt) =>
+        opt
+          .setName("műveletlog")
+          .setDescription("A csatorna, ahová a kapcsolgatási log kerül")
+          .setRequired(true)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("refresh")
+      .setDescription("A vezérlőpult frissítése")
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("status")
+      .setDescription("A fő rendszerek állapotának lekérdezése")
+  ),
+
     new SlashCommandBuilder()
   .setName("delaiwarn")
   .setDescription("Lenullázza egy játékos AI kockázatát/statisztikáját.")
@@ -849,6 +883,21 @@ async function handleSendTicketPanels(interaction) {
 }
 
 async function handleTicketOpenButton(interaction) {
+    if (!getState("tickets_enabled")) {
+    await interaction.reply({
+      content: "❌ A ticket rendszer jelenleg ki van kapcsolva.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (!getState("tickets_allow_open")) {
+    await interaction.reply({
+      content: "❌ Az új ticket nyitás jelenleg fel van függesztve.",
+      ephemeral: true
+    });
+    return;
+  }
   const typeKey = interaction.customId.replace("ticket_open_", "");
   const type = TICKET_TYPES[typeKey];
 
@@ -864,6 +913,21 @@ async function handleTicketOpenButton(interaction) {
 }
 
 async function handleTicketModalSubmit(interaction) {
+    if (!getState("tickets_enabled")) {
+    await interaction.reply({
+      content: "❌ A ticket rendszer jelenleg ki van kapcsolva.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (!getState("tickets_allow_modal")) {
+    await interaction.reply({
+      content: "❌ A ticket modal rendszer jelenleg ki van kapcsolva.",
+      ephemeral: true
+    });
+    return;
+  }
   const typeKey = interaction.customId.replace("ticket_modal_", "");
   const type = TICKET_TYPES[typeKey];
 
@@ -1117,6 +1181,13 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       if (interaction.customId === "ticket_close") {
+        if (!getState("tickets_enabled")) {
+  await interaction.reply({
+    content: "❌ A ticket rendszer jelenleg ki van kapcsolva.",
+    ephemeral: true
+  }).catch(() => {});
+  return;
+}
         await handleTicketClose(interaction);
         return;
       }

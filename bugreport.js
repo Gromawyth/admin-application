@@ -12,7 +12,7 @@ const {
 const fs = require("fs");
 const path = require("path");
 const OpenAI = require("openai");
-
+const { getState } = require("./systempanel");
 // =========================
 // KONFIG
 // =========================
@@ -833,6 +833,12 @@ Csak JSON:
 }
 
 async function aiRefreshBugSummaryFromComments(bug) {
+    if (!getState("bugreport_ai_summary")) {
+    return cleanupShortText(
+      bug.description || bug.aiSummary || bug.title || "Nincs összefoglaló.",
+      420
+    );
+  }
   const fallback = cleanupShortText(
     [
       bug.description || "",
@@ -924,6 +930,9 @@ function getFallbackDecisionReason(status, manualReason) {
 }
 
 async function aiDecisionReason({ bug, status, trainingExamples, manualReason = "" }) {
+    if (!getState("bugreport_auto_status")) {
+    return getFallbackDecisionReason(status, manualReason);
+  }
   const fallback = getFallbackDecisionReason(status, manualReason);
 
   if (!openai) {
@@ -1108,6 +1117,7 @@ async function deleteBugAndThreads(client, bugId) {
 }
 
 function scheduleDeletion(client, bugId, deleteAt) {
+    if (!getState("bugreport_delete_timer")) return;
   if (!deleteAt) return;
 
   if (deleteTimers.has(bugId)) {
@@ -1536,7 +1546,10 @@ async function handleStatusChange(client, interaction, bugId, status, manualReas
   bug.lastForumFeedbackType = status;
 
   if (isFinal) {
-    bug.deleteAt = Date.now() + CONFIG.DELETE_AFTER_MS;
+    bug.deleteAt = getState("bugreport_delete_timer")
+      ? Date.now() + CONFIG.DELETE_AFTER_MS
+      : null;
+
     addTrainingExample(data, bug, status);
   } else {
     bug.deleteAt = null;
@@ -1642,6 +1655,7 @@ function registerBugReport(client) {
   });
 
   client.on("threadCreate", async (thread) => {
+    if (!getState("bugreport_enabled")) return;
     try {
       await processNewForumThread(client, thread);
     } catch (error) {
@@ -1650,6 +1664,7 @@ function registerBugReport(client) {
   });
 
   client.on("messageCreate", async (message) => {
+    if (!getState("bugreport_enabled")) return;
     try {
       await processForumReply(client, message);
     } catch (error) {
@@ -1658,6 +1673,7 @@ function registerBugReport(client) {
   });
 
   client.on("interactionCreate", async (interaction) => {
+        if (!getState("bugreport_enabled")) return;
     try {
       if (interaction.isButton()) {
         if (

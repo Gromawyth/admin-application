@@ -12,7 +12,7 @@ const {
 const fs = require("fs");
 const path = require("path");
 const OpenAI = require("openai");
-
+const { getState } = require("./systempanel");
 // =========================
 // KONFIG
 // =========================
@@ -554,6 +554,9 @@ function getRecentTrainingExamples(data) {
 // AI - TAKARÉKOSAN
 // =========================
 async function aiGroupIdea({ title, description, openIdeas, trainingExamples }) {
+    if (!getState("ideas_ai_grouping")) {
+    return null;
+  }
   if (!openai || !CONFIG.USE_AI_GROUPING) return null;
 
   const candidates = openIdeas.slice(0, CONFIG.MAX_OPEN_IDEAS_FOR_AI).map((idea) => ({
@@ -825,6 +828,9 @@ function getFallbackDecisionReason(status, manualReason) {
 }
 
 async function aiDecisionReason({ idea, status, trainingExamples, manualReason = "" }) {
+    if (!getState("ideas_ai_decisions")) {
+    return getFallbackDecisionReason(status, manualReason);
+  }
   const fallback = getFallbackDecisionReason(status, manualReason);
 
   if (!openai || !CONFIG.USE_AI_DECISIONS) {
@@ -1005,6 +1011,7 @@ async function deleteIdeaAndThreads(client, ideaId) {
 }
 
 function scheduleDeletion(client, ideaId, deleteAt) {
+    if (!getState("ideas_enabled")) return;
   if (!deleteAt) return;
 
   if (deleteTimers.has(ideaId)) {
@@ -1137,7 +1144,7 @@ async function processForumReply(client, message) {
   const data = loadData();
   const idea = findIdeaByThreadId(data, thread.id);
   if (!idea) return;
-
+if (!getState("ideas_comment_insights")) return;
   ensureIdeaDefaults(idea);
 
   if (["Elfogadva", "Elutasítva"].includes(idea.status)) return;
@@ -1479,13 +1486,16 @@ async function handleStatusChange(client, interaction, ideaId, status, manualRea
   idea.lastForumFeedbackAt = Date.now();
   idea.lastForumFeedbackType = status;
 
-  if (isFinal) {
-    idea.deleteAt = Date.now() + CONFIG.DELETE_AFTER_MS;
-    addTrainingExample(data, idea, status);
-  } else {
-    idea.deleteAt = null;
-    clearDeletionSchedule(idea.id);
-  }
+if (isFinal) {
+  idea.deleteAt = getState("ideas_enabled")
+    ? Date.now() + CONFIG.DELETE_AFTER_MS
+    : null;
+
+  addTrainingExample(data, idea, status);
+} else {
+  idea.deleteAt = null;
+  clearDeletionSchedule(idea.id);
+}
 
   try {
     const msg = await updateSummaryMessage(client, idea);
@@ -1581,6 +1591,7 @@ function registerIdeaSystem(client) {
   });
 
   client.on("threadCreate", async (thread) => {
+        if (!getState("ideas_enabled")) return;
     try {
       await processNewForumThread(client, thread);
     } catch (error) {
@@ -1589,6 +1600,7 @@ function registerIdeaSystem(client) {
   });
 
   client.on("messageCreate", async (message) => {
+        if (!getState("ideas_enabled")) return;
     try {
       await processForumReply(client, message);
     } catch (error) {
@@ -1597,6 +1609,7 @@ function registerIdeaSystem(client) {
   });
 
   client.on("interactionCreate", async (interaction) => {
+        if (!getState("ideas_enabled")) return;
     try {
       if (interaction.isButton()) {
         if (!interaction.customId.startsWith("idea:")) return;

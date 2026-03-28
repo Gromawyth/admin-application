@@ -10,7 +10,7 @@ const {
 const fs = require("fs");
 const path = require("path");
 const OpenAI = require("openai");
-
+const { getState } = require("./systempanel");
 // =========================
 // ⚙️ BEÁLLÍTÁSOK
 // =========================
@@ -254,6 +254,9 @@ function buildFallbackSummary(adminId) {
 // =========================
 
 async function generateAiSummary(adminId) {
+  if (!getState("adminfeedback_ai_summary")) {
+    return buildFallbackSummary(adminId);
+  }
   const admin = admins.find(a => a.id === adminId);
   const stats = getSummaryData(adminId);
 
@@ -526,6 +529,7 @@ async function createOrUpdateSummary(guild, adminId) {
 }
 
 async function rebuildAllSummaries(guild) {
+  if (!getState("adminfeedback_enabled")) return;
   for (const admin of admins) {
     await createOrUpdateSummary(guild, admin.id);
   }
@@ -537,6 +541,13 @@ async function rebuildAllSummaries(guild) {
 console.log("📤 /adminpanel elindult");
 console.log("📁 Mentési útvonal:", DATA_FILE);
 async function sendPanel(interaction) {
+  if (!getState("adminfeedback_enabled")) {
+    await interaction.reply({
+      content: "❌ Az admin feedback rendszer jelenleg ki van kapcsolva.",
+      ephemeral: true
+    }).catch(() => {});
+    return;
+  }
   for (const admin of admins) {
     const stats = getData(admin.id);
     const embed = buildAdminPanelEmbed(admin, stats);
@@ -601,8 +612,20 @@ async function sendPanel(interaction) {
 // =========================
 
 async function handleButton(interaction) {
+  if (!getState("adminfeedback_enabled")) {
+    return;
+  }
+
   if (!interaction.isButton()) return;
   if (!interaction.customId.startsWith("feedback_")) return;
+
+  if (!getState("adminfeedback_accept_new_reviews")) {
+    await interaction.reply({
+      content: "❌ Új admin értékelések jelenleg fel vannak függesztve.",
+      ephemeral: true
+    }).catch(() => {});
+    return;
+  }
 
   const [, type, adminId] = interaction.customId.split("_");
   const adminName = getAdminName(adminId);
@@ -658,6 +681,17 @@ async function handleButton(interaction) {
 // =========================
 
 async function handleModal(interaction) {
+    if (!getState("adminfeedback_enabled")) {
+    return;
+  }
+
+  if (!getState("adminfeedback_accept_new_reviews")) {
+    await interaction.reply({
+      content: "❌ Új admin értékelések jelenleg fel vannak függesztve.",
+      ephemeral: true
+    }).catch(() => {});
+    return;
+  }
   if (!interaction.isModalSubmit()) return;
   if (!interaction.customId.startsWith("feedback_modal_")) return;
 
@@ -758,6 +792,7 @@ async function handleModal(interaction) {
 // =========================
 
 async function refreshPublicPanel(guild, adminId) {
+    if (!getState("adminfeedback_enabled")) return;
   const msgId = panelMessages[adminId];
   if (!msgId) return;
 
@@ -791,6 +826,13 @@ async function refreshPublicPanel(guild, adminId) {
 // - AI maradjon, summaryData maradjon
 
 async function resetData(interaction) {
+    if (!getState("adminfeedback_enabled")) {
+    await interaction.reply({
+      content: "❌ Az admin feedback rendszer jelenleg ki van kapcsolva.",
+      ephemeral: true
+    }).catch(() => {});
+    return;
+  }
   await interaction.deferReply({ ephemeral: true });
 
   // 1) Élő, resetelhető értékelések nullázása

@@ -1,5 +1,5 @@
 "use strict";
-
+const { getState } = require("./systempanel");
 const fs = require("fs");
 const path = require("path");
 const {
@@ -29,13 +29,14 @@ const CONFIG = {
     "1322545317995876397",
   ],
 
-  EXEMPT_ROLE_IDS: [1403401954712883200,
-    1322545317995876398,
-    1322545317995876399,
-    1322545317995876401,
-    1322545317995876400,
-    1322545317995876402
-  ],
+EXEMPT_ROLE_IDS: [
+  "1403401954712883200",
+  "1322545317995876398",
+  "1322545317995876399",
+  "1322545317995876401",
+  "1322545317995876400",
+  "1322545317995876402"
+],
   EXEMPT_CHANNEL_IDS: [],
   EXEMPT_CATEGORY_IDS: [],
 
@@ -281,7 +282,15 @@ async function handleDelAiWarnCommand(client, interaction) {
 
 async function handleSlashCommand(client, interaction) {
   if (!interaction.isChatInputCommand()) return false;
-
+  if (!getState("aimod_enabled")) {
+    if (interaction.isRepliable()) {
+      await interaction.reply({
+        content: "❌ Az AI moderáció jelenleg ki van kapcsolva.",
+        flags: MessageFlags.Ephemeral
+      }).catch(() => {});
+    }
+    return true;
+  }
   if (interaction.commandName === "delaiwarn") {
     await handleDelAiWarnCommand(client, interaction);
     return true;
@@ -315,9 +324,15 @@ function safeMentionUser(userId) {
   return userId ? `<@${userId}>` : "Ismeretlen";
 }
 
-function getLogChannel(client) {
-  if (!CONFIG.MOD_LOG_CHANNEL_ID || CONFIG.MOD_LOG_CHANNEL_ID.startsWith("IDE_")) return null;
-  return client.channels.cache.get(CONFIG.MOD_LOG_CHANNEL_ID) || null;
+async function getLogChannel(client) {
+  if (!CONFIG.MOD_LOG_CHANNEL_ID || CONFIG.MOD_LOG_CHANNEL_ID.startsWith("IDE_")) {
+    return null;
+  }
+
+  return (
+    client.channels.cache.get(CONFIG.MOD_LOG_CHANNEL_ID) ||
+    await client.channels.fetch(CONFIG.MOD_LOG_CHANNEL_ID).catch(() => null)
+  );
 }
 
 function getUserProfile(userId) {
@@ -1555,6 +1570,7 @@ async function sendBanDM(user, final, member, message) {
 }
 
 async function sendDeleteNoticeInChannel(message, member, profile, final) {
+    if (!getState("aimod_allow_delete_notice")) return;
   try {
     const noticeText = await aiWriteUserFacingMessage({
       mode: "delete_notice",
@@ -1602,6 +1618,7 @@ async function sendDeleteNoticeInChannel(message, member, profile, final) {
 }
 
 async function sendWarnNoticeInChannel(message, member, profile, final) {
+    if (!getState("aimod_allow_delete_notice")) return;
   try {
     const noticeText = await aiWriteUserFacingMessage({
       mode: "warn_notice",
@@ -1665,7 +1682,21 @@ async function applyDecision(client, message, member, final, profile) {
   let warnNotice = false;
 
   const reason = `[AI Moderation] ${cleanText(final.reason, 300)}`;
+  if (final.action === "ban" && !getState("aimod_allow_ban")) {
+    final.action = getState("aimod_allow_kick")
+      ? "kick"
+      : getState("aimod_allow_timeout")
+        ? "timeout"
+        : "delete";
+  }
 
+  if (final.action === "kick" && !getState("aimod_allow_kick")) {
+    final.action = getState("aimod_allow_timeout") ? "timeout" : "delete";
+  }
+
+  if (final.action === "timeout" && !getState("aimod_allow_timeout")) {
+    final.action = "delete";
+  }
   if (["delete", "timeout", "kick", "ban"].includes(final.action)) {
     deleteDone = await safeDeleteMessage(message);
     if (deleteDone) {
@@ -1746,6 +1777,7 @@ function scanMemberNames(member) {
 }
 
 async function handleMemberNameCheck(client, member, source = "memberAdd") {
+    if (!getState("aimod_enabled")) return;
   try {
     if (!member?.guild) return;
     if (member.user?.bot) return;
@@ -1791,6 +1823,7 @@ async function handleMemberNameCheck(client, member, source = "memberAdd") {
 }
 
 async function processMessage(client, message) {
+    if (!getState("aimod_enabled")) return;
   if (shouldIgnoreMessage(message)) return;
   if (!message.content?.trim()) return;
 

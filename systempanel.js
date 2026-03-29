@@ -239,7 +239,6 @@ function buildMasterEmbed() {
   value: [
     `• "Összes rendszer leállítása" – minden rendszer azonnali lekapcsolása.`,
     `• "Összes rendszer indítása" – minden rendszer újra bekapcsolása.`,
-    `• "Safe mód" – az AI enyhébb, biztonságos működésre vált.`,
     `• "Panel frissítése" – a vezérlőpult újratöltése és hibák javítása.`
   ].join("\n"),
   inline: false
@@ -262,10 +261,6 @@ function buildMasterButtons() {
         .setStyle(ButtonStyle.Success)
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("systempanel:master:safe")
-        .setLabel("Safe mód")
-        .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("systempanel:master:refresh")
         .setLabel("Panel frissítése")
@@ -831,15 +826,6 @@ async function handleMasterAction(interaction, action) {
     }
     saveStore();
     await logControlAction(interaction, "Összes rendszer indítása", "Vegyes", "Minden bekapcsolva");
-  }
-
-  if (action === "safe") {
-    setState("aimod_enabled", true);
-    setState("aimod_safe_mode", true);
-    setState("aimod_allow_ban", false);
-    setState("aimod_allow_kick", false);
-    setState("aimod_allow_timeout", true);
-    await logControlAction(interaction, "Safe mód", "Normál", "Biztonságos");
   }
 
   if (action === "refresh") {

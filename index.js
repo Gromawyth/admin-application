@@ -1106,28 +1106,30 @@ async function handleTicketClose(interaction) {
 
 client.on("interactionCreate", async (interaction) => {
   try {
-    if (
-      interaction.isButton() &&
-      (
-        interaction.customId.startsWith("bug_") ||
-        interaction.customId.startsWith("bug:") ||
-        interaction.customId.startsWith("idea:") ||
-        interaction.customId.startsWith("aimod:")
-      )
-    ) {
-      return;
-    }
+if (
+  interaction.isButton() &&
+  (
+    interaction.customId.startsWith("bug_") ||
+    interaction.customId.startsWith("bug:") ||
+    interaction.customId.startsWith("idea:") ||
+    interaction.customId.startsWith("aimod:") ||
+    interaction.customId.startsWith("systempanel:")
+  )
+) {
+  return;
+}
 
-    if (
-      interaction.isModalSubmit() &&
-      (
-        interaction.customId.startsWith("bugmodal:") ||
-        interaction.customId.startsWith("ideamodal:") ||
-        interaction.customId.startsWith("aimod:")
-      )
-    ) {
-      return;
-    }
+if (
+  interaction.isModalSubmit() &&
+  (
+    interaction.customId.startsWith("bugmodal:") ||
+    interaction.customId.startsWith("ideamodal:") ||
+    interaction.customId.startsWith("aimod:") ||
+    interaction.customId.startsWith("systempanel:")
+  )
+) {
+  return;
+}
 
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "adminpanel") {

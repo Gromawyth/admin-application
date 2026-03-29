@@ -128,20 +128,12 @@ function setPanelChannels(panelChannelId, actionLogChannelId) {
   saveStore();
 }
 
-function yesNo(enabled, yes = "🟢 Bekapcsolva", no = "🔴 Kikapcsolva") {
-  return enabled ? yes : no;
+function yesNo(enabled) {
+  return enabled ? "🟢 Bekapcsolva" : "🔴 Kikapcsolva";
 }
 
-function boolButtonLabel(enabled, offLabel, onLabel) {
-  return enabled ? offLabel : onLabel;
-}
-
-function mapValues(obj, prefix = "") {
-  const lines = [];
-  for (const [key, value] of Object.entries(obj)) {
-    lines.push(`${prefix}${key}: ${value}`);
-  }
-  return lines.join("\n");
+function boolButtonLabel(enabled, whenEnabled, whenDisabled) {
+  return enabled ? whenEnabled : whenDisabled;
 }
 
 function getSystemLabel(key) {
@@ -182,77 +174,62 @@ function getSystemLabel(key) {
   return labels[key] || key;
 }
 
+function shortLines(lines) {
+  return lines.join("\n");
+}
+
+function stateField(lines) {
+  return {
+    name: "📌 Állapot",
+    value: shortLines(lines),
+    inline: false
+  };
+}
+
+function buttonField(lines) {
+  return {
+    name: "🔘 Gombok jelentése",
+    value: shortLines(lines),
+    inline: false
+  };
+}
+
 function getSystemMeta() {
   return {
     master: {
       title: "🧩 internalGaming • Központi vezérlőpult",
-      color: 0x1f8b4c
+      color: 0x1f8b4c,
+      description: "Az összes fontos rendszer állapotát és gyors vezérlését egy helyen kezeled."
     },
-
     aimod: {
       title: "🤖 AI moderáció",
       color: 0x5865F2,
-      description:
-        "Automatikus szabálysértés-figyelés, kockázati profilok és külön szabályozható szankciók kezelése egy helyen.",
-      commandText: [
-        "/delaiwarn — játékos AI kockázat nullázása",
-        "A panel gombjai a legtöbb napi AI kezelést kiváltják."
-      ]
+      description: "AI alapú figyelés, biztonsági mód és külön szabályozható automatikus szankciók."
     },
-
     bugreport: {
       title: "🐞 Bugreport rendszer",
       color: 0xE67E22,
-      description:
-        "Bug fórum figyelés, AI összegzés, státuszkezelés és summary üzenetek vezérlése.",
-      commandText: [
-        "A panel gombjai a fő működést szabályozzák.",
-        "A státuszok továbbra is a bug summary gombokon állíthatók."
-      ]
+      description: "Bug fórum figyelés, AI összegzés, automatikus státusz és időzített törlés kezelése."
     },
-
     ideas: {
       title: "💡 Ötlet rendszer",
       color: 0x2ECC71,
-      description:
-        "Ötlet fórum figyelés, AI összegzés, közösségi kommentfeldolgozás és státuszkezelés.",
-      commandText: [
-        "A panel gombjai a működési módokat állítják.",
-        "A státuszok az ötlet summary gombokon külön kezelhetők."
-      ]
+      description: "Ötletek kezelése, AI csoportosítás, AI döntések és kommentösszegzések vezérlése."
     },
-
     adminfeedback: {
       title: "👮 Admin értékelési rendszer",
       color: 0xF1C40F,
-      description:
-        "Admin értékelések, publikus panelek, naplócsatorna, összesítő és AI leírások kezelése.",
-      commandText: [
-        "A panel kiváltja a reset jellegű staff műveleteket.",
-        "A publikus értékelő panelek külön is frissíthetők."
-      ]
+      description: "Admin értékelések, AI összegzés és új értékelések fogadásának kezelése."
     },
-
     tickets: {
       title: "🎫 Ticket rendszer",
       color: 0x3498DB,
-      description:
-        "Ticket panelek, új ticket nyitás, kérdőablakok és privát ticket működés kezelése.",
-      commandText: [
-        "A panelből leállítható az új ticket nyitás.",
-        "A már megnyitott ticketek ettől még kezelhetők maradhatnak."
-      ]
+      description: "Új ticket nyitás, ticket kérdőablak és a teljes ticket rendszer vezérlése."
     },
-
     logs: {
       title: "📜 Naplózási és statisztikai rendszer",
       color: 0x95A5A6,
-      description:
-        "Szervernaplózás, külön log típusok és a hajnalban futó napi statisztika kezelése.",
-      commandText: [
-        "/discordstats — kézi stat küldés",
-        "A napi stat külön is leállítható a teljes naplózástól."
-      ]
+      description: "Log típusok és napi statisztika külön-külön vezérelhető."
     }
   };
 }
@@ -263,32 +240,22 @@ function buildMasterEmbed() {
   return new EmbedBuilder()
     .setColor(meta.color)
     .setTitle(meta.title)
-    .setDescription(
-      "Ez a központi staff vezérlőpult az összes fontos rendszer állapotát, kezelését és gyors beavatkozási lehetőségét egy helyen jeleníti meg."
-    )
+    .setDescription(meta.description)
     .addFields(
-      {
-        name: "📌 Rövid állapot",
-        value: [
-          `AI moderáció: ${yesNo(getState("aimod_enabled"))}`,
-          `Bugreport rendszer: ${yesNo(getState("bugreport_enabled"))}`,
-          `Ötlet rendszer: ${yesNo(getState("ideas_enabled"))}`,
-          `Admin értékelések: ${yesNo(getState("adminfeedback_enabled"))}`,
-          `Ticket rendszer: ${yesNo(getState("tickets_enabled"))}`,
-          `Naplózási rendszer: ${yesNo(getState("logs_enabled"))}`,
-          `Napi statisztika: ${yesNo(getState("logs_daily_stats"))}`
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "🔘 Gombok leírása",
-        value:
-          "**„Összes rendszer leállítása” gomb:**\nMinden rendszer működését egyszerre felfüggeszti, hogy hiba vagy karbantartás esetén az egész botot gyorsan meg lehessen állítani.\n\n" +
-          "**„Összes rendszer indítása” gomb:**\nAz összes fő rendszert egyszerre visszakapcsolja, így nem kell külön-külön mindent újra engedélyezni.\n\n" +
-          "**„Safe mód” gomb:**\nBiztonságosabb működésre állítja a kritikusabb rendszereket, főleg az AI moderációt. Ilyenkor az erősebb automatikus szankciók visszafoghatók.\n\n" +
-          "**„Panel frissítése” gomb:**\nÚjraépíti a vezérlőpult összes állapotát és gombnevét, így mindig az aktuális állapot látszik.",
-        inline: false
-      }
+      stateField([
+        `AI moderáció: ${yesNo(getState("aimod_enabled"))}`,
+        `Bugreport rendszer: ${yesNo(getState("bugreport_enabled"))}`,
+        `Ötlet rendszer: ${yesNo(getState("ideas_enabled"))}`,
+        `Admin értékelések: ${yesNo(getState("adminfeedback_enabled"))}`,
+        `Ticket rendszer: ${yesNo(getState("tickets_enabled"))}`,
+        `Naplózási rendszer: ${yesNo(getState("logs_enabled"))}`
+      ]),
+      buttonField([
+        `• "Összes rendszer leállítása": mindent kikapcsol.`,
+        `• "Összes rendszer indítása": mindent visszakapcsol.`,
+        `• "Safe mód": AI-t biztonságosabb működésre állítja.`,
+        `• "Panel frissítése": újraépíti az összes panelt.`
+      ])
     )
     .setFooter({ text: "internalGaming • Staff vezérlőpult" })
     .setTimestamp(new Date());
@@ -301,7 +268,6 @@ function buildMasterButtons() {
         .setCustomId("systempanel:master:disableall")
         .setLabel("Összes rendszer leállítása")
         .setStyle(ButtonStyle.Danger),
-
       new ButtonBuilder()
         .setCustomId("systempanel:master:enableall")
         .setLabel("Összes rendszer indítása")
@@ -312,7 +278,6 @@ function buildMasterButtons() {
         .setCustomId("systempanel:master:safe")
         .setLabel("Safe mód")
         .setStyle(ButtonStyle.Secondary),
-
       new ButtonBuilder()
         .setCustomId("systempanel:master:refresh")
         .setLabel("Panel frissítése")
@@ -324,42 +289,37 @@ function buildMasterButtons() {
 function buildAiEmbed() {
   const meta = getSystemMeta().aimod;
 
+  const aiToggle = boolButtonLabel(getState("aimod_enabled"), "AI moderáció kikapcsolása", "AI moderáció bekapcsolása");
+  const safeToggle = boolButtonLabel(getState("aimod_safe_mode"), "Teljes mód visszaállítása", "Safe mód bekapcsolása");
+  const banToggle = boolButtonLabel(getState("aimod_allow_ban"), "Automatikus kitiltás kikapcsolása", "Automatikus kitiltás bekapcsolása");
+  const kickToggle = boolButtonLabel(getState("aimod_allow_kick"), "Automatikus kirúgás kikapcsolása", "Automatikus kirúgás bekapcsolása");
+  const timeoutToggle = boolButtonLabel(getState("aimod_allow_timeout"), "Automatikus némítás kikapcsolása", "Automatikus némítás bekapcsolása");
+  const noticeToggle = boolButtonLabel(getState("aimod_allow_delete_notice"), "Törlési értesítés kikapcsolása", "Törlési értesítés bekapcsolása");
+
   return new EmbedBuilder()
     .setColor(meta.color)
     .setTitle(meta.title)
     .setDescription(meta.description)
     .addFields(
-      {
-        name: "📌 Állapot",
-        value: [
-          `Rendszer: ${yesNo(getState("aimod_enabled"))}`,
-          `Biztonságos mód: ${yesNo(getState("aimod_safe_mode"))}`,
-          `Automatikus kitiltás: ${yesNo(getState("aimod_allow_ban"))}`,
-          `Automatikus kirúgás: ${yesNo(getState("aimod_allow_kick"))}`,
-          `Automatikus némítás / időkorlát: ${yesNo(getState("aimod_allow_timeout"))}`,
-          `Törlési értesítés: ${yesNo(getState("aimod_allow_delete_notice"))}`
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "⌨️ Parancsok",
-        value: meta.commandText.map((x) => `• ${x}`).join("\n"),
-        inline: false
-      },
-      {
-        name: "🔘 Gombok leírása",
-        value:
-          "**„AI kikapcsolása” / „AI bekapcsolása” gomb:**\nA teljes AI moderációs rendszert kapcsolja ki vagy vissza. Kikapcsolt állapotban az AI nem vizsgál és nem szankcionál.\n\n" +
-          "**„Teljes mód visszaállítása” / „Safe mód” gomb:**\nBiztonságos működési módra állítja vissza az AI rendszert, vagy visszateszi teljes módba. Tesztnél és hiba esetén különösen hasznos.\n\n" +
-          "**„Ban felfüggesztése” / „Ban visszakapcsolása” gomb:**\nCsak az automatikus kitiltást szabályozza, a többi AI működés ettől még megmaradhat.\n\n" +
-          "**„Kick felfüggesztése” / „Kick visszakapcsolása” gomb:**\nCsak az automatikus kirúgást állítja le vagy engedi vissza.\n\n" +
-          "**„Mute/Timeout felfüggesztése” / „Mute/Timeout visszakapcsolása” gomb:**\nAz automatikus némítási vagy időkorlátos büntetést vezérli.\n\n" +
-          "**„Törlési értesítés kikapcsolása” / „Törlési értesítés bekapcsolása” gomb:**\nA chatben megjelenő AI értesítéseket szabályozza. Kikapcsolva a rendszer dolgozhat tovább, csak a csatorna-visszajelzés marad el.\n\n" +
-          "**„AI panel frissítése” gomb:**\nÚjraépíti az AI moderációs panel állapotát és gombfeliratait.",
-        inline: false
-      }
+      stateField([
+        `AI moderáció: ${yesNo(getState("aimod_enabled"))}`,
+        `Biztonságos mód: ${yesNo(getState("aimod_safe_mode"))}`,
+        `Automatikus kitiltás: ${yesNo(getState("aimod_allow_ban"))}`,
+        `Automatikus kirúgás: ${yesNo(getState("aimod_allow_kick"))}`,
+        `Automatikus némítás: ${yesNo(getState("aimod_allow_timeout"))}`,
+        `Törlési értesítés: ${yesNo(getState("aimod_allow_delete_notice"))}`
+      ]),
+      buttonField([
+        `• "${aiToggle}": AI főkapcsoló.`,
+        `• "${safeToggle}": biztonságos mód váltása.`,
+        `• "${banToggle}": auto ban ki/be.`,
+        `• "${kickToggle}": auto kick ki/be.`,
+        `• "${timeoutToggle}": auto timeout ki/be.`,
+        `• "${noticeToggle}": értesítés ki/be.`,
+        `• "AI panel frissítése": panel újraépítése.`
+      ])
     )
-    .setFooter({ text: "internalGaming • AI moderáció kezelése" })
+    .setFooter({ text: "internalGaming • AI moderáció" })
     .setTimestamp(new Date());
 }
 
@@ -368,31 +328,28 @@ function buildAiButtons() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:aimod_enabled")
-        .setLabel(boolButtonLabel(getState("aimod_enabled"), "AI kikapcsolása", "AI bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("aimod_enabled"), "AI moderáció kikapcsolása", "AI moderáció bekapcsolása"))
         .setStyle(getState("aimod_enabled") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:aimod_safe_mode")
-        .setLabel(boolButtonLabel(getState("aimod_safe_mode"), "Teljes mód visszaállítása", "Safe mód"))
+        .setLabel(boolButtonLabel(getState("aimod_safe_mode"), "Teljes mód visszaállítása", "Safe mód bekapcsolása"))
         .setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:aimod_allow_ban")
-        .setLabel(boolButtonLabel(getState("aimod_allow_ban"), "Ban felfüggesztése", "Ban visszakapcsolása"))
+        .setLabel(boolButtonLabel(getState("aimod_allow_ban"), "Automatikus kitiltás kikapcsolása", "Automatikus kitiltás bekapcsolása"))
         .setStyle(getState("aimod_allow_ban") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:aimod_allow_kick")
-        .setLabel(boolButtonLabel(getState("aimod_allow_kick"), "Kick felfüggesztése", "Kick visszakapcsolása"))
+        .setLabel(boolButtonLabel(getState("aimod_allow_kick"), "Automatikus kirúgás kikapcsolása", "Automatikus kirúgás bekapcsolása"))
         .setStyle(getState("aimod_allow_kick") ? ButtonStyle.Danger : ButtonStyle.Success)
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:aimod_allow_timeout")
-        .setLabel(boolButtonLabel(getState("aimod_allow_timeout"), "Mute/Timeout felfüggesztése", "Mute/Timeout visszakapcsolása"))
+        .setLabel(boolButtonLabel(getState("aimod_allow_timeout"), "Automatikus némítás kikapcsolása", "Automatikus némítás bekapcsolása"))
         .setStyle(getState("aimod_allow_timeout") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:aimod_allow_delete_notice")
         .setLabel(boolButtonLabel(getState("aimod_allow_delete_notice"), "Törlési értesítés kikapcsolása", "Törlési értesítés bekapcsolása"))
@@ -410,38 +367,31 @@ function buildAiButtons() {
 function buildBugEmbed() {
   const meta = getSystemMeta().bugreport;
 
+  const mainToggle = boolButtonLabel(getState("bugreport_enabled"), "Bugreport rendszer kikapcsolása", "Bugreport rendszer bekapcsolása");
+  const aiToggle = boolButtonLabel(getState("bugreport_ai_summary"), "AI összegzés kikapcsolása", "AI összegzés bekapcsolása");
+  const statusToggle = boolButtonLabel(getState("bugreport_auto_status"), "Automatikus státusz kikapcsolása", "Automatikus státusz bekapcsolása");
+  const timerToggle = boolButtonLabel(getState("bugreport_delete_timer"), "Törlési időzítő kikapcsolása", "Törlési időzítő bekapcsolása");
+
   return new EmbedBuilder()
     .setColor(meta.color)
     .setTitle(meta.title)
     .setDescription(meta.description)
     .addFields(
-      {
-        name: "📌 Állapot",
-        value: [
-          `Rendszer: ${yesNo(getState("bugreport_enabled"))}`,
-          `AI összegzés: ${yesNo(getState("bugreport_ai_summary"))}`,
-          `Automatikus státusz: ${yesNo(getState("bugreport_auto_status"))}`,
-          `Törlési időzítő: ${yesNo(getState("bugreport_delete_timer"))}`
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "⌨️ Parancsok",
-        value: meta.commandText.map((x) => `• ${x}`).join("\n"),
-        inline: false
-      },
-      {
-        name: "🔘 Gombok leírása",
-        value:
-          "**„Bugreport kikapcsolása” / „Bugreport bekapcsolása” gomb:**\nA teljes bugreport rendszert állítja le vagy indítja újra. Ez a fórumfigyelésre és az összesítő frissítésekre is kihat.\n\n" +
-          "**„AI összegzés kikapcsolása” / „AI összegzés bekapcsolása” gomb:**\nAz AI által készített bugösszefoglalókat szabályozza.\n\n" +
-          "**„Auto státusz kikapcsolása” / „Auto státusz bekapcsolása” gomb:**\nAz automatikus vagy javasolt státuszlogikát engedélyezi vagy tiltja.\n\n" +
-          "**„Törlési időzítő kikapcsolása” / „Törlési időzítő bekapcsolása” gomb:**\nA lezárt vagy elutasított bug threadek késleltetett eltakarítását kezeli.\n\n" +
-          "**„Bug panel frissítése” gomb:**\nÚjraépíti a bugreport panel állapotát és gombfeliratait.",
-        inline: false
-      }
+      stateField([
+        `Bugreport rendszer: ${yesNo(getState("bugreport_enabled"))}`,
+        `AI összegzés: ${yesNo(getState("bugreport_ai_summary"))}`,
+        `Automatikus státusz: ${yesNo(getState("bugreport_auto_status"))}`,
+        `Törlési időzítő: ${yesNo(getState("bugreport_delete_timer"))}`
+      ]),
+      buttonField([
+        `• "${mainToggle}": főkapcsoló.`,
+        `• "${aiToggle}": AI összegzés ki/be.`,
+        `• "${statusToggle}": auto státusz ki/be.`,
+        `• "${timerToggle}": időzítő ki/be.`,
+        `• "Bugreport panel frissítése": panel újraépítése.`
+      ])
     )
-    .setFooter({ text: "internalGaming • Bugreport kezelése" })
+    .setFooter({ text: "internalGaming • Bugreport rendszer" })
     .setTimestamp(new Date());
 }
 
@@ -450,9 +400,8 @@ function buildBugButtons() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:bugreport_enabled")
-        .setLabel(boolButtonLabel(getState("bugreport_enabled"), "Bugreport kikapcsolása", "Bugreport bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("bugreport_enabled"), "Bugreport rendszer kikapcsolása", "Bugreport rendszer bekapcsolása"))
         .setStyle(getState("bugreport_enabled") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:bugreport_ai_summary")
         .setLabel(boolButtonLabel(getState("bugreport_ai_summary"), "AI összegzés kikapcsolása", "AI összegzés bekapcsolása"))
@@ -461,9 +410,8 @@ function buildBugButtons() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:bugreport_auto_status")
-        .setLabel(boolButtonLabel(getState("bugreport_auto_status"), "Auto státusz kikapcsolása", "Auto státusz bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("bugreport_auto_status"), "Automatikus státusz kikapcsolása", "Automatikus státusz bekapcsolása"))
         .setStyle(getState("bugreport_auto_status") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:bugreport_delete_timer")
         .setLabel(boolButtonLabel(getState("bugreport_delete_timer"), "Törlési időzítő kikapcsolása", "Törlési időzítő bekapcsolása"))
@@ -472,7 +420,7 @@ function buildBugButtons() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:refresh:bugreport")
-        .setLabel("Bug panel frissítése")
+        .setLabel("Bugreport panel frissítése")
         .setStyle(ButtonStyle.Primary)
     )
   ];
@@ -481,38 +429,31 @@ function buildBugButtons() {
 function buildIdeasEmbed() {
   const meta = getSystemMeta().ideas;
 
+  const mainToggle = boolButtonLabel(getState("ideas_enabled"), "Ötlet rendszer kikapcsolása", "Ötlet rendszer bekapcsolása");
+  const groupingToggle = boolButtonLabel(getState("ideas_ai_grouping"), "AI csoportosítás kikapcsolása", "AI csoportosítás bekapcsolása");
+  const decisionToggle = boolButtonLabel(getState("ideas_ai_decisions"), "AI döntések kikapcsolása", "AI döntések bekapcsolása");
+  const commentToggle = boolButtonLabel(getState("ideas_comment_insights"), "Komment összegzések kikapcsolása", "Komment összegzések bekapcsolása");
+
   return new EmbedBuilder()
     .setColor(meta.color)
     .setTitle(meta.title)
     .setDescription(meta.description)
     .addFields(
-      {
-        name: "📌 Állapot",
-        value: [
-          `Rendszer: ${yesNo(getState("ideas_enabled"))}`,
-          `AI csoportosítás: ${yesNo(getState("ideas_ai_grouping"))}`,
-          `AI döntések: ${yesNo(getState("ideas_ai_decisions"))}`,
-          `Komment összegzések: ${yesNo(getState("ideas_comment_insights"))}`
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "⌨️ Parancsok",
-        value: meta.commandText.map((x) => `• ${x}`).join("\n"),
-        inline: false
-      },
-      {
-        name: "🔘 Gombok leírása",
-        value:
-          "**„Ötlet rendszer kikapcsolása” / „Ötlet rendszer bekapcsolása” gomb:**\nAz egész ötlet rendszert állítja le vagy kapcsolja vissza.\n\n" +
-          "**„AI csoportosítás kikapcsolása” / „AI csoportosítás bekapcsolása” gomb:**\nA hasonló ötletek AI-alapú összekapcsolását kezeli.\n\n" +
-          "**„AI döntések kikapcsolása” / „AI döntések bekapcsolása” gomb:**\nAz AI döntési vagy döntéstámogató logikát szabályozza.\n\n" +
-          "**„Komment összegzések kikapcsolása” / „Komment összegzések bekapcsolása” gomb:**\nA kommentekből épülő közösségi összegzéseket és rövid kivonatokat kezeli.\n\n" +
-          "**„Ötlet panel frissítése” gomb:**\nÚjraépíti az ötlet rendszer paneljét és az aktuális állapotok szerint frissíti a gombokat.",
-        inline: false
-      }
+      stateField([
+        `Ötlet rendszer: ${yesNo(getState("ideas_enabled"))}`,
+        `AI csoportosítás: ${yesNo(getState("ideas_ai_grouping"))}`,
+        `AI döntések: ${yesNo(getState("ideas_ai_decisions"))}`,
+        `Komment összegzések: ${yesNo(getState("ideas_comment_insights"))}`
+      ]),
+      buttonField([
+        `• "${mainToggle}": főkapcsoló.`,
+        `• "${groupingToggle}": AI csoportosítás ki/be.`,
+        `• "${decisionToggle}": AI döntések ki/be.`,
+        `• "${commentToggle}": komment összegzések ki/be.`,
+        `• "Ötlet panel frissítése": panel újraépítése.`
+      ])
     )
-    .setFooter({ text: "internalGaming • Ötlet rendszer kezelése" })
+    .setFooter({ text: "internalGaming • Ötlet rendszer" })
     .setTimestamp(new Date());
 }
 
@@ -523,7 +464,6 @@ function buildIdeasButtons() {
         .setCustomId("systempanel:toggle:ideas_enabled")
         .setLabel(boolButtonLabel(getState("ideas_enabled"), "Ötlet rendszer kikapcsolása", "Ötlet rendszer bekapcsolása"))
         .setStyle(getState("ideas_enabled") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:ideas_ai_grouping")
         .setLabel(boolButtonLabel(getState("ideas_ai_grouping"), "AI csoportosítás kikapcsolása", "AI csoportosítás bekapcsolása"))
@@ -534,7 +474,6 @@ function buildIdeasButtons() {
         .setCustomId("systempanel:toggle:ideas_ai_decisions")
         .setLabel(boolButtonLabel(getState("ideas_ai_decisions"), "AI döntések kikapcsolása", "AI döntések bekapcsolása"))
         .setStyle(getState("ideas_ai_decisions") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:ideas_comment_insights")
         .setLabel(boolButtonLabel(getState("ideas_comment_insights"), "Komment összegzések kikapcsolása", "Komment összegzések bekapcsolása"))
@@ -552,37 +491,29 @@ function buildIdeasButtons() {
 function buildAdminFeedbackEmbed() {
   const meta = getSystemMeta().adminfeedback;
 
+  const mainToggle = boolButtonLabel(getState("adminfeedback_enabled"), "Admin értékelések kikapcsolása", "Admin értékelések bekapcsolása");
+  const aiToggle = boolButtonLabel(getState("adminfeedback_ai_summary"), "AI összegzés kikapcsolása", "AI összegzés bekapcsolása");
+  const acceptToggle = boolButtonLabel(getState("adminfeedback_accept_new_reviews"), "Új értékelések fogadásának lezárása", "Új értékelések fogadásának megnyitása");
+
   return new EmbedBuilder()
     .setColor(meta.color)
     .setTitle(meta.title)
     .setDescription(meta.description)
     .addFields(
-      {
-        name: "📌 Állapot",
-        value: [
-          `Rendszer: ${yesNo(getState("adminfeedback_enabled"))}`,
-          `AI összegzés: ${yesNo(getState("adminfeedback_ai_summary"))}`,
-          `Új értékelések fogadása: ${yesNo(getState("adminfeedback_accept_new_reviews"))}`
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "⌨️ Parancsok",
-        value: meta.commandText.map((x) => `• ${x}`).join("\n"),
-        inline: false
-      },
-      {
-        name: "🔘 Gombok leírása",
-        value:
-          "**„Admin értékelések kikapcsolása” / „Admin értékelések bekapcsolása” gomb:**\nAz egész admin értékelési rendszer működését szabályozza.\n\n" +
-          "**„AI összegzés kikapcsolása” / „AI összegzés bekapcsolása” gomb:**\nAz adminokról készített AI leírásokat és összegző szövegeket kezeli.\n\n" +
-          "**„Értékelések lezárása” / „Értékelések megnyitása” gomb:**\nIdeiglenesen leállítja vagy újra engedi az új értékelések fogadását.\n\n" +
-          "**„Admin értékelések nullázása” gomb:**\nLenullázza az élő admin értékelési adatokat és kitisztítja a logcsatornát, miközben az összesítő és az AI adatok megmaradnak.\n\n" +
-          "**„Admin értékelési panel frissítése” gomb:**\nÚjraépíti az admin értékelési panel állapotát és gombjait.",
-        inline: false
-      }
+      stateField([
+        `Admin értékelési rendszer: ${yesNo(getState("adminfeedback_enabled"))}`,
+        `AI összegzés: ${yesNo(getState("adminfeedback_ai_summary"))}`,
+        `Új értékelések fogadása: ${yesNo(getState("adminfeedback_accept_new_reviews"))}`
+      ]),
+      buttonField([
+        `• "${mainToggle}": főkapcsoló.`,
+        `• "${aiToggle}": AI összegzés ki/be.`,
+        `• "${acceptToggle}": új értékelések ki/be.`,
+        `• "Admin értékelések nullázása": élő adatok nullázása.`,
+        `• "Admin értékelési panel frissítése": panel újraépítése.`
+      ])
     )
-    .setFooter({ text: "internalGaming • Admin értékelési rendszer kezelése" })
+    .setFooter({ text: "internalGaming • Admin értékelési rendszer" })
     .setTimestamp(new Date());
 }
 
@@ -593,7 +524,6 @@ function buildAdminFeedbackButtons() {
         .setCustomId("systempanel:toggle:adminfeedback_enabled")
         .setLabel(boolButtonLabel(getState("adminfeedback_enabled"), "Admin értékelések kikapcsolása", "Admin értékelések bekapcsolása"))
         .setStyle(getState("adminfeedback_enabled") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:adminfeedback_ai_summary")
         .setLabel(boolButtonLabel(getState("adminfeedback_ai_summary"), "AI összegzés kikapcsolása", "AI összegzés bekapcsolása"))
@@ -602,9 +532,8 @@ function buildAdminFeedbackButtons() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:adminfeedback_accept_new_reviews")
-        .setLabel(boolButtonLabel(getState("adminfeedback_accept_new_reviews"), "Értékelések lezárása", "Értékelések megnyitása"))
+        .setLabel(boolButtonLabel(getState("adminfeedback_accept_new_reviews"), "Új értékelések fogadásának lezárása", "Új értékelések fogadásának megnyitása"))
         .setStyle(getState("adminfeedback_accept_new_reviews") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:action:adminfeedback_reset")
         .setLabel("Admin értékelések nullázása")
@@ -622,36 +551,28 @@ function buildAdminFeedbackButtons() {
 function buildTicketEmbed() {
   const meta = getSystemMeta().tickets;
 
+  const mainToggle = boolButtonLabel(getState("tickets_enabled"), "Ticket rendszer kikapcsolása", "Ticket rendszer bekapcsolása");
+  const openToggle = boolButtonLabel(getState("tickets_allow_open"), "Új ticket nyitás kikapcsolása", "Új ticket nyitás bekapcsolása");
+  const modalToggle = boolButtonLabel(getState("tickets_allow_modal"), "Ticket kérdőablak kikapcsolása", "Ticket kérdőablak bekapcsolása");
+
   return new EmbedBuilder()
     .setColor(meta.color)
     .setTitle(meta.title)
     .setDescription(meta.description)
     .addFields(
-      {
-        name: "📌 Állapot",
-        value: [
-          `Rendszer: ${yesNo(getState("tickets_enabled"))}`,
-          `Új ticket nyitás: ${yesNo(getState("tickets_allow_open"))}`,
-          `Ticket kérdőablak: ${yesNo(getState("tickets_allow_modal"))}`
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "⌨️ Parancsok",
-        value: meta.commandText.map((x) => `• ${x}`).join("\n"),
-        inline: false
-      },
-      {
-        name: "🔘 Gombok leírása",
-        value:
-          "**„Ticket rendszer kikapcsolása” / „Ticket rendszer bekapcsolása” gomb:**\nAz egész ticket rendszer működését vezérli.\n\n" +
-          "**„Új ticket nyitás tiltása” / „Új ticket nyitás engedése” gomb:**\nCsak az új ticketek létrehozását tiltja vagy engedi.\n\n" +
-          "**„Ticket kérdőablak kikapcsolása” / „Ticket kérdőablak bekapcsolása” gomb:**\nA ticket megnyitásakor felugró kérdőablakot kezeli.\n\n" +
-          "**„Ticket panel frissítése” gomb:**\nÚjraépíti a ticket rendszer paneljét, hogy minden állapot és gombszöveg naprakész legyen.",
-        inline: false
-      }
+      stateField([
+        `Ticket rendszer: ${yesNo(getState("tickets_enabled"))}`,
+        `Új ticket nyitás: ${yesNo(getState("tickets_allow_open"))}`,
+        `Ticket kérdőablak: ${yesNo(getState("tickets_allow_modal"))}`
+      ]),
+      buttonField([
+        `• "${mainToggle}": főkapcsoló.`,
+        `• "${openToggle}": új ticket nyitás ki/be.`,
+        `• "${modalToggle}": kérdőablak ki/be.`,
+        `• "Ticket panel frissítése": panel újraépítése.`
+      ])
     )
-    .setFooter({ text: "internalGaming • Ticket rendszer kezelése" })
+    .setFooter({ text: "internalGaming • Ticket rendszer" })
     .setTimestamp(new Date());
 }
 
@@ -662,10 +583,9 @@ function buildTicketButtons() {
         .setCustomId("systempanel:toggle:tickets_enabled")
         .setLabel(boolButtonLabel(getState("tickets_enabled"), "Ticket rendszer kikapcsolása", "Ticket rendszer bekapcsolása"))
         .setStyle(getState("tickets_enabled") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:tickets_allow_open")
-        .setLabel(boolButtonLabel(getState("tickets_allow_open"), "Új ticket nyitás tiltása", "Új ticket nyitás engedése"))
+        .setLabel(boolButtonLabel(getState("tickets_allow_open"), "Új ticket nyitás kikapcsolása", "Új ticket nyitás bekapcsolása"))
         .setStyle(getState("tickets_allow_open") ? ButtonStyle.Danger : ButtonStyle.Success)
     ),
     new ActionRowBuilder().addComponents(
@@ -673,7 +593,6 @@ function buildTicketButtons() {
         .setCustomId("systempanel:toggle:tickets_allow_modal")
         .setLabel(boolButtonLabel(getState("tickets_allow_modal"), "Ticket kérdőablak kikapcsolása", "Ticket kérdőablak bekapcsolása"))
         .setStyle(getState("tickets_allow_modal") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:refresh:tickets")
         .setLabel("Ticket panel frissítése")
@@ -685,43 +604,38 @@ function buildTicketButtons() {
 function buildLogsEmbed() {
   const meta = getSystemMeta().logs;
 
+  const mainToggle = boolButtonLabel(getState("logs_enabled"), "Naplózási rendszer kikapcsolása", "Naplózási rendszer bekapcsolása");
+  const dailyToggle = boolButtonLabel(getState("logs_daily_stats"), "Napi statisztika kikapcsolása", "Napi statisztika bekapcsolása");
+  const msgToggle = boolButtonLabel(getState("logs_message"), "Üzenetnaplózás kikapcsolása", "Üzenetnaplózás bekapcsolása");
+  const voiceToggle = boolButtonLabel(getState("logs_voice"), "Hangcsatorna naplózás kikapcsolása", "Hangcsatorna naplózás bekapcsolása");
+  const ticketToggle = boolButtonLabel(getState("logs_ticket"), "Ticket naplózás kikapcsolása", "Ticket naplózás bekapcsolása");
+  const modToggle = boolButtonLabel(getState("logs_moderation"), "Moderációs naplózás kikapcsolása", "Moderációs naplózás bekapcsolása");
+
   return new EmbedBuilder()
     .setColor(meta.color)
     .setTitle(meta.title)
     .setDescription(meta.description)
     .addFields(
-      {
-        name: "📌 Állapot",
-        value: [
-          `Naplózási rendszer: ${yesNo(getState("logs_enabled"))}`,
-          `Napi statisztika: ${yesNo(getState("logs_daily_stats"))}`,
-          `Üzenetnaplózás: ${yesNo(getState("logs_message"))}`,
-          `Hangcsatorna naplózás: ${yesNo(getState("logs_voice"))}`,
-          `Ticket naplózás: ${yesNo(getState("logs_ticket"))}`,
-          `Moderációs naplózás: ${yesNo(getState("logs_moderation"))}`
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "⌨️ Parancsok",
-        value: meta.commandText.map((x) => `• ${x}`).join("\n"),
-        inline: false
-      },
-      {
-        name: "🔘 Gombok leírása",
-        value:
-          "**„Log rendszer kikapcsolása” / „Log rendszer bekapcsolása” gomb:**\nA teljes naplózási rendszert állítja le vagy indítja vissza.\n\n" +
-          "**„Napi stat kikapcsolása” / „Napi stat bekapcsolása” gomb:**\nA hajnalban automatikusan küldött napi statisztikai jelentést kezeli.\n\n" +
-          "**„Üzenet log kikapcsolása” / „Üzenet log bekapcsolása” gomb:**\nAz üzenetekhez kapcsolódó naplózást szabályozza.\n\n" +
-          "**„Voice log kikapcsolása” / „Voice log bekapcsolása” gomb:**\nA hangcsatornás események naplózását kezeli.\n\n" +
-          "**„Ticket log kikapcsolása” / „Ticket log bekapcsolása” gomb:**\nA ticket rendszerhez tartozó naplózást kapcsolja.\n\n" +
-          "**„Moderációs log kikapcsolása” / „Moderációs log bekapcsolása” gomb:**\nA moderációs események naplózását szabályozza.\n\n" +
-          "**„Kézi stat küldés” gomb:**\nAzonnali statküldést kérhetsz vele staff műveletként.\n\n" +
-          "**„Log panel frissítése” gomb:**\nÚjraépíti a naplózási panel üzenetét, hogy a legfrissebb állapotok és gombfeliratok jelenjenek meg.",
-        inline: false
-      }
+      stateField([
+        `Naplózási rendszer: ${yesNo(getState("logs_enabled"))}`,
+        `Napi statisztika: ${yesNo(getState("logs_daily_stats"))}`,
+        `Üzenetnaplózás: ${yesNo(getState("logs_message"))}`,
+        `Hangcsatorna naplózás: ${yesNo(getState("logs_voice"))}`,
+        `Ticket naplózás: ${yesNo(getState("logs_ticket"))}`,
+        `Moderációs naplózás: ${yesNo(getState("logs_moderation"))}`
+      ]),
+      buttonField([
+        `• "${mainToggle}": főkapcsoló.`,
+        `• "${dailyToggle}": napi stat ki/be.`,
+        `• "${msgToggle}": üzenetlog ki/be.`,
+        `• "${voiceToggle}": voice log ki/be.`,
+        `• "${ticketToggle}": ticket log ki/be.`,
+        `• "${modToggle}": moderációs log ki/be.`,
+        `• "Kézi stat küldés": azonnali statküldés.`,
+        `• "Log panel frissítése": panel újraépítése.`
+      ])
     )
-    .setFooter({ text: "internalGaming • Naplózási és statisztikai rendszer kezelése" })
+    .setFooter({ text: "internalGaming • Naplózási rendszer" })
     .setTimestamp(new Date());
 }
 
@@ -730,34 +644,31 @@ function buildLogsButtons() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:logs_enabled")
-        .setLabel(boolButtonLabel(getState("logs_enabled"), "Log rendszer kikapcsolása", "Log rendszer bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("logs_enabled"), "Naplózási rendszer kikapcsolása", "Naplózási rendszer bekapcsolása"))
         .setStyle(getState("logs_enabled") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:logs_daily_stats")
-        .setLabel(boolButtonLabel(getState("logs_daily_stats"), "Napi stat kikapcsolása", "Napi stat bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("logs_daily_stats"), "Napi statisztika kikapcsolása", "Napi statisztika bekapcsolása"))
         .setStyle(getState("logs_daily_stats") ? ButtonStyle.Danger : ButtonStyle.Success)
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:logs_message")
-        .setLabel(boolButtonLabel(getState("logs_message"), "Üzenet log kikapcsolása", "Üzenet log bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("logs_message"), "Üzenetnaplózás kikapcsolása", "Üzenetnaplózás bekapcsolása"))
         .setStyle(getState("logs_message") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:logs_voice")
-        .setLabel(boolButtonLabel(getState("logs_voice"), "Voice log kikapcsolása", "Voice log bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("logs_voice"), "Hangcsatorna naplózás kikapcsolása", "Hangcsatorna naplózás bekapcsolása"))
         .setStyle(getState("logs_voice") ? ButtonStyle.Danger : ButtonStyle.Success)
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:logs_ticket")
-        .setLabel(boolButtonLabel(getState("logs_ticket"), "Ticket log kikapcsolása", "Ticket log bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("logs_ticket"), "Ticket naplózás kikapcsolása", "Ticket naplózás bekapcsolása"))
         .setStyle(getState("logs_ticket") ? ButtonStyle.Danger : ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:logs_moderation")
-        .setLabel(boolButtonLabel(getState("logs_moderation"), "Moderációs log kikapcsolása", "Moderációs log bekapcsolása"))
+        .setLabel(boolButtonLabel(getState("logs_moderation"), "Moderációs naplózás kikapcsolása", "Moderációs naplózás bekapcsolása"))
         .setStyle(getState("logs_moderation") ? ButtonStyle.Danger : ButtonStyle.Success)
     ),
     new ActionRowBuilder().addComponents(
@@ -765,7 +676,6 @@ function buildLogsButtons() {
         .setCustomId("systempanel:action:logs_send_stats")
         .setLabel("Kézi stat küldés")
         .setStyle(ButtonStyle.Secondary),
-
       new ButtonBuilder()
         .setCustomId("systempanel:refresh:logs")
         .setLabel("Log panel frissítése")
@@ -869,6 +779,8 @@ async function refreshPanel(guild) {
 }
 
 async function handleMasterAction(interaction, action) {
+  await interaction.deferUpdate().catch(() => null);
+
   if (action === "disableall") {
     for (const key of Object.keys(store.systems)) {
       store.systems[key] = false;
@@ -899,14 +811,11 @@ async function handleMasterAction(interaction, action) {
   }
 
   await refreshPanel(interaction.guild).catch(() => null);
-
-  await interaction.update({
-    embeds: [buildMasterEmbed()],
-    components: buildMasterButtons()
-  });
 }
 
 async function handleToggleAction(interaction, key) {
+  await interaction.deferUpdate().catch(() => null);
+
   const before = getState(key);
   const after = !before;
   setState(key, after);
@@ -919,13 +828,14 @@ async function handleToggleAction(interaction, key) {
   );
 
   await refreshPanel(interaction.guild).catch(() => null);
-  await interaction.deferUpdate().catch(() => null);
 }
 
 async function handleSystemRefresh(interaction, key) {
+  await interaction.deferUpdate().catch(() => null);
+
   const panelNames = {
     aimod: "AI panel frissítése",
-    bugreport: "Bug panel frissítése",
+    bugreport: "Bugreport panel frissítése",
     ideas: "Ötlet panel frissítése",
     adminfeedback: "Admin értékelési panel frissítése",
     tickets: "Ticket panel frissítése",
@@ -940,7 +850,6 @@ async function handleSystemRefresh(interaction, key) {
   );
 
   await refreshPanel(interaction.guild).catch(() => null);
-  await interaction.deferUpdate().catch(() => null);
 }
 
 async function handleCustomAction(interaction, key) {
@@ -953,9 +862,9 @@ async function handleCustomAction(interaction, key) {
   }
 
   if (key === "logs_send_stats") {
+    await interaction.deferUpdate().catch(() => null);
     interaction.client.emit("systempanel:sendManualStats", interaction);
     await logControlAction(interaction, "Kézi stat küldés", "Nincs küldés", "Statisztika küldése elindítva");
-    await interaction.deferUpdate().catch(() => null);
     return;
   }
 
@@ -1095,12 +1004,12 @@ function registerSystemPanel(client) {
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply({
             content: "❌ Hiba történt a vezérlőpult művelet közben."
-          });
+          }).catch(() => {});
         } else if (interaction.isRepliable()) {
           await interaction.reply({
             content: "❌ Hiba történt a vezérlőpult művelet közben.",
             flags: MessageFlags.Ephemeral
-          });
+          }).catch(() => {});
         }
       } catch {}
     }

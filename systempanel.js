@@ -234,16 +234,16 @@ function buildMasterEmbed() {
         ].join("\n"),
         inline: false
       },
-      {
-        name: "🔘 Gombok",
-        value: [
-          `• "Összes rendszer leállítása" – minden fő rendszert kikapcsol.`,
-          `• "Összes rendszer indítása" – minden fő rendszert visszakapcsol.`,
-          `• "Safe mód" – az AI-t óvatosabb működésre állítja.`,
-          `• "Panel frissítése" – újratölti a teljes vezérlőpultot.`
-        ].join("\n"),
-        inline: false
-      }
+{
+  name: "🔘 Gombok",
+  value: [
+    `• "Összes rendszer leállítása" – minden rendszer azonnali lekapcsolása.`,
+    `• "Összes rendszer indítása" – minden rendszer újra bekapcsolása.`,
+    `• "Safe mód" – az AI enyhébb, biztonságos működésre vált.`,
+    `• "Panel frissítése" – a vezérlőpult újratöltése és hibák javítása.`
+  ].join("\n"),
+  inline: false
+}
     )
     .setFooter({ text: "internalGaming • Staff vezérlőpult" })
     .setTimestamp(new Date());
@@ -301,19 +301,19 @@ function buildAiEmbed() {
         ].join("\n"),
         inline: false
       },
-      {
-        name: "🔘 Gombok",
-        value: [
-          `• "${aiToggle}" – az AI főkapcsolója.`,
-          `• "${safeToggle}" – biztonságos mód váltása.`,
-          `• "${banToggle}" – az automatikus ban kezelése.`,
-          `• "${kickToggle}" – az automatikus kick kezelése.`,
-          `• "${timeoutToggle}" – az automatikus timeout kezelése.`,
-          `• "${noticeToggle}" – az AI üzenet visszajelzés kezelése.`,
-          `• "AI panel frissítése" – újratölti ezt a panelt.`
-        ].join("\n"),
-        inline: false
-      }
+{
+  name: "🔘 Gombok",
+  value: [
+    `• "${aiToggle}" – az AI moderáció teljes ki/be kapcsolása.`,
+    `• "${safeToggle}" – enyhébb moderáció / normál működés visszaállítása.`,
+    `• "${banToggle}" – súlyos esetnél automatikus ban engedélyezése/tiltása.`,
+    `• "${kickToggle}" – közepes esetnél automatikus kick engedélyezése/tiltása.`,
+    `• "${timeoutToggle}" – enyhébb esetnél timeout használata engedélyezve/tiltva.`,
+    `• "${noticeToggle}" – törlés után a felhasználó értesítése / értesítés kikapcsolása.`,
+    `• "AI panel frissítése" – AI panel újratöltése.`
+  ].join("\n"),
+  inline: false
+}
     )
     .setFooter({ text: "internalGaming • AI moderáció" })
     .setTimestamp(new Date());
@@ -383,17 +383,17 @@ function buildBugEmbed() {
         ].join("\n"),
         inline: false
       },
-      {
-        name: "🔘 Gombok",
-        value: [
-          `• "${mainToggle}" – a bugreport főkapcsolója.`,
-          `• "${aiToggle}" – az AI összegzés kezelése.`,
-          `• "${statusToggle}" – az automatikus státusz kezelése.`,
-          `• "${timerToggle}" – az időzített törlés kezelése.`,
-          `• "Bugreport panel frissítése" – újratölti ezt a panelt.`
-        ].join("\n"),
-        inline: false
-      }
+{
+  name: "🔘 Gombok",
+  value: [
+    `• "${mainToggle}" – a bugreport rendszer teljes ki/be kapcsolása.`,
+    `• "${aiToggle}" – AI által írt összefoglaló engedélyezése/tiltása.`,
+    `• "${statusToggle}" – bugok automatikus státusz frissítése ki/be.`,
+    `• "${timerToggle}" – megoldott bugok automatikus törlése ki/be.`,
+    `• "Bugreport panel frissítése" – panel újratöltése.`
+  ].join("\n"),
+  inline: false
+}
     )
     .setFooter({ text: "internalGaming • Bugreport rendszer" })
     .setTimestamp(new Date());
@@ -453,17 +453,17 @@ function buildIdeasEmbed() {
         ].join("\n"),
         inline: false
       },
-      {
-        name: "🔘 Gombok",
-        value: [
-          `• "${mainToggle}" – az ötlet rendszer főkapcsolója.`,
-          `• "${groupingToggle}" – a hasonló ötletek kezelését állítja.`,
-          `• "${decisionToggle}" – az AI döntési részt kezeli.`,
-          `• "${commentToggle}" – a komment összegzések kezelésére való.`,
-          `• "Ötlet panel frissítése" – újratölti ezt a panelt.`
-        ].join("\n"),
-        inline: false
-      }
+{
+  name: "🔘 Gombok",
+  value: [
+    `• "${mainToggle}" – ötlet rendszer ki/be kapcsolása.`,
+    `• "${groupingToggle}" – hasonló ötletek automatikus összevonása.`,
+    `• "${decisionToggle}" – AI döntési javaslatok engedélyezése/tiltása.`,
+    `• "${commentToggle}" – kommentekből automatikus összegzés készítése.`,
+    `• "Ötlet panel frissítése" – panel újratöltése.`
+  ].join("\n"),
+  inline: false
+}
     )
     .setFooter({ text: "internalGaming • Ötlet rendszer" })
     .setTimestamp(new Date());
@@ -521,17 +521,17 @@ function buildAdminFeedbackEmbed() {
         ].join("\n"),
         inline: false
       },
-      {
-        name: "🔘 Gombok",
-        value: [
-          `• "${mainToggle}" – az értékelési rendszer főkapcsolója.`,
-          `• "${aiToggle}" – az AI összegzés kezelése.`,
-          `• "${acceptToggle}" – új értékelések fogadása.`,
-          `• "Admin értékelések nullázása" – lenullázza az élő adatokat.`,
-          `• "Admin értékelési panel frissítése" – újratölti ezt a panelt.`
-        ].join("\n"),
-        inline: false
-      }
+{
+  name: "🔘 Gombok",
+  value: [
+    `• "${mainToggle}" – admin értékelések ki/be kapcsolása.`,
+    `• "${aiToggle}" – AI összegző leírás generálása ki/be.`,
+    `• "${acceptToggle}" – új értékelések fogadása / lezárása.`,
+    `• "Admin értékelések nullázása" – aktuális értékelések törlése.`,
+    `• "Admin értékelési panel frissítése" – panel újratöltése.`
+  ].join("\n"),
+  inline: false
+}
     )
     .setFooter({ text: "internalGaming • Admin értékelések" })
     .setTimestamp(new Date());
@@ -589,16 +589,16 @@ function buildTicketEmbed() {
         ].join("\n"),
         inline: false
       },
-      {
-        name: "🔘 Gombok",
-        value: [
-          `• "${mainToggle}" – a ticket rendszer főkapcsolója.`,
-          `• "${openToggle}" – az új ticketek nyitását kezeli.`,
-          `• "${modalToggle}" – a kérdőablakot kezeli.`,
-          `• "Ticket panel frissítése" – újratölti ezt a panelt.`
-        ].join("\n"),
-        inline: false
-      }
+{
+  name: "🔘 Gombok",
+  value: [
+    `• "${mainToggle}" – ticket rendszer ki/be kapcsolása.`,
+    `• "${openToggle}" – új ticket nyitás engedélyezése/tiltása.`,
+    `• "${modalToggle}" – ticket kérdőablak megjelenítése ki/be.`,
+    `• "Ticket panel frissítése" – panel újratöltése.`
+  ].join("\n"),
+  inline: false
+}
     )
     .setFooter({ text: "internalGaming • Ticket rendszer" })
     .setTimestamp(new Date());
@@ -656,20 +656,20 @@ function buildLogsEmbed() {
         ].join("\n"),
         inline: false
       },
-      {
-        name: "🔘 Gombok",
-        value: [
-          `• "${mainToggle}" – a teljes log rendszert kezeli.`,
-          `• "${dailyToggle}" – a napi összesítőt kezeli.`,
-          `• "${msgToggle}" – az üzenet logokat kezeli.`,
-          `• "${voiceToggle}" – a voice logokat kezeli.`,
-          `• "${ticketToggle}" – a ticket logokat kezeli.`,
-          `• "${modToggle}" – a moderációs logokat kezeli.`,
-          `• "Kézi stat küldés" – azonnal kiküld egy statot.`,
-          `• "Log panel frissítése" – újratölti ezt a panelt.`
-        ].join("\n"),
-        inline: false
-      }
+{
+  name: "🔘 Gombok",
+  value: [
+    `• "${mainToggle}" – minden log küldés ki/be kapcsolása.`,
+    `• "${dailyToggle}" – napi statisztika automatikus küldése ki/be.`,
+    `• "${msgToggle}" – üzenetek naplózása ki/be.`,
+    `• "${voiceToggle}" – voice események naplózása ki/be.`,
+    `• "${ticketToggle}" – ticket események naplózása ki/be.`,
+    `• "${modToggle}" – moderációs események naplózása ki/be.`,
+    `• "Kézi stat küldés" – azonnali statisztika küldése.`,
+    `• "Log panel frissítése" – panel újratöltése.`
+  ].join("\n"),
+  inline: false
+}
     )
     .setFooter({ text: "internalGaming • Naplózási rendszer" })
     .setTimestamp(new Date());

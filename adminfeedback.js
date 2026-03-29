@@ -826,14 +826,13 @@ async function refreshPublicPanel(guild, adminId) {
 // - AI maradjon, summaryData maradjon
 
 async function resetData(interaction) {
-    if (!getState("adminfeedback_enabled")) {
+  if (!getState("adminfeedback_enabled")) {
     await interaction.reply({
       content: "❌ Az admin feedback rendszer jelenleg ki van kapcsolva.",
       ephemeral: true
     }).catch(() => {});
     return;
   }
-  await interaction.deferReply({ ephemeral: true });
 
   // 1) Élő, resetelhető értékelések nullázása
   data = {};
@@ -873,7 +872,6 @@ async function resetData(interaction) {
         await msg.delete().catch(() => {});
       }
 
-      // Ha ebben a körben semmit nem tudtunk törölni, kilépünk
       if (youngerThan14Days.size === 0 && olderThan14Days.size === 0) {
         break;
       }
@@ -881,11 +879,20 @@ async function resetData(interaction) {
   }
 
   // 4) Az admin összesítő és AI adatok NEM változnak
-  await interaction.editReply({
-    content:
-      "🔄 Az admin értékelések és a logok törölve lettek. " +
-      "Az admin összesítő és az AI adatok megmaradtak."
-  });
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({
+      content:
+        "🔄 Az admin értékelések és a logok törölve lettek. " +
+        "Az admin összesítő és az AI adatok megmaradtak."
+    }).catch(() => {});
+  } else {
+    await interaction.reply({
+      content:
+        "🔄 Az admin értékelések és a logok törölve lettek. " +
+        "Az admin összesítő és az AI adatok megmaradtak.",
+      ephemeral: true
+    }).catch(() => {});
+  }
 }
 
 module.exports = {

@@ -56,6 +56,13 @@ const admins = [
     level: "Adminsegéd",
     desc:
       "Kiemelten figyelek az új játékosok támogatására és a kisebb ügyek gyors rendezésére. Fontosnak tartom, hogy mindenki korrekt bánásmódban részesüljön."
+  },
+  {
+    id: "4",
+    name: "Gromawyth 4",
+    level: "Adminsegéd",
+    desc:
+      "Kiemelten figyelek az új játékosok támogatására és a kisebb ügyek gyors rendezésére. Fontosnak tartom, hogy mindenki korrekt bánásmódban részesüljön."
   }
 ];
 

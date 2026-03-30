@@ -21,7 +21,12 @@ const LOG_CHANNEL_ID =
 const SUMMARY_CHANNEL_ID =
   process.env.ADMIN_FEEDBACK_SUMMARY_CHANNEL_ID || "1485392296714174544";
 
-const DATA_FILE = path.join(__dirname, "adminfeedback-data.json");
+const DATA_DIR =
+  process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, "data");
+
+const DATA_FILE = path.join(DATA_DIR, "adminfeedback-data.json");
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY

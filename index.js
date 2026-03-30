@@ -515,6 +515,11 @@ function buildTicketModal(typeKey) {
 async function registerCommands() {
   const commands = [
 
+    new SlashCommandBuilder()
+  .setName("adminrebuild")
+  .setDescription("Az admin értékelő embedek újraépítése adatvesztés nélkül")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
 new SlashCommandBuilder()
   .setName("systempanel")
   .setDescription("Központi staff rendszervezérlőpult")
@@ -1146,6 +1151,11 @@ if (
         await adminFeedback.resetData(interaction);
         return;
       }
+
+if (interaction.commandName === "adminrebuild") {
+  await adminFeedback.rebuildEmbeds(interaction);
+  return;
+}
 
       if (interaction.commandName === "sendticketpanels") {
         await handleSendTicketPanels(interaction);

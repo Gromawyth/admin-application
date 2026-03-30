@@ -35,12 +35,12 @@ const openai = new OpenAI({
 const admins = [
   {
     id: "1",
-    name: "Gromawyth",
-    level: "Lead Administrator",
+    name: "Lana",
+    level: "Manager",
     desc:
-      "Sziasztok! Gromawyth vagyok.\n\n" +
-      "A szerveren Lead Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminsegéd csapat koordinálása.\n\n" +
-      "Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni. Konfliktusos esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést.\n\n" +
+      "Sziasztok! Gromawyth vagyok." +
+      "A szerveren Lead Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminsegéd csapat koordinálása." +
+      "Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni. Konfliktusos esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést." +
       "Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám."
   },
   {
@@ -834,6 +834,8 @@ async function resetData(interaction) {
     return;
   }
 
+  await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
   // 1) Élő, resetelhető értékelések nullázása
   data = {};
 
@@ -878,26 +880,61 @@ async function resetData(interaction) {
     }
   }
 
-  // 4) Az admin összesítő és AI adatok NEM változnak
-  if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({
-      content:
-        "🔄 Az admin értékelések és a logok törölve lettek. " +
-        "Az admin összesítő és az AI adatok megmaradtak."
-    }).catch(() => {});
-  } else {
-    await interaction.reply({
-      content:
-        "🔄 Az admin értékelések és a logok törölve lettek. " +
-        "Az admin összesítő és az AI adatok megmaradtak.",
-      ephemeral: true
-    }).catch(() => {});
-  }
+  await interaction.editReply({
+    content:
+      "🔄 Az admin értékelések és a logok törölve lettek. " +
+      "Az admin összesítő és az AI adatok megmaradtak."
+  }).catch(() => {});
 }
 
+async function rebuildEmbeds(interaction) {
+  if (!getState("adminfeedback_enabled")) {
+    await interaction.reply({
+      content: "❌ Az admin feedback rendszer jelenleg ki van kapcsolva.",
+      ephemeral: true
+    }).catch(() => {});
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+  panelMessages = {};
+  summaryMessages = {};
+  rulesMessageId = null;
+
+  saveData();
+
+  for (const admin of admins) {
+    const stats = getData(admin.id);
+    const embed = buildAdminPanelEmbed(admin, stats);
+    const row = buildAdminButtons(admin.id);
+
+    const msg = await interaction.channel.send({
+      embeds: [embed],
+      components: [row]
+    });
+
+    panelMessages[admin.id] = msg.id;
+    saveData();
+
+    await createOrUpdateSummary(interaction.guild, admin.id);
+  }
+
+  const rulesMsg = await interaction.channel.send({
+    embeds: [buildRulesEmbed()]
+  });
+
+  rulesMessageId = rulesMsg.id;
+  saveData();
+
+  await interaction.editReply({
+    content: "✅ Az admin panelek és összesítők újra lettek építve, az adatok megmaradtak."
+  }).catch(() => {});
+}
 module.exports = {
   sendPanel,
   resetData,
+  rebuildEmbeds,
   handleButton,
   handleModal,
   rebuildAllSummaries,

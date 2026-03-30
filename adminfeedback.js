@@ -912,7 +912,51 @@ async function resetData(interaction) {
       "Az admin összesítő és az AI adatok megmaradtak."
   }).catch(() => {});
 }
+async function cleanupRemovedAdmins(guild) {
+  const validAdminIds = admins.map(a => a.id);
 
+  // PANEL embedek törlése
+  for (const adminId of Object.keys(panelMessages)) {
+    if (validAdminIds.includes(adminId)) continue;
+
+    const msgId = panelMessages[adminId];
+
+    for (const channel of guild.channels.cache.values()) {
+      if (!channel || typeof channel.messages?.fetch !== "function") continue;
+
+      try {
+        const msg = await channel.messages.fetch(msgId).catch(() => null);
+        if (msg) {
+          await msg.delete().catch(() => {});
+          break;
+        }
+      } catch {}
+    }
+
+    delete panelMessages[adminId];
+  }
+
+  // SUMMARY embedek törlése
+  for (const adminId of Object.keys(summaryMessages)) {
+    if (validAdminIds.includes(adminId)) continue;
+
+    const msgId = summaryMessages[adminId];
+    const channel = await fetchGuildChannel(guild, SUMMARY_CHANNEL_ID);
+
+    if (channel) {
+      try {
+        const msg = await channel.messages.fetch(msgId).catch(() => null);
+        if (msg) {
+          await msg.delete().catch(() => {});
+        }
+      } catch {}
+    }
+
+    delete summaryMessages[adminId];
+  }
+
+  saveData();
+}
 async function rebuildEmbeds(interaction) {
   if (!getState("adminfeedback_enabled")) {
     await interaction.reply({
@@ -923,39 +967,60 @@ async function rebuildEmbeds(interaction) {
   }
 
   await interaction.deferReply({ ephemeral: true }).catch(() => {});
-
-  panelMessages = {};
-  summaryMessages = {};
-  rulesMessageId = null;
-
-  saveData();
-
+await cleanupRemovedAdmins(interaction.guild);
   for (const admin of admins) {
     const stats = getData(admin.id);
     const embed = buildAdminPanelEmbed(admin, stats);
     const row = buildAdminButtons(admin.id);
 
-    const msg = await interaction.channel.send({
-      embeds: [embed],
-      components: [row]
-    });
-
-    panelMessages[admin.id] = msg.id;
-    saveData();
+    if (!panelMessages[admin.id]) {
+      const msg = await interaction.channel.send({
+        embeds: [embed],
+        components: [row]
+      });
+      panelMessages[admin.id] = msg.id;
+      saveData();
+    } else {
+      try {
+        const msg = await interaction.channel.messages.fetch(panelMessages[admin.id]);
+        await msg.edit({
+          embeds: [embed],
+          components: [row]
+        });
+      } catch {
+        const msg = await interaction.channel.send({
+          embeds: [embed],
+          components: [row]
+        });
+        panelMessages[admin.id] = msg.id;
+        saveData();
+      }
+    }
 
     await createOrUpdateSummary(interaction.guild, admin.id);
   }
 
-  const rulesMsg = await interaction.channel.send({
-    embeds: [buildRulesEmbed()]
-  });
+  const rulesEmbed = buildRulesEmbed();
 
-  rulesMessageId = rulesMsg.id;
-  saveData();
+  if (!rulesMessageId) {
+    const msg = await interaction.channel.send({ embeds: [rulesEmbed] });
+    rulesMessageId = msg.id;
+    saveData();
+  } else {
+    try {
+      const msg = await interaction.channel.messages.fetch(rulesMessageId);
+      await msg.edit({ embeds: [rulesEmbed] });
+    } catch {
+      const msg = await interaction.channel.send({ embeds: [rulesEmbed] });
+      rulesMessageId = msg.id;
+      saveData();
+    }
+  }
+saveData();
 
-  await interaction.editReply({
-    content: "✅ Az admin panelek és összesítők újra lettek építve, az adatok megmaradtak."
-  }).catch(() => {});
+await interaction.editReply({
+  content: "✅ Az admin embedek frissítve lettek, a mentett értékelések megmaradtak."
+}).catch(() => {});
 }
 module.exports = {
   sendPanel,

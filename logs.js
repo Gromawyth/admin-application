@@ -478,6 +478,14 @@ function napiStatIdozites(client) {
  */
 module.exports = function registerLogs(client) {
   client.once("ready", () => {
+      client.on("systempanel:logsDailyStatsChanged", async () => {
+    try {
+      napiStatIdozites(client);
+      console.log("[LOG] Napi stat időzítés frissítve a panelből.");
+    } catch (error) {
+      console.error("[LOG] Napi stat újraütemezési hiba:", error);
+    }
+  });
     if (getState("logs_enabled")) {
       console.log("[LOG] internalGaming naplózási rendszer elindult.");
     } else {
@@ -489,7 +497,6 @@ module.exports = function registerLogs(client) {
   client.on("systempanel:sendManualStats", async (interaction) => {
     try {
       if (!interaction.guild) return;
-      if (!getState("logs_daily_stats")) return;
 
       const stat = guildStat(interaction.guild.id);
       const embed = buildStatEmbed(

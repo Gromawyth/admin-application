@@ -812,21 +812,23 @@ async function refreshPanel(guild) {
 async function handleMasterAction(interaction, action) {
   await interaction.deferUpdate().catch(() => null);
 
-  if (action === "disableall") {
-    for (const key of Object.keys(store.systems)) {
-      store.systems[key] = false;
-    }
-    saveStore();
-    await logControlAction(interaction, "Összes rendszer leállítása", "Vegyes", "Minden kikapcsolva");
+if (action === "disableall") {
+  for (const key of Object.keys(store.systems)) {
+    store.systems[key] = false;
   }
+  saveStore();
+  interaction.client.emit("systempanel:logsDailyStatsChanged");
+  await logControlAction(interaction, "Összes rendszer leállítása", "Vegyes", "Minden kikapcsolva");
+}
 
-  if (action === "enableall") {
-    for (const key of Object.keys(store.systems)) {
-      store.systems[key] = true;
-    }
-    saveStore();
-    await logControlAction(interaction, "Összes rendszer indítása", "Vegyes", "Minden bekapcsolva");
+if (action === "enableall") {
+  for (const key of Object.keys(store.systems)) {
+    store.systems[key] = true;
   }
+  saveStore();
+  interaction.client.emit("systempanel:logsDailyStatsChanged");
+  await logControlAction(interaction, "Összes rendszer indítása", "Vegyes", "Minden bekapcsolva");
+}
 
   if (action === "refresh") {
     await logControlAction(interaction, "Panel frissítése", "Aktuális", "Frissítve");
@@ -842,6 +844,10 @@ async function handleToggleAction(interaction, key) {
   const after = !before;
   setState(key, after);
 
+if (key === "logs_daily_stats" || key === "logs_enabled") {
+  interaction.client.emit("systempanel:logsDailyStatsChanged");
+}
+
   await logControlAction(
     interaction,
     `Beállítás módosítása: ${getSystemLabel(key)}`,
@@ -851,7 +857,6 @@ async function handleToggleAction(interaction, key) {
 
   await refreshPanel(interaction.guild).catch(() => null);
 }
-
 async function handleSystemRefresh(interaction, key) {
   await interaction.deferUpdate().catch(() => null);
 

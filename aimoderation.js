@@ -901,6 +901,28 @@ function canModerateTarget(member) {
 }
 
 function extractJson(text) {
+  function getPlainUserFacingFallback(mode, staffText = "", context = "") {
+  const note = cleanText(staffText || "", 220);
+
+  if (note) return note;
+
+  switch (mode) {
+    case "delete_notice":
+      return "Az üzenetedet a moderáció törölte. Kérlek figyelj jobban a szabályokra.";
+    case "warn_notice":
+      return "Figyelmeztetést kaptál. Kérlek figyelj jobban a kommunikációra.";
+    case "watch_notice":
+      return "A rendszer megfigyelési jelzést adott az üzenetedre. Kérlek figyelj jobban a szabályokra.";
+    case "apology":
+      return "Elnézést kérünk, a moderáció tévesen kezelt egy helyzetet.";
+    case "unban":
+      return "A korábbi korlátozásodat feloldottuk.";
+    case "ban_notice":
+      return "A fiókod szabályszegés miatt korlátozásra került.";
+    default:
+      return cleanText(context || "Moderációs értesítés.", 220);
+  }
+}
   const raw = String(text || "").trim();
   const firstBrace = raw.indexOf("{");
   const lastBrace = raw.lastIndexOf("}");
@@ -1236,7 +1258,23 @@ async function aiAnalyzeModeration(payload) {
     watchActive = false,
     escalationLabel = "nincs",
   } = payload;
-
+  
+if (!getState("aimod_enabled")) {
+  return {
+    category: "other",
+    categoryHu: "Egyéb",
+    severity: "enyhe",
+    confidence: 0,
+    points: 0,
+    ruleBroken: "AI kikapcsolva",
+    reason: "Az AI moderáció ki van kapcsolva.",
+    analysis: "Az AI moderáció jelenleg nem aktív, csak alap szabályalapú rendszer fut.",
+    patternSummary: "AI nem fut.",
+    recommendedAction: "ignore",
+    timeoutMinutes: 0,
+    shouldNotifyStaff: false,
+  };
+}
   const prompt = `
 Te egy emberi hangnemű, de fegyelmezett Discord moderációs AI vagy a(z) ${CONFIG.SERVER_NAME} szerveren.
 
@@ -1294,7 +1332,10 @@ Döntési elvek:
 }
 `;
 
-  const response = await openai.chat.completions.create({
+let response;
+
+try {
+  response = await openai.chat.completions.create({
     model: CONFIG.AI_MODEL,
     messages: [
       {
@@ -1307,6 +1348,24 @@ Döntési elvek:
       },
     ],
   });
+} catch (error) {
+  console.error("[AIMOD] OpenAI hiba:", error?.message || error);
+
+  return {
+    category: "other",
+    categoryHu: "Egyéb",
+    severity: "enyhe",
+    confidence: 0,
+    points: 0,
+    ruleBroken: "AI hiba történt",
+    reason: "Az AI válasz nem érhető el.",
+    analysis: "Az AI kérés hibába futott, ezért fallback logika lett használva.",
+    patternSummary: "AI elemzés nem futott le.",
+    recommendedAction: "ignore",
+    timeoutMinutes: 0,
+    shouldNotifyStaff: false,
+  };
+}
 
   const content = response.choices?.[0]?.message?.content?.trim() || "{}";
 
@@ -1337,11 +1396,50 @@ Döntési elvek:
   }
 }
 
+// =========================
+// 🧠 USER ÜZENET GENERÁLÁS (AI + fallback)
+// =========================
+
+function getPlainUserFacingFallback(mode, staffText = "", context = "") {
+  const note = cleanText(staffText || "", 220);
+
+  if (note) return note;
+
+  switch (mode) {
+    case "delete_notice":
+      return "Az üzenetedet a moderáció törölte. Kérlek figyelj jobban a szabályokra.";
+    case "warn_notice":
+      return "Figyelmeztetést kaptál. Kérlek figyelj jobban a kommunikációra.";
+    case "watch_notice":
+      return "A rendszer figyelmeztető jelzést adott az üzenetedre. Kérlek figyelj jobban a szabályokra.";
+    case "apology":
+      return "Elnézést kérünk, a moderáció ebben az esetben hibás döntést hozott.";
+    case "unban":
+      return "A korábbi korlátozásodat feloldottuk.";
+    case "ban_notice":
+      return "A fiókod szabályszegés miatt korlátozásra került.";
+    default:
+      return cleanText(context || "Moderációs értesítés.", 220);
+  }
+}
+
 async function aiWriteUserFacingMessage({ mode, staffText = "", context = "" }) {
   const safeStaffText = cleanText(staffText || "", 700);
   const safeContext = cleanText(context || "", 1200);
+  const fallback = getPlainUserFacingFallback(mode, safeStaffText, safeContext);
 
-  const prompt = `
+  // 🔴 AI KI KAPCSOLVA → fallback
+  if (!getState("aimod_enabled")) {
+    return fallback;
+  }
+
+  // 🔴 NINCS API / nincs előfizetés → fallback
+  if (!process.env.OPENAI_API_KEY || String(process.env.OPENAI_API_KEY).includes("IDE_IRD")) {
+    return fallback;
+  }
+
+  try {
+    const prompt = `
 Te egy Discord szerver természetes magyar üzenetírója vagy.
 
 Feladat:
@@ -1349,62 +1447,33 @@ Feladat:
 - ne legyél túl hivatalos
 - ne írj aláírást
 - ne használj felsorolást
+- maximum 2 rövid mondat legyen
 - ha a staff szövege üres, akkor magadtól írj korrekt rövid szöveget
 - ha a staff szövege meg van adva, fogalmazd át természetesebbre
 - ne írj olyat, hogy "Nincs megadva"
 - csak a kész szöveget add vissza
 
-Mód: ${mode}
-Kontextus: ${safeContext || "nincs"}
+Típus: ${mode}
 Staff szöveg: ${safeStaffText || "nincs"}
+Kontextus: ${safeContext || "nincs"}
+
+Csak maga a szöveg legyen a válasz.
 `;
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: CONFIG.AI_MODEL,
-      messages: [
-        { role: "system", content: "Csak a kész magyar szöveget add vissza." },
-        { role: "user", content: prompt },
-      ],
+    const response = await openai.responses.create({
+      model: "gpt-5-mini",
+      input: prompt,
+      reasoning: { effort: "low" },
     });
 
-    const text = cleanText(response.choices?.[0]?.message?.content || "", 1000);
-    if (text) return text;
+    const text = cleanText(response.output_text || "", 260);
+    if (!text) return fallback;
+
+    return text;
   } catch (error) {
     console.error("[AIMOD] aiWriteUserFacingMessage hiba:", error?.message || error);
+    return fallback;
   }
-
-  if (mode === "apology") {
-    return (
-      safeStaffText ||
-      "Elnézést kérünk, az automatikus moderáció ebben az esetben hibás döntést hozott, ezért a korábbi intézkedést felülvizsgáltuk."
-    );
-  }
-
-  if (mode === "unban") {
-    return safeStaffText || "A korábbi korlátozás feloldásra került, a helyzetet felülvizsgáltuk.";
-  }
-
-  if (mode === "warn_notice") {
-    return (
-      safeStaffText ||
-      "Figyelmeztetést kaptál, mert az üzeneted problémásnak minősült. Ha ez folytatódik, a rendszer szigorúbban fog reagálni."
-    );
-  }
-
-  if (mode === "delete_notice") {
-    return safeStaffText || "Az üzenetedet a rendszer eltávolította, mert szabályszegésre utaló tartalmat észlelt.";
-  }
-
-  if (mode === "ban_notice") {
-    return safeStaffText || "A fiókod automatikus moderációs döntés alapján kitiltásra került a vizsgált tartalom miatt.";
-  }
-
-  if (mode === "watch_notice") {
-    return safeStaffText || "A rendszer figyelmeztető megfigyelési állapotba tett, mert az üzeneted problémás mintát mutatott.";
-  }
-
-  return safeStaffText || "A művelet sikeresen végrehajtva.";
 }
 
 function pickHighestRuleHit(ruleHits) {
@@ -1923,8 +1992,9 @@ async function safeDeleteMessage(message) {
 
 async function safeTimeout(member, minutes, reason) {
   try {
-    if (!CONFIG.ALLOW_TIMEOUT) return false;
+    if (!getState("aimod_allow_timeout")) return false;
     if (!member?.moderatable) return false;
+
     const ms = Math.max(60_000, Number(minutes || 1) * 60_000);
     await member.timeout(ms, reason);
     return true;
@@ -1936,8 +2006,9 @@ async function safeTimeout(member, minutes, reason) {
 
 async function safeKick(member, reason) {
   try {
-    if (!CONFIG.ALLOW_KICK) return false;
+    if (!getState("aimod_allow_kick")) return false;
     if (!member?.kickable) return false;
+
     await member.kick(reason);
     return true;
   } catch (error) {
@@ -1948,8 +2019,9 @@ async function safeKick(member, reason) {
 
 async function safeBan(member, reason, deleteMessageSeconds = 0) {
   try {
-    if (!CONFIG.ALLOW_BAN) return false;
+    if (!getState("aimod_allow_ban")) return false;
     if (!member?.bannable) return false;
+
     await member.ban({ reason, deleteMessageSeconds });
     return true;
   } catch (error) {
@@ -2341,8 +2413,8 @@ async function applyDecision({
 
 async function processMessage(client, message) {
   try {
-    if (!getState("aimod_enabled")) return;
-    if (shouldIgnoreMessage(message)) return;
+  if (!getState("aimod_enabled")) return;
+  if (shouldIgnoreMessage(message)) return;
 
     const member =
       message.member ||

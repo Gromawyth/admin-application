@@ -258,21 +258,15 @@ function buildFallbackSummary(adminId) {
     return "Nincs még beérkező válasz.";
   }
 
-  const latest = stats.reviews[stats.reviews.length - 1];
-  const typeLabel = latest.type === "pos" ? "pozitív" : "negatív";
-  const balanceText =
-    stats.pos > stats.neg
-      ? "inkább pozitív"
-      : stats.neg > stats.pos
-        ? "inkább negatív"
-        : "vegyes";
+  const latest = [...stats.reviews]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+
+  const latestType = latest?.type === "pos" ? "pozitív" : "negatív";
 
   return (
-    `${admin.name} adminról eddig ${total} értékelés érkezett, amelyek alapján már kialakítható egy kezdeti összkép. ` +
-    `A visszajelzések aránya jelenleg ${balanceText}, hiszen ${stats.pos} pozitív és ${stats.neg} negatív értékelés szerepel az összesítőben. ` +
-    `A legutóbbi vélemény ${typeLabel} jellegű volt, és a beküldő főként a következőket emelte ki: ${trimText(latest.strengths || "nincs megadva", 220)}. ` +
-    `A leírt szituáció alapján az admin megítélésében fontos szerepet játszik a kommunikáció, a döntéshozatal gyorsasága és az ügyek kezelésének minősége. ` +
-    `A jelenlegi összesítő minden eddig eltárolt véleményt figyelembe vesz, ezért az összkép folyamatosan pontosodik az új visszajelzésekkel.`
+    `Az AI összegzés jelenleg ki van kapcsolva. ` +
+    `Eddig ${total} értékelés érkezett: ${stats.pos} pozitív, ${stats.neg} negatív. ` +
+    `A legutóbbi visszajelzés ${latestType} jellegű volt.`
   );
 }
 
@@ -439,6 +433,9 @@ function buildSummaryEmbed(admin, stats, aiSummary) {
   const posPercent = getPercent(stats.pos, total);
   const negPercent = getPercent(stats.neg, total);
   const bar = getRatingBar(stats.pos, stats.neg);
+  const summaryFieldTitle = getState("adminfeedback_ai_summary")
+    ? "🤖 AI leírás"
+    : "📝 Összegzés";
 
   return new EmbedBuilder()
     .setColor(0x2b2d31)
@@ -462,7 +459,7 @@ function buildSummaryEmbed(admin, stats, aiSummary) {
         inline: true
       },
       {
-        name: "🤖 AI leírás",
+        name: summaryFieldTitle,
         value: trimText(aiSummary || "Nincs még beérkező válasz.", 1024),
         inline: false
       }

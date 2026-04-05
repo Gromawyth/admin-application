@@ -24,7 +24,6 @@ const CONFIG = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   OPENAI_MODEL: "gpt-5-mini",
 
-  // AI takarékos beállítások
   USE_AI_GROUPING: true,
   USE_AI_DECISIONS: true,
   USE_AI_FOR_LONG_COMMENTS_ONLY: true,
@@ -103,6 +102,10 @@ function ensureIdeaDefaults(idea) {
   if (typeof idea.supportCount !== "number") idea.supportCount = 0;
   if (typeof idea.opposeCount !== "number") idea.opposeCount = 0;
   if (typeof idea.neutralCount !== "number") idea.neutralCount = 0;
+  if (typeof idea.messageId !== "string" && idea.messageId !== null) idea.messageId = null;
+  if (typeof idea.handler !== "string" && idea.handler !== null) idea.handler = null;
+  if (typeof idea.deleteAt !== "number" && idea.deleteAt !== null) idea.deleteAt = null;
+  if (typeof idea.decidedAt !== "number" && idea.decidedAt !== null) idea.decidedAt = null;
 }
 
 function loadData() {
@@ -420,13 +423,21 @@ Csak maga a szöveg legyen a válasz.
 function buildIdeaEmbed(idea) {
   const style = getStatusStyle(idea.status);
 
-const summaryText = cleanupShortText(
-  idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
-  520
-);
+  const summaryText = getState("ideas_ai_summary")
+    ? cleanupShortText(
+        idea.aiSummary || idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
+        520
+      )
+    : cleanupShortText(
+        idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
+        520
+      );
 
   const aiShort = getState("ideas_ai_summary")
-    ? cleanupShortText(idea.aiSummary || "Nincs összefoglaló.", 240)
+    ? cleanupShortText(
+        idea.aiDecisionReason || idea.aiSummary || "Nincs összefoglaló.",
+        240
+      )
     : buildAiSummaryDisabledText();
 
   const manualComment = compactText(idea.lastManualReason || "");
@@ -813,7 +824,10 @@ async function aiAnalyzeIdeaComment({ idea, content, authorTag }) {
   const fallback = heuristicAnalyzeComment(content);
   if (!openai) return fallback;
 
-  if (CONFIG.USE_AI_FOR_LONG_COMMENTS_ONLY && compactText(content).length < CONFIG.MIN_COMMENT_LENGTH_FOR_AI) {
+  if (
+    CONFIG.USE_AI_FOR_LONG_COMMENTS_ONLY &&
+    compactText(content).length < CONFIG.MIN_COMMENT_LENGTH_FOR_AI
+  ) {
     return fallback;
   }
 
@@ -1322,14 +1336,16 @@ async function rebuildAllIdeaSummaries(client) {
   for (const idea of Object.values(data.ideas || {})) {
     ensureIdeaDefaults(idea);
 
-try {
-  if (getState("ideas_ai_summary")) {
-    idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
-  }
-} catch (error) {
-  console.error("[IDEAS] rebuildAllIdeaSummaries aiSummary hiba:", error);
-  idea.aiSummary = buildFallbackIdeaSummaryText(idea);
-}
+    try {
+      if (getState("ideas_ai_summary")) {
+        idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+      } else {
+        idea.aiSummary = buildFallbackIdeaSummaryText(idea);
+      }
+    } catch (error) {
+      console.error("[IDEAS] rebuildAllIdeaSummaries aiSummary hiba:", error);
+      idea.aiSummary = buildFallbackIdeaSummaryText(idea);
+    }
 
     if (!getState("ideas_ai_decisions")) {
       idea.aiDecisionReason = buildAiCommentDisabledText();
@@ -1495,13 +1511,13 @@ async function processNewForumThread(client, thread) {
       idea.aiDecisionReason = result.decisionReason || idea.aiDecisionReason;
     }
 
-if (getState("ideas_ai_summary")) {
-  try {
-    idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
-  } catch (error) {
-    console.error("[IDEAS] processNewForumThread match aiSummary hiba:", error);
-  }
-}
+    if (getState("ideas_ai_summary")) {
+      try {
+        idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+      } catch (error) {
+        console.error("[IDEAS] processNewForumThread match aiSummary hiba:", error);
+      }
+    }
 
     try {
       const msg = await updateSummaryMessage(client, idea);
@@ -1532,8 +1548,7 @@ if (getState("ideas_ai_summary")) {
   }
 
   const ideaId = makeIdeaId();
-
-const initialSummary = cleanupShortText(result.summary || description, 520);
+  const initialSummary = cleanupShortText(result.summary || description, 520);
 
   const idea = {
     id: ideaId,
@@ -1587,6 +1602,7 @@ const initialSummary = cleanupShortText(result.summary || description, 520);
 
   saveData(data);
   await applyThreadStatusTag(thread, "Nyitott");
+  await syncThreadState(thread, "Nyitott");
 }
 
 async function handleStatusChange(client, interaction, ideaId, status, manualReason = "") {
@@ -1657,9 +1673,9 @@ async function handleStatusChange(client, interaction, ideaId, status, manualRea
   }
 
   try {
-if (getState("ideas_ai_summary")) {
-  idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
-}
+    if (getState("ideas_ai_summary")) {
+      idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+    }
 
     const msg = await updateSummaryMessage(client, idea);
     if (msg) {

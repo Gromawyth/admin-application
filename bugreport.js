@@ -1810,9 +1810,4 @@ function registerBugReport(client) {
     }
   });
 }
-const aiEnabled = getState("bugreport_ai_summary");
-
-if (!aiEnabled) {
-  bug.aiSummary = "⚙️ Kikapcsolva az AI megjegyzés.";
-}
 module.exports = { registerBugReport };

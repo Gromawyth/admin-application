@@ -1164,7 +1164,6 @@ if (
   });
 
   const adminFeedback = require("./adminfeedback");
-
   await adminFeedback.resetAdminSummary(client);
 
   await interaction.editReply({

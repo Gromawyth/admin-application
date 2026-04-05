@@ -276,7 +276,7 @@ function buildFallbackSummary(adminId) {
 
 async function generateAiSummary(adminId) {
   if (!getState("adminfeedback_ai_summary")) {
-    return buildFallbackSummary(adminId);
+      return "⚙️ Kikapcsolva az AI megjegyzés.";
   }
   const admin = admins.find(a => a.id === adminId);
   const stats = getSummaryData(adminId);
@@ -1027,35 +1027,32 @@ async function resetAdminSummary(client) {
   saveData();
 
   const channel = await client.channels.fetch(SUMMARY_CHANNEL_ID).catch(() => null);
-  if (!channel) return;
+  if (!channel) {
+    throw new Error("Nem találom az összesítő csatornát.");
+  }
 
-  // régi embedek törlése
   try {
     const messages = await channel.messages.fetch({ limit: 100 });
     for (const msg of messages.values()) {
-      if (msg.author.id === client.user.id) {
+      if (msg.author?.id === client.user?.id) {
         await msg.delete().catch(() => null);
       }
     }
-  } catch (err) {}
-
-  // újraépítés
-  for (const admin of admins) {
-    await sendOrUpdateSummaryEmbed(client, admin);
+  } catch (err) {
+    console.error("[ADMINFEEDBACK] Régi összesítők törlése sikertelen:", err);
   }
+
+  const guild = channel.guild;
+  if (!guild) {
+    throw new Error("Nem találom a guildet az összesítő csatornához.");
+  }
+
+  for (const admin of admins) {
+    await createOrUpdateSummary(guild, admin.id);
+  }
+
+  saveData();
 }
-function registerAdminFeedbackEvents(client) {
-  client.on("systempanel:adminfeedbackAiSummaryChanged", async ({ guild }) => {
-    try {
-      if (!guild) return;
-      await rebuildAllSummaries(guild);
-      console.log("[ADMINFEEDBACK] AI összegzés állapot változott, összesítők frissítve.");
-    } catch (error) {
-      console.error("[ADMINFEEDBACK] AI összegzés frissítési hiba:", error);
-    }
-  });
-}
-module.exports.resetAdminSummary = resetAdminSummary;
 module.exports = {
   sendPanel,
   resetData,
@@ -1064,5 +1061,6 @@ module.exports = {
   handleModal,
   rebuildAllSummaries,
   refreshPublicPanel,
-  registerAdminFeedbackEvents
+  registerAdminFeedbackEvents,
+  resetAdminSummary
 };

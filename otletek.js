@@ -1752,9 +1752,4 @@ function registerIdeaSystem(client) {
     }
   });
 }
-const aiEnabled = getState("ideas_ai_grouping");
-
-if (!aiEnabled) {
-  idea.aiSummary = "⚙️ Kikapcsolva az AI megjegyzés.";
-}
 module.exports = { registerIdeaSystem };

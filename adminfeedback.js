@@ -43,46 +43,49 @@ const admins = [
     name: "Lana",
     level: "Manager",
     desc:
-      "Sziasztok! Gromawyth vagyok." +
-      "A szerveren Lead Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminsegéd csapat koordinálása." +
-      "Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni. Konfliktusos esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést." +
-      "Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám."
+      "Nincs még bemutatkozás."
   },
   {
     id: "2",
-    name: "Gromawyth 2",
-    level: "Administrator",
+    name: "ItzWolfi",
+    level: "Head Administrator",
     desc:
-      "Segítőkész és aktív adminisztrátor vagyok, aki igyekszik gyorsan és pontosan kezelni a felmerülő ügyeket. Fontos számomra a kulturált kommunikáció és a következetes döntéshozatal."
+"Sziasztok! ItzWolfi vagyok, de nyugodtan hívhattok simán Wolfinak is." +
+"A szerveren Head Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminisztrátori csapat koordinálása." +
+"Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni." +
+"Konfliktusos esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést." +
+"Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára." +
+"Tudni kell rólam, hogy így is hajlandó vagyok a legújabb játékosnak segíteni. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám."
   },
   {
     id: "3",
-    name: "Gromawyth 3",
-    level: "Adminsegéd",
+    name: "Berkut",
+    level: "Senior Administrator",
     desc:
-      "Kiemelten figyelek az új játékosok támogatására és a kisebb ügyek gyors rendezésére. Fontosnak tartom, hogy mindenki korrekt bánásmódban részesüljön."
+      "Nincs még bemutatkozás."
   },
   {
     id: "4",
-    name: "Gromawyth 4",
-    level: "Adminsegéd",
+    name: "Gromawyth",
+    level: "Lead Administrator",
     desc:
-      "Kiemelten figyelek az új játékosok támogatására és a kisebb ügyek gyors rendezésére. Fontosnak tartom, hogy mindenki korrekt bánásmódban részesüljön."
+      "Nincs még bemutatkozás."
   },
   {
     id: "5",
-    name: "Gromawyth 5",
-    level: "Adminsegéd",
+    name: "Szepy",
+    level: "Administrator 5(?)",
     desc:
-      "Kiemelten figyelek az új játékosok támogatására és a kisebb ügyek gyors rendezésére. Fontosnak tartom, hogy mindenki korrekt bánásmódban részesüljön."
+"Gépészmérnök hallgató vagyok, akinek legfőbb eszméi közé tartozik az esélyegyenlőség, a kölcsönös segítségnyújtás és tisztelet, valamint a szabályok szerinti munkavégzés." +
+"Tapasztalattal rendelkezem a vendéglátásban, ezért kooperatív és segítőkész vagyok, ugyanakkor komolyan veszem a szabályok betartását és az etikett követését, és empátiával fordulok a segítséget kérők felé." +
+"Bátran lehet hozzám fordulni, a legjobb tudásom szerint nyújtok segítséget."
   },
-
   {
-    id: "7",
-    name: "asdasdasdasd",
-    level: "Adminsegéd",
+    id: "6",
+    name: "Bounty",
+    level: "Administrator 5(?)",
     desc:
-      "Kiemelten figyelek az új játékosok támogatására és a kisebb ügyek gyors rendezésére. Fontosnak tartom, hogy mindenki korrekt bánásmódban részesüljön."
+      "Nincs még bemutatkozás."
   }
 ];
 
@@ -366,17 +369,17 @@ function buildRulesEmbed() {
       {
         name: "⚖️ Alapelvek",
         value:
-          "• Egy játékos havonta legfeljebb **3 értékelést** adhat ugyanarra az adminra.\n" +
-          "• Az értékelésnek valódi tapasztalaton kell alapulnia.\n" +
-          "• Indoklás nélkül vagy troll célból ne küldj értékelést.",
+          "▫️ Egy játékos havonta legfeljebb **3 értékelést** adhat ugyanarra az adminra.\n" +
+          "▫️ Az értékelésnek valódi tapasztalaton kell alapulnia.\n" +
+          "▫️ Indoklás nélkül vagy troll célból ne küldj értékelést.",
         inline: false
       },
       {
         name: "🔍 Fontos tudnivalók",
         value:
-          "• A válaszok a vezetőség számára láthatók.\n" +
-          "• A visszaélések szankciót vonhatnak maguk után.\n" +
-          "• Minden beküldés naplózásra kerül.",
+          "▫️ A válaszok a vezetőség számára láthatók.\n" +
+          "▫️ A visszaélések szankciót vonhatnak maguk után.\n" +
+          "▫️ Minden beküldés naplózásra kerül.",
         inline: false
       }
     )
@@ -391,9 +394,9 @@ function buildAdminPanelEmbed(admin, stats) {
 
   return new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`⭐ ${admin.name}`)
+    .setTitle(`🟢 ${admin.name}`)
     .setDescription(
-      `🏷️ **Szint:** ${admin.level}\n\n💬 **Bemutatkozás:**\n${admin.desc}`
+      `🔺 **Szint:** ${admin.level}\n\n💬 **Bemutatkozás:**\n${admin.desc}`
     )
     .addFields(
       {

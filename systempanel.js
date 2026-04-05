@@ -33,6 +33,7 @@ const DEFAULT_STATE = {
 
     ideas_enabled: true,
     ideas_ai_grouping: true,
+    ideas_ai_summary: true,
     ideas_ai_decisions: true,
     ideas_comment_insights: true,
 
@@ -152,6 +153,7 @@ function getSystemLabel(key) {
 
     ideas_enabled: "Ötlet rendszer",
     ideas_ai_grouping: "AI csoportosítás",
+    ideas_ai_summary: "AI összegzés",
     ideas_ai_decisions: "AI döntések",
     ideas_comment_insights: "Komment összegzések",
 
@@ -234,15 +236,15 @@ function buildMasterEmbed() {
         ].join("\n"),
         inline: false
       },
-{
-  name: "🔘 Gombok",
-  value: [
-    `• "Összes rendszer leállítása" – minden rendszer azonnali lekapcsolása.`,
-    `• "Összes rendszer indítása" – minden rendszer újra bekapcsolása.`,
-    `• "Panel frissítése" – a vezérlőpult újratöltése és hibák javítása.`
-  ].join("\n"),
-  inline: false
-}
+      {
+        name: "🔘 Gombok",
+        value: [
+          `• "Összes rendszer leállítása" – minden rendszer azonnali lekapcsolása.`,
+          `• "Összes rendszer indítása" – minden rendszer újra bekapcsolása.`,
+          `• "Panel frissítése" – a vezérlőpult újratöltése és hibák javítása.`
+        ].join("\n"),
+        inline: false
+      }
     )
     .setFooter({ text: "internalGaming • Staff vezérlőpult" })
     .setTimestamp(new Date());
@@ -296,19 +298,19 @@ function buildAiEmbed() {
         ].join("\n"),
         inline: false
       },
-{
-  name: "🔘 Gombok",
-  value: [
-    `• "${aiToggle}" – az AI moderáció teljes ki/be kapcsolása.`,
-    `• "${safeToggle}" – enyhébb moderáció / normál működés visszaállítása.`,
-    `• "${banToggle}" – súlyos esetnél automatikus ban engedélyezése/tiltása.`,
-    `• "${kickToggle}" – közepes esetnél automatikus kick engedélyezése/tiltása.`,
-    `• "${timeoutToggle}" – enyhébb esetnél timeout használata engedélyezve/tiltva.`,
-    `• "${noticeToggle}" – törlés után a felhasználó értesítése / értesítés kikapcsolása.`,
-    `• "AI panel frissítése" – AI panel újratöltése.`
-  ].join("\n"),
-  inline: false
-}
+      {
+        name: "🔘 Gombok",
+        value: [
+          `• "${aiToggle}" – az AI moderáció teljes ki/be kapcsolása.`,
+          `• "${safeToggle}" – enyhébb moderáció / normál működés visszaállítása.`,
+          `• "${banToggle}" – súlyos esetnél automatikus ban engedélyezése/tiltása.`,
+          `• "${kickToggle}" – közepes esetnél automatikus kick engedélyezése/tiltása.`,
+          `• "${timeoutToggle}" – enyhébb esetnél timeout használata engedélyezve/tiltva.`,
+          `• "${noticeToggle}" – törlés után a felhasználó értesítése / értesítés kikapcsolása.`,
+          `• "AI panel frissítése" – AI panel újratöltése.`
+        ].join("\n"),
+        inline: false
+      }
     )
     .setFooter({ text: "internalGaming • AI moderáció" })
     .setTimestamp(new Date());
@@ -378,17 +380,17 @@ function buildBugEmbed() {
         ].join("\n"),
         inline: false
       },
-{
-  name: "🔘 Gombok",
-  value: [
-    `• "${mainToggle}" – a bugreport rendszer teljes ki/be kapcsolása.`,
-    `• "${aiToggle}" – AI által írt összefoglaló engedélyezése/tiltása.`,
-    `• "${statusToggle}" – bugok automatikus státusz frissítése ki/be.`,
-    `• "${timerToggle}" – megoldott bugok automatikus törlése ki/be.`,
-    `• "Bugreport panel frissítése" – panel újratöltése.`
-  ].join("\n"),
-  inline: false
-}
+      {
+        name: "🔘 Gombok",
+        value: [
+          `• "${mainToggle}" – a bugreport rendszer teljes ki/be kapcsolása.`,
+          `• "${aiToggle}" – AI által írt összefoglaló engedélyezése/tiltása.`,
+          `• "${statusToggle}" – bugok automatikus státusz frissítése ki/be.`,
+          `• "${timerToggle}" – megoldott bugok automatikus törlése ki/be.`,
+          `• "Bugreport panel frissítése" – panel újratöltése.`
+        ].join("\n"),
+        inline: false
+      }
     )
     .setFooter({ text: "internalGaming • Bugreport rendszer" })
     .setTimestamp(new Date());
@@ -430,6 +432,7 @@ function buildIdeasEmbed() {
 
   const mainToggle = boolButtonLabel(getState("ideas_enabled"), "Ötlet rendszer kikapcsolása", "Ötlet rendszer bekapcsolása");
   const groupingToggle = boolButtonLabel(getState("ideas_ai_grouping"), "AI csoportosítás kikapcsolása", "AI csoportosítás bekapcsolása");
+  const summaryToggle = boolButtonLabel(getState("ideas_ai_summary"), "AI összegzés kikapcsolása", "AI összegzés bekapcsolása");
   const decisionToggle = boolButtonLabel(getState("ideas_ai_decisions"), "AI döntések kikapcsolása", "AI döntések bekapcsolása");
   const commentToggle = boolButtonLabel(getState("ideas_comment_insights"), "Komment összegzések kikapcsolása", "Komment összegzések bekapcsolása");
 
@@ -443,22 +446,24 @@ function buildIdeasEmbed() {
         value: [
           `Ötlet rendszer: ${yesNo(getState("ideas_enabled"))}`,
           `AI csoportosítás: ${yesNo(getState("ideas_ai_grouping"))}`,
+          `AI összegzés: ${yesNo(getState("ideas_ai_summary"))}`,
           `AI döntések: ${yesNo(getState("ideas_ai_decisions"))}`,
           `Komment összegzések: ${yesNo(getState("ideas_comment_insights"))}`
         ].join("\n"),
         inline: false
       },
-{
-  name: "🔘 Gombok",
-  value: [
-    `• "${mainToggle}" – ötlet rendszer ki/be kapcsolása.`,
-    `• "${groupingToggle}" – hasonló ötletek automatikus összevonása.`,
-    `• "${decisionToggle}" – AI döntési javaslatok engedélyezése/tiltása.`,
-    `• "${commentToggle}" – kommentekből automatikus összegzés készítése.`,
-    `• "Ötlet panel frissítése" – panel újratöltése.`
-  ].join("\n"),
-  inline: false
-}
+      {
+        name: "🔘 Gombok",
+        value: [
+          `• "${mainToggle}" – ötlet rendszer ki/be kapcsolása.`,
+          `• "${groupingToggle}" – hasonló ötletek automatikus összevonása.`,
+          `• "${summaryToggle}" – AI összegzés ki/be kapcsolása.`,
+          `• "${decisionToggle}" – AI döntési javaslatok engedélyezése/tiltása.`,
+          `• "${commentToggle}" – kommentekből automatikus összegzés készítése.`,
+          `• "Ötlet panel frissítése" – panel újratöltése.`
+        ].join("\n"),
+        inline: false
+      }
     )
     .setFooter({ text: "internalGaming • Ötlet rendszer" })
     .setTimestamp(new Date());
@@ -478,9 +483,15 @@ function buildIdeasButtons() {
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
+        .setCustomId("systempanel:toggle:ideas_ai_summary")
+        .setLabel(boolButtonLabel(getState("ideas_ai_summary"), "AI összegzés kikapcsolása", "AI összegzés bekapcsolása"))
+        .setStyle(getState("ideas_ai_summary") ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder()
         .setCustomId("systempanel:toggle:ideas_ai_decisions")
         .setLabel(boolButtonLabel(getState("ideas_ai_decisions"), "AI döntések kikapcsolása", "AI döntések bekapcsolása"))
-        .setStyle(getState("ideas_ai_decisions") ? ButtonStyle.Danger : ButtonStyle.Success),
+        .setStyle(getState("ideas_ai_decisions") ? ButtonStyle.Danger : ButtonStyle.Success)
+    ),
+    new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:ideas_comment_insights")
         .setLabel(boolButtonLabel(getState("ideas_comment_insights"), "Komment összegzések kikapcsolása", "Komment összegzések bekapcsolása"))
@@ -516,17 +527,17 @@ function buildAdminFeedbackEmbed() {
         ].join("\n"),
         inline: false
       },
-{
-  name: "🔘 Gombok",
-  value: [
-    `• "${mainToggle}" – admin értékelések ki/be kapcsolása.`,
-    `• "${aiToggle}" – AI összegző leírás generálása ki/be.`,
-    `• "${acceptToggle}" – új értékelések fogadása / lezárása.`,
-    `• "Admin értékelések nullázása" – aktuális értékelések törlése.`,
-    `• "Admin értékelési panel frissítése" – panel újratöltése.`
-  ].join("\n"),
-  inline: false
-}
+      {
+        name: "🔘 Gombok",
+        value: [
+          `• "${mainToggle}" – admin értékelések ki/be kapcsolása.`,
+          `• "${aiToggle}" – AI összegző leírás generálása ki/be.`,
+          `• "${acceptToggle}" – új értékelések fogadása / lezárása.`,
+          `• "Admin értékelések nullázása" – aktuális értékelések törlése.`,
+          `• "Admin értékelési panel frissítése" – panel újratöltése.`
+        ].join("\n"),
+        inline: false
+      }
     )
     .setFooter({ text: "internalGaming • Admin értékelések" })
     .setTimestamp(new Date());
@@ -584,16 +595,16 @@ function buildTicketEmbed() {
         ].join("\n"),
         inline: false
       },
-{
-  name: "🔘 Gombok",
-  value: [
-    `• "${mainToggle}" – ticket rendszer ki/be kapcsolása.`,
-    `• "${openToggle}" – új ticket nyitás engedélyezése/tiltása.`,
-    `• "${modalToggle}" – ticket kérdőablak megjelenítése ki/be.`,
-    `• "Ticket panel frissítése" – panel újratöltése.`
-  ].join("\n"),
-  inline: false
-}
+      {
+        name: "🔘 Gombok",
+        value: [
+          `• "${mainToggle}" – ticket rendszer ki/be kapcsolása.`,
+          `• "${openToggle}" – új ticket nyitás engedélyezése/tiltása.`,
+          `• "${modalToggle}" – ticket kérdőablak megjelenítése ki/be.`,
+          `• "Ticket panel frissítése" – panel újratöltése.`
+        ].join("\n"),
+        inline: false
+      }
     )
     .setFooter({ text: "internalGaming • Ticket rendszer" })
     .setTimestamp(new Date());
@@ -615,7 +626,9 @@ function buildTicketButtons() {
       new ButtonBuilder()
         .setCustomId("systempanel:toggle:tickets_allow_modal")
         .setLabel(boolButtonLabel(getState("tickets_allow_modal"), "Ticket kérdőablak kikapcsolása", "Ticket kérdőablak bekapcsolása"))
-        .setStyle(getState("tickets_allow_modal") ? ButtonStyle.Danger : ButtonStyle.Success),
+        .setStyle(getState("tickets_allow_modal") ? ButtonStyle.Danger : ButtonStyle.Success)
+    ),
+    new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("systempanel:refresh:tickets")
         .setLabel("Ticket panel frissítése")
@@ -628,11 +641,11 @@ function buildLogsEmbed() {
   const meta = getSystemMeta().logs;
 
   const mainToggle = boolButtonLabel(getState("logs_enabled"), "Naplózási rendszer kikapcsolása", "Naplózási rendszer bekapcsolása");
-  const dailyToggle = boolButtonLabel(getState("logs_daily_stats"), "Napi statisztika kikapcsolása", "Napi statisztika bekapcsolása");
   const msgToggle = boolButtonLabel(getState("logs_message"), "Üzenetnaplózás kikapcsolása", "Üzenetnaplózás bekapcsolása");
   const voiceToggle = boolButtonLabel(getState("logs_voice"), "Hangcsatorna naplózás kikapcsolása", "Hangcsatorna naplózás bekapcsolása");
   const ticketToggle = boolButtonLabel(getState("logs_ticket"), "Ticket naplózás kikapcsolása", "Ticket naplózás bekapcsolása");
   const modToggle = boolButtonLabel(getState("logs_moderation"), "Moderációs naplózás kikapcsolása", "Moderációs naplózás bekapcsolása");
+  const dailyToggle = boolButtonLabel(getState("logs_daily_stats"), "Napi statisztika kikapcsolása", "Napi statisztika bekapcsolása");
 
   return new EmbedBuilder()
     .setColor(meta.color)
@@ -643,28 +656,28 @@ function buildLogsEmbed() {
         name: "📌 Állapot",
         value: [
           `Naplózási rendszer: ${yesNo(getState("logs_enabled"))}`,
-          `Napi statisztika: ${yesNo(getState("logs_daily_stats"))}`,
           `Üzenetnaplózás: ${yesNo(getState("logs_message"))}`,
           `Hangcsatorna naplózás: ${yesNo(getState("logs_voice"))}`,
           `Ticket naplózás: ${yesNo(getState("logs_ticket"))}`,
-          `Moderációs naplózás: ${yesNo(getState("logs_moderation"))}`
+          `Moderációs naplózás: ${yesNo(getState("logs_moderation"))}`,
+          `Napi statisztika: ${yesNo(getState("logs_daily_stats"))}`
         ].join("\n"),
         inline: false
       },
-{
-  name: "🔘 Gombok",
-  value: [
-    `• "${mainToggle}" – minden log küldés ki/be kapcsolása.`,
-    `• "${dailyToggle}" – napi statisztika automatikus küldése ki/be.`,
-    `• "${msgToggle}" – üzenetek naplózása ki/be.`,
-    `• "${voiceToggle}" – voice események naplózása ki/be.`,
-    `• "${ticketToggle}" – ticket események naplózása ki/be.`,
-    `• "${modToggle}" – moderációs események naplózása ki/be.`,
-    `• "Kézi stat küldés" – azonnali statisztika küldése.`,
-    `• "Log panel frissítése" – panel újratöltése.`
-  ].join("\n"),
-  inline: false
-}
+      {
+        name: "🔘 Gombok",
+        value: [
+          `• "${mainToggle}" – a teljes log rendszer ki/be kapcsolása.`,
+          `• "${msgToggle}" – üzenetnaplózás ki/be.`,
+          `• "${voiceToggle}" – hangcsatorna naplózás ki/be.`,
+          `• "${ticketToggle}" – ticket naplózás ki/be.`,
+          `• "${modToggle}" – moderációs naplózás ki/be.`,
+          `• "${dailyToggle}" – napi statisztika ki/be.`,
+          `• "Kézi stat küldés" – azonnali stat küldése.`,
+          `• "Log panel frissítése" – panel újratöltése.`
+        ].join("\n"),
+        inline: false
+      }
     )
     .setFooter({ text: "internalGaming • Naplózási rendszer" })
     .setTimestamp(new Date());
@@ -717,13 +730,13 @@ function buildLogsButtons() {
 
 function getPanelDefinitions() {
   return [
-    { key: "master", buildEmbed: buildMasterEmbed, buildRows: buildMasterButtons },
-    { key: "aimod", buildEmbed: buildAiEmbed, buildRows: buildAiButtons },
-    { key: "bugreport", buildEmbed: buildBugEmbed, buildRows: buildBugButtons },
-    { key: "ideas", buildEmbed: buildIdeasEmbed, buildRows: buildIdeasButtons },
-    { key: "adminfeedback", buildEmbed: buildAdminFeedbackEmbed, buildRows: buildAdminFeedbackButtons },
-    { key: "tickets", buildEmbed: buildTicketEmbed, buildRows: buildTicketButtons },
-    { key: "logs", buildEmbed: buildLogsEmbed, buildRows: buildLogsButtons }
+    { key: "master", buildEmbed: buildMasterEmbed, buildRows: buildMasterButtons() },
+    { key: "aimod", buildEmbed: buildAiEmbed, buildRows: buildAiButtons() },
+    { key: "bugreport", buildEmbed: buildBugEmbed, buildRows: buildBugButtons() },
+    { key: "ideas", buildEmbed: buildIdeasEmbed, buildRows: buildIdeasButtons() },
+    { key: "adminfeedback", buildEmbed: buildAdminFeedbackEmbed, buildRows: buildAdminFeedbackButtons() },
+    { key: "tickets", buildEmbed: buildTicketEmbed, buildRows: buildTicketButtons() },
+    { key: "logs", buildEmbed: buildLogsEmbed, buildRows: buildLogsButtons() }
   ];
 }
 
@@ -791,7 +804,7 @@ async function publishPanel(guild, panelChannel, actionLogChannel = null) {
       panelChannel,
       def.key,
       def.buildEmbed(),
-      def.buildRows()
+      def.buildRows
     );
   }
 }
@@ -809,32 +822,68 @@ async function refreshPanel(guild) {
   return true;
 }
 
+function getAllSystemKeys() {
+  return Object.keys(store.systems);
+}
+
 async function handleMasterAction(interaction, action) {
   await interaction.deferUpdate().catch(() => null);
 
-if (action === "disableall") {
-  for (const key of Object.keys(store.systems)) {
-    store.systems[key] = false;
-  }
-  saveStore();
-  interaction.client.emit("systempanel:logsDailyStatsChanged");
-  await logControlAction(interaction, "Összes rendszer leállítása", "Vegyes", "Minden kikapcsolva");
-}
+  if (action === "disableall") {
+    for (const key of getAllSystemKeys()) {
+      setState(key, false);
+    }
 
-if (action === "enableall") {
-  for (const key of Object.keys(store.systems)) {
-    store.systems[key] = true;
+    interaction.client.emit("systempanel:logsDailyStatsChanged");
+    interaction.client.emit("systempanel:adminfeedbackAiSummaryChanged", {
+      guild: interaction.guild,
+      enabled: false
+    });
+    interaction.client.emit("systempanel:bugreportAiSummaryChanged", {
+      guild: interaction.guild,
+      enabled: false
+    });
+    interaction.client.emit("systempanel:ideasAiChanged", {
+      guild: interaction.guild,
+      key: "disableall",
+      enabled: false
+    });
+
+    await logControlAction(interaction, "Összes rendszer leállítása", "Vegyes", "Minden kikapcsolva");
+    await refreshPanel(interaction.guild).catch(() => null);
+    return;
   }
-  saveStore();
-  interaction.client.emit("systempanel:logsDailyStatsChanged");
-  await logControlAction(interaction, "Összes rendszer indítása", "Vegyes", "Minden bekapcsolva");
-}
+
+  if (action === "enableall") {
+    const defaults = cloneDefault().systems;
+    for (const [key, value] of Object.entries(defaults)) {
+      setState(key, value);
+    }
+
+    interaction.client.emit("systempanel:logsDailyStatsChanged");
+    interaction.client.emit("systempanel:adminfeedbackAiSummaryChanged", {
+      guild: interaction.guild,
+      enabled: getState("adminfeedback_ai_summary")
+    });
+    interaction.client.emit("systempanel:bugreportAiSummaryChanged", {
+      guild: interaction.guild,
+      enabled: getState("bugreport_ai_summary")
+    });
+    interaction.client.emit("systempanel:ideasAiChanged", {
+      guild: interaction.guild,
+      key: "enableall",
+      enabled: getState("ideas_ai_summary")
+    });
+
+    await logControlAction(interaction, "Összes rendszer indítása", "Vegyes", "Alapértékek visszaállítva");
+    await refreshPanel(interaction.guild).catch(() => null);
+    return;
+  }
 
   if (action === "refresh") {
-    await logControlAction(interaction, "Panel frissítése", "Aktuális", "Frissítve");
+    await refreshPanel(interaction.guild).catch(() => null);
+    await logControlAction(interaction, "Panel frissítése", "Kérés", "Frissítve");
   }
-
-  await refreshPanel(interaction.guild).catch(() => null);
 }
 
 async function handleToggleAction(interaction, key) {
@@ -851,26 +900,27 @@ async function handleToggleAction(interaction, key) {
   if (key === "adminfeedback_ai_summary") {
     interaction.client.emit("systempanel:adminfeedbackAiSummaryChanged", {
       guild: interaction.guild,
-      enabled: after,
+      enabled: after
     });
   }
 
   if (key === "bugreport_ai_summary") {
     interaction.client.emit("systempanel:bugreportAiSummaryChanged", {
       guild: interaction.guild,
-      enabled: after,
+      enabled: after
     });
   }
 
   if (
     key === "ideas_ai_grouping" ||
+    key === "ideas_ai_summary" ||
     key === "ideas_ai_decisions" ||
     key === "ideas_comment_insights"
   ) {
     interaction.client.emit("systempanel:ideasAiChanged", {
       guild: interaction.guild,
       key,
-      enabled: after,
+      enabled: after
     });
   }
 
@@ -883,196 +933,191 @@ async function handleToggleAction(interaction, key) {
 
   await refreshPanel(interaction.guild).catch(() => null);
 }
-async function handleSystemRefresh(interaction, key) {
+
+async function handleActionButton(interaction, action) {
   await interaction.deferUpdate().catch(() => null);
 
-  const panelNames = {
-    aimod: "AI panel frissítése",
-    bugreport: "Bugreport panel frissítése",
-    ideas: "Ötlet panel frissítése",
-    adminfeedback: "Admin értékelési panel frissítése",
-    tickets: "Ticket panel frissítése",
-    logs: "Log panel frissítése"
-  };
+  if (action === "adminfeedback_reset") {
+    interaction.client.emit("systempanel:adminfeedbackResetRequested", {
+      interaction,
+      guild: interaction.guild
+    });
 
-  await logControlAction(
-    interaction,
-    panelNames[key] || `Panel frissítése: ${key}`,
-    "Aktuális",
-    "Frissítve"
-  );
+    await logControlAction(
+      interaction,
+      "Admin értékelések nullázása",
+      "Kérés",
+      "Elküldve a modulnak"
+    );
 
-  await refreshPanel(interaction.guild).catch(() => null);
-}
-
-async function handleCustomAction(interaction, key) {
-  if (key === "adminfeedback_reset") {
-    const adminFeedback = require("./adminfeedback");
-    await adminFeedback.resetData(interaction);
-    await logControlAction(interaction, "Admin értékelések nullázása", "Aktív adatok", "Lenullázva");
     await refreshPanel(interaction.guild).catch(() => null);
     return;
   }
 
-  if (key === "logs_send_stats") {
-    await interaction.deferUpdate().catch(() => null);
-    interaction.client.emit("systempanel:sendManualStats", interaction);
-    await logControlAction(interaction, "Kézi stat küldés", "Nincs", "Elindítva");
+  if (action === "logs_send_stats") {
+    interaction.client.emit("systempanel:logsSendStatsRequested", {
+      interaction,
+      guild: interaction.guild
+    });
+
+    await logControlAction(
+      interaction,
+      "Kézi stat küldés",
+      "Kérés",
+      "Elküldve a modulnak"
+    );
+
+    await refreshPanel(interaction.guild).catch(() => null);
+  }
+}
+
+async function handleRefreshButton(interaction) {
+  await interaction.deferUpdate().catch(() => null);
+  await refreshPanel(interaction.guild).catch(() => null);
+
+  await logControlAction(
+    interaction,
+    "Részpanel frissítése",
+    "Kérés",
+    "Frissítve"
+  );
+}
+
+async function sendPanelCommand(interaction) {
+  const panelChannel = interaction.options.getChannel("panelcsatorna");
+  const actionLogChannel = interaction.options.getChannel("műveletlog");
+
+  if (!panelChannel || !panelChannel.isTextBased()) {
+    await interaction.reply({
+      content: "❌ A panelcsatorna csak szöveges csatorna lehet.",
+      flags: MessageFlags.Ephemeral
+    });
     return;
   }
 
+  if (!actionLogChannel || !actionLogChannel.isTextBased()) {
+    await interaction.reply({
+      content: "❌ A műveletlog csatorna csak szöveges csatorna lehet.",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
+
+  await publishPanel(interaction.guild, panelChannel, actionLogChannel);
+
+  await interaction.editReply({
+    content: `✅ A vezérlőpult kiküldve ide: ${panelChannel}`
+  }).catch(() => null);
+}
+
+async function refreshCommand(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
+
+  const ok = await refreshPanel(interaction.guild);
+
+  await interaction.editReply({
+    content: ok
+      ? "✅ A vezérlőpult frissítve lett."
+      : "❌ Nincs még kiküldött vezérlőpult."
+  }).catch(() => null);
+}
+
+async function statusCommand(interaction) {
+  const embed = new EmbedBuilder()
+    .setColor(0x1f8b4c)
+    .setTitle("📊 Rendszerállapot")
+    .addFields(
+      { name: "AI moderáció", value: yesNo(getState("aimod_enabled")), inline: true },
+      { name: "Bugreport", value: yesNo(getState("bugreport_enabled")), inline: true },
+      { name: "Ötlet rendszer", value: yesNo(getState("ideas_enabled")), inline: true },
+      { name: "Admin értékelések", value: yesNo(getState("adminfeedback_enabled")), inline: true },
+      { name: "Ticket rendszer", value: yesNo(getState("tickets_enabled")), inline: true },
+      { name: "Naplózás", value: yesNo(getState("logs_enabled")), inline: true }
+    )
+    .setFooter({ text: "internalGaming • Állapot" })
+    .setTimestamp(new Date());
+
   await interaction.reply({
-    content: "Ismeretlen panelművelet.",
+    embeds: [embed],
     flags: MessageFlags.Ephemeral
   }).catch(() => null);
 }
 
-async function handleSlash(interaction) {
-  if (!interaction.isChatInputCommand()) return false;
-  if (interaction.commandName !== "systempanel") return false;
-
+async function handleInteraction(interaction) {
   if (!hasStaffPermission(interaction)) {
     await interaction.reply({
-      content: "Ehhez staff jogosultság kell.",
+      content: "❌ Ehhez nincs jogosultságod.",
       flags: MessageFlags.Ephemeral
-    });
-    return true;
+    }).catch(() => null);
+    return;
   }
 
-  const sub = interaction.options.getSubcommand();
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName !== "systempanel") return;
 
-  if (sub === "send") {
-    const panelChannel = interaction.options.getChannel("panelcsatorna");
-    const actionLogChannel = interaction.options.getChannel("műveletlog");
+    const sub = interaction.options.getSubcommand();
 
-    if (!panelChannel || !panelChannel.isTextBased() || panelChannel.type === ChannelType.GuildVoice) {
-      await interaction.reply({
-        content: "A vezérlőpulthoz egy szöveges csatorna kell.",
-        flags: MessageFlags.Ephemeral
-      });
-      return true;
+    if (sub === "send") {
+      await sendPanelCommand(interaction);
+      return;
     }
 
-    if (!actionLogChannel || !actionLogChannel.isTextBased() || actionLogChannel.type === ChannelType.GuildVoice) {
-      await interaction.reply({
-        content: "A műveletnaplóhoz egy szöveges csatorna kell.",
-        flags: MessageFlags.Ephemeral
-      });
-      return true;
+    if (sub === "refresh") {
+      await refreshCommand(interaction);
+      return;
     }
 
-    await interaction.deferReply({
-      flags: MessageFlags.Ephemeral
-    }).catch(() => {});
+    if (sub === "status") {
+      await statusCommand(interaction);
+    }
 
-    await publishPanel(interaction.guild, panelChannel, actionLogChannel);
-
-    await interaction.editReply(
-      `✅ A vezérlőpult elkészült ide: ${panelChannel}\n📝 Műveletnapló: ${actionLogChannel}`
-    ).catch(() => {});
-
-    return true;
+    return;
   }
 
-  if (sub === "refresh") {
-    await interaction.deferReply({
-      flags: MessageFlags.Ephemeral
-    }).catch(() => {});
+  if (!interaction.isButton()) return;
+  if (!interaction.customId.startsWith("systempanel:")) return;
 
-    const ok = await refreshPanel(interaction.guild);
+  const [, scope, value] = interaction.customId.split(":");
 
-    await interaction.editReply(
-      ok
-        ? "✅ A vezérlőpult frissítve lett."
-        : "❌ Nem találom a korábban kiküldött vezérlőpultot."
-    ).catch(() => {});
-
-    return true;
+  if (scope === "master") {
+    await handleMasterAction(interaction, value);
+    return;
   }
 
-  if (sub === "status") {
-    const content = [
-      `• ${getSystemLabel("aimod_enabled")}: ${yesNo(getState("aimod_enabled"))}`,
-      `• ${getSystemLabel("bugreport_enabled")}: ${yesNo(getState("bugreport_enabled"))}`,
-      `• ${getSystemLabel("ideas_enabled")}: ${yesNo(getState("ideas_enabled"))}`,
-      `• ${getSystemLabel("adminfeedback_enabled")}: ${yesNo(getState("adminfeedback_enabled"))}`,
-      `• ${getSystemLabel("tickets_enabled")}: ${yesNo(getState("tickets_enabled"))}`,
-      `• ${getSystemLabel("logs_enabled")}: ${yesNo(getState("logs_enabled"))}`,
-      `• ${getSystemLabel("logs_daily_stats")}: ${yesNo(getState("logs_daily_stats"))}`
-    ].join("\n");
-
-    await interaction.reply({
-      content,
-      flags: MessageFlags.Ephemeral
-    });
-    return true;
+  if (scope === "toggle") {
+    await handleToggleAction(interaction, value);
+    return;
   }
 
-  return true;
-}
-
-async function handleButtons(interaction) {
-  if (!interaction.isButton()) return false;
-  if (!interaction.customId.startsWith("systempanel:")) return false;
-
-  if (!hasStaffPermission(interaction)) {
-    await interaction.reply({
-      content: "Ehhez staff jogosultság kell.",
-      flags: MessageFlags.Ephemeral
-    });
-    return true;
+  if (scope === "action") {
+    await handleActionButton(interaction, value);
+    return;
   }
 
-  const parts = interaction.customId.split(":");
-  const type = parts[1];
-  const key = parts[2];
-
-  if (type === "master") {
-    await handleMasterAction(interaction, key);
-    return true;
+  if (scope === "refresh") {
+    await handleRefreshButton(interaction);
   }
-
-  if (type === "toggle") {
-    await handleToggleAction(interaction, key);
-    return true;
-  }
-
-  if (type === "refresh") {
-    await handleSystemRefresh(interaction, key);
-    return true;
-  }
-
-  if (type === "action") {
-    await handleCustomAction(interaction, key);
-    return true;
-  }
-
-  return false;
 }
 
 function registerSystemPanel(client) {
   client.on("interactionCreate", async (interaction) => {
     try {
-      const slashHandled = await handleSlash(interaction);
-      if (slashHandled) return;
-
-      const buttonHandled = await handleButtons(interaction);
-      if (buttonHandled) return;
+      await handleInteraction(interaction);
     } catch (error) {
-      console.error("[SYSTEMPANEL] interaction hiba:", error);
+      console.error("[SYSTEMPANEL] interactionCreate hiba:", error);
 
-      try {
-        if (interaction.deferred || interaction.replied) {
-          await interaction.editReply({
-            content: "❌ Hiba történt a vezérlőpult művelet közben."
-          }).catch(() => {});
-        } else if (interaction.isRepliable()) {
-          await interaction.reply({
-            content: "❌ Hiba történt a vezérlőpult művelet közben.",
-            flags: MessageFlags.Ephemeral
-          }).catch(() => {});
-        }
-      } catch {}
+      const payload = {
+        content: "❌ Hiba történt a vezérlőpult kezelésénél.",
+        flags: MessageFlags.Ephemeral
+      };
+
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp(payload).catch(() => null);
+      } else {
+        await interaction.reply(payload).catch(() => null);
+      }
     }
   });
 }
@@ -1081,6 +1126,6 @@ module.exports = {
   registerSystemPanel,
   getState,
   setState,
-  refreshPanel,
-  getPanelConfig
+  getPanelConfig,
+  refreshPanel
 };

@@ -13,6 +13,7 @@ const fs = require("fs");
 const path = require("path");
 const OpenAI = require("openai");
 const { getState } = require("./systempanel");
+
 // =========================
 // KONFIG
 // =========================
@@ -217,6 +218,14 @@ function getStatusStyle(status) {
   return { color: 0xf1c40f, emoji: "💡" };
 }
 
+function buildAiSummaryDisabledText() {
+  return "⚙️ Kikapcsolva az AI összegzés.";
+}
+
+function buildAiCommentDisabledText() {
+  return "⚙️ Kikapcsolva az AI hozzászólás.";
+}
+
 function createButtons(ideaId, status = "Nyitott") {
   if (status === "Elfogadva") {
     return new ActionRowBuilder().addComponents(
@@ -328,6 +337,82 @@ function getSupportText(idea) {
   return `👍 ${support} • 👎 ${oppose} • 💬 ${neutral}`;
 }
 
+function buildFallbackIdeaSummaryText(idea) {
+  const parts = [];
+
+  if (idea.description) parts.push(idea.description);
+
+  if (idea.communityStatus && idea.communityStatus !== "nincs") {
+    parts.push(`Közösségi visszajelzés: ${idea.communityStatus}.`);
+  }
+
+  if (idea.communityNotes && idea.communityNotes !== "-") {
+    parts.push(idea.communityNotes);
+  }
+
+  const built = cleanupShortText(parts.filter(Boolean).join(" "), 520);
+  if (built && built !== "-") return built;
+
+  return cleanupShortText(
+    idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
+    520
+  );
+}
+
+async function aiRefreshIdeaSummaryFromComments(idea) {
+  if (!getState("ideas_ai_summary")) {
+    return buildAiSummaryDisabledText();
+  }
+
+  const fallback = buildFallbackIdeaSummaryText(idea);
+
+  if (!openai) {
+    return fallback;
+  }
+
+  const prompt = `
+Te egy Discord ötletkezelő rendszer rövid magyar összegzője vagy.
+
+Feladat:
+- írj 2-3 rövid, természetes magyar mondatot
+- ne legyen túl hivatalos
+- foglald össze röviden az ötlet lényegét
+- ha vannak kommentek, építsd bele röviden a közösségi visszajelzést is
+- ne használj felsorolást
+- ne írj regényt
+
+Ötlet címe:
+${idea.canonicalTitle || idea.title || "Ismeretlen ötlet"}
+
+Ötlet leírása:
+${idea.description || "Nincs leírás."}
+
+Közösségi hangulat:
+${idea.communityStatus || "nincs"}
+
+Kiemelt kommentek:
+${idea.communityNotes || "-"}
+
+Csak maga a szöveg legyen a válasz.
+`;
+
+  try {
+    const response = await openai.responses.create({
+      model: CONFIG.OPENAI_MODEL,
+      input: prompt,
+      reasoning: { effort: "low" },
+    });
+
+    const text = compactText(response.output_text || "");
+    if (!text) return fallback;
+
+    return cleanupShortText(text, 520);
+  } catch (error) {
+    console.error("[IDEAS] aiRefreshIdeaSummaryFromComments hiba:", error?.message || error);
+    return fallback;
+  }
+}
+
 // =========================
 // EMBED
 // =========================
@@ -339,10 +424,9 @@ function buildIdeaEmbed(idea) {
     520
   );
 
-  const aiShort = cleanupShortText(
-    idea.aiDecisionReason || idea.aiSummary || "Nincs rövid leírás.",
-    240
-  );
+  const aiShort = getState("ideas_ai_summary")
+    ? cleanupShortText(idea.aiSummary || "Nincs összefoglaló.", 240)
+    : buildAiSummaryDisabledText();
 
   const manualComment = compactText(idea.lastManualReason || "");
 
@@ -498,7 +582,12 @@ function buildForumFeedbackEmbed({ status, reason, handlerTag, idea }) {
       },
       {
         name: "🤖 AI hozzászólás",
-        value: limitText(reason || "-", 1024),
+        value: limitText(
+          !getState("ideas_ai_decisions")
+            ? buildAiCommentDisabledText()
+            : reason || "-",
+          1024
+        ),
         inline: false,
       },
       {
@@ -554,7 +643,7 @@ function getRecentTrainingExamples(data) {
 // AI - TAKARÉKOSAN
 // =========================
 async function aiGroupIdea({ title, description, openIdeas, trainingExamples }) {
-    if (!getState("ideas_ai_grouping")) {
+  if (!getState("ideas_ai_grouping")) {
     return null;
   }
   if (!openai || !CONFIG.USE_AI_GROUPING) return null;
@@ -828,9 +917,10 @@ function getFallbackDecisionReason(status, manualReason) {
 }
 
 async function aiDecisionReason({ idea, status, trainingExamples, manualReason = "" }) {
-    if (!getState("ideas_ai_decisions")) {
-    return getFallbackDecisionReason(status, manualReason);
+  if (!getState("ideas_ai_decisions")) {
+    return buildAiCommentDisabledText();
   }
+
   const fallback = getFallbackDecisionReason(status, manualReason);
 
   if (!openai || !CONFIG.USE_AI_DECISIONS) {
@@ -1011,7 +1101,7 @@ async function deleteIdeaAndThreads(client, ideaId) {
 }
 
 function scheduleDeletion(client, ideaId, deleteAt) {
-    if (!getState("ideas_enabled")) return;
+  if (!getState("ideas_enabled")) return;
   if (!deleteAt) return;
 
   if (deleteTimers.has(ideaId)) {
@@ -1144,7 +1234,8 @@ async function processForumReply(client, message) {
   const data = loadData();
   const idea = findIdeaByThreadId(data, thread.id);
   if (!idea) return;
-if (!getState("ideas_comment_insights")) return;
+  if (!getState("ideas_comment_insights")) return;
+
   ensureIdeaDefaults(idea);
 
   if (["Elfogadva", "Elutasítva"].includes(idea.status)) return;
@@ -1182,6 +1273,10 @@ if (!getState("ideas_comment_insights")) return;
   rebuildCommunityNotes(idea);
 
   try {
+    if (getState("ideas_ai_summary")) {
+      idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+    }
+
     const msg = await updateSummaryMessage(client, idea);
     if (msg) {
       idea.messageId = msg.id;
@@ -1219,6 +1314,7 @@ async function updateSummaryMessage(client, idea) {
 
   return await summaryChannel.send(payload);
 }
+
 async function rebuildAllIdeaSummaries(client) {
   const data = loadData();
 
@@ -1226,35 +1322,28 @@ async function rebuildAllIdeaSummaries(client) {
     ensureIdeaDefaults(idea);
 
     try {
-      if (typeof aiRefreshIdeaSummaryFromComments === "function") {
-        idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
-      } else {
-        idea.aiSummary = cleanupShortText(
-          [
-            idea.description || "",
-            idea.communityStatus && idea.communityStatus !== "nincs"
-              ? `Közösségi visszajelzés: ${idea.communityStatus}.`
-              : "",
-            idea.communityNotes && idea.communityNotes !== "-"
-              ? idea.communityNotes
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" "),
-          520
-        ) || "Nincs összefoglaló.";
-      }
+      idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
     } catch (error) {
       console.error("[IDEAS] rebuildAllIdeaSummaries aiSummary hiba:", error);
-      idea.aiSummary = cleanupShortText(
-        idea.description || idea.title || "Nincs összefoglaló.",
-        520
-      );
+      idea.aiSummary = getState("ideas_ai_summary")
+        ? buildFallbackIdeaSummaryText(idea)
+        : buildAiSummaryDisabledText();
     }
 
     if (!getState("ideas_ai_decisions")) {
-      idea.aiDecisionReason = "⚙️ Kikapcsolva az AI hozzászólás.";
+      idea.aiDecisionReason = buildAiCommentDisabledText();
+    } else if (idea.aiDecisionReason === buildAiCommentDisabledText()) {
+      if (idea.status === "Nyitott") {
+        idea.aiDecisionReason = "-";
+      } else {
+        idea.aiDecisionReason = getFallbackDecisionReason(
+          idea.status,
+          idea.lastManualReason || ""
+        );
+      }
     }
+
+    idea.updatedAt = Date.now();
 
     try {
       const msg = await updateSummaryMessage(client, idea);
@@ -1268,6 +1357,7 @@ async function rebuildAllIdeaSummaries(client) {
 
   saveData(data);
 }
+
 function getForumFeedbackRecord(idea, threadId) {
   if (!idea.threadFeedbackMessages || typeof idea.threadFeedbackMessages !== "object") {
     idea.threadFeedbackMessages = {};
@@ -1404,6 +1494,16 @@ async function processNewForumThread(client, thread) {
       idea.aiDecisionReason = result.decisionReason || idea.aiDecisionReason;
     }
 
+    if (getState("ideas_ai_summary")) {
+      try {
+        idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+      } catch (error) {
+        console.error("[IDEAS] processNewForumThread match aiSummary hiba:", error);
+      }
+    } else {
+      idea.aiSummary = buildAiSummaryDisabledText();
+    }
+
     try {
       const msg = await updateSummaryMessage(client, idea);
       if (msg) {
@@ -1434,12 +1534,16 @@ async function processNewForumThread(client, thread) {
 
   const ideaId = makeIdeaId();
 
+  const initialSummary = getState("ideas_ai_summary")
+    ? cleanupShortText(result.summary || description, 520)
+    : buildAiSummaryDisabledText();
+
   const idea = {
     id: ideaId,
     title,
     canonicalTitle: result.canonicalTitle || title,
     description,
-    aiSummary: cleanupShortText(result.summary || description, 520),
+    aiSummary: initialSummary,
     aiDecisionReason: cleanupShortText(
       result.decisionReason || "Új ötletként lett felvéve.",
       150
@@ -1464,6 +1568,14 @@ async function processNewForumThread(client, thread) {
     opposeCount: 0,
     neutralCount: 0,
   };
+
+  if (getState("ideas_ai_summary")) {
+    try {
+      idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+    } catch (error) {
+      console.error("[IDEAS] új ötlet aiSummary hiba:", error);
+    }
+  }
 
   data.ideas[ideaId] = idea;
 
@@ -1522,7 +1634,9 @@ async function handleStatusChange(client, interaction, ideaId, status, manualRea
     });
   } catch (error) {
     console.error("[IDEAS] aiDecisionReason hiba:", error);
-    reason = getFallbackDecisionReason(status, manualReason);
+    reason = getState("ideas_ai_decisions")
+      ? getFallbackDecisionReason(status, manualReason)
+      : buildAiCommentDisabledText();
   }
 
   idea.status = status;
@@ -1534,18 +1648,24 @@ async function handleStatusChange(client, interaction, ideaId, status, manualRea
   idea.lastForumFeedbackAt = Date.now();
   idea.lastForumFeedbackType = status;
 
-if (isFinal) {
-  idea.deleteAt = getState("ideas_enabled")
-    ? Date.now() + CONFIG.DELETE_AFTER_MS
-    : null;
+  if (isFinal) {
+    idea.deleteAt = getState("ideas_enabled")
+      ? Date.now() + CONFIG.DELETE_AFTER_MS
+      : null;
 
-  addTrainingExample(data, idea, status);
-} else {
-  idea.deleteAt = null;
-  clearDeletionSchedule(idea.id);
-}
+    addTrainingExample(data, idea, status);
+  } else {
+    idea.deleteAt = null;
+    clearDeletionSchedule(idea.id);
+  }
 
   try {
+    if (getState("ideas_ai_summary")) {
+      idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+    } else {
+      idea.aiSummary = buildAiSummaryDisabledText();
+    }
+
     const msg = await updateSummaryMessage(client, idea);
     if (msg) {
       idea.messageId = msg.id;
@@ -1637,6 +1757,7 @@ function registerIdeaSystem(client) {
     console.log("[IDEAS] Ötlet modul betöltve.");
     restoreDeletionSchedules(client);
   });
+
   client.on("systempanel:ideasAiChanged", async () => {
     try {
       await rebuildAllIdeaSummaries(client);
@@ -1645,8 +1766,9 @@ function registerIdeaSystem(client) {
       console.error("[IDEAS] AI refresh hiba:", error);
     }
   });
+
   client.on("threadCreate", async (thread) => {
-        if (!getState("ideas_enabled")) return;
+    if (!getState("ideas_enabled")) return;
     try {
       await processNewForumThread(client, thread);
     } catch (error) {
@@ -1655,7 +1777,7 @@ function registerIdeaSystem(client) {
   });
 
   client.on("messageCreate", async (message) => {
-        if (!getState("ideas_enabled")) return;
+    if (!getState("ideas_enabled")) return;
     try {
       await processForumReply(client, message);
     } catch (error) {
@@ -1664,7 +1786,8 @@ function registerIdeaSystem(client) {
   });
 
   client.on("interactionCreate", async (interaction) => {
-        if (!getState("ideas_enabled")) return;
+    if (!getState("ideas_enabled")) return;
+
     try {
       if (interaction.isButton()) {
         if (!interaction.customId.startsWith("idea:")) return;
@@ -1752,4 +1875,5 @@ function registerIdeaSystem(client) {
     }
   });
 }
+
 module.exports = { registerIdeaSystem };

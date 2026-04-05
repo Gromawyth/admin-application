@@ -1020,6 +1020,19 @@ await interaction.editReply({
   content: "✅ Az admin embedek frissítve lettek, a mentett értékelések megmaradtak."
 }).catch(() => {});
 }
+function registerAdminFeedbackEvents(client) {
+  client.on("systempanel:adminfeedbackAiSummaryChanged", async ({ guild }) => {
+    try {
+      if (!guild) return;
+
+      await rebuildAllSummaries(guild);
+
+      console.log("🔥 ADMINFEEDBACK FRISSÍTVE (AI toggle)");
+    } catch (err) {
+      console.error("❌ ADMINFEEDBACK HIBA:", err);
+    }
+  });
+}
 async function resetAdminSummary(client) {
   summaryData = {};
   summaryMessages = {};
@@ -1053,14 +1066,14 @@ async function resetAdminSummary(client) {
 
   saveData();
 }
-module.exports = {
-  sendPanel,
-  resetData,
-  rebuildEmbeds,
-  handleButton,
-  handleModal,
-  rebuildAllSummaries,
-  refreshPublicPanel,
-  registerAdminFeedbackEvents,
-  resetAdminSummary
-};
+  module.exports = {
+    sendPanel,
+    resetData,
+    rebuildEmbeds,
+    handleButton,
+    handleModal,
+    rebuildAllSummaries,
+    refreshPublicPanel,
+    registerAdminFeedbackEvents,
+    resetAdminSummary
+  };

@@ -78,6 +78,9 @@ systemPanel.registerSystemPanel(client);
 bugReport.registerBugReport(client);
 ideaSystem.registerIdeaSystem(client);
 aiModeration.registerAiModeration(client);
+if (typeof adminFeedback.registerAdminFeedbackEvents === "function") {
+  adminFeedback.registerAdminFeedbackEvents(client);
+}
 registerLogs(client);
 function safeValue(value) {
   if (value === null || value === undefined) return "Nincs megadva";
@@ -514,7 +517,15 @@ function buildTicketModal(typeKey) {
 
 async function registerCommands() {
   const commands = [
-
+new SlashCommandBuilder()
+  .setName("adminsummaryreset")
+  .setDescription("Admin összesítő nullázása")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+  .addStringOption(option =>
+    option.setName("kod")
+      .setDescription("Biztonsági kód")
+      .setRequired(true)
+  ),
     new SlashCommandBuilder()
   .setName("adminrebuild")
   .setDescription("Az admin értékelő embedek újraépítése adatvesztés nélkül")
@@ -1137,6 +1148,29 @@ if (
 }
 
     if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === "adminsummaryreset") {
+  const code = interaction.options.getString("kod");
+
+  if (code !== "Gromawyth123") {
+    return interaction.reply({
+      content: "❌ Hibás biztonsági kód.",
+      ephemeral: true
+    });
+  }
+
+  await interaction.reply({
+    content: "⚙️ Összesítő nullázása...",
+    ephemeral: true
+  });
+
+  const adminFeedback = require("./adminfeedback");
+
+  await adminFeedback.resetAdminSummary(client);
+
+  await interaction.editReply({
+    content: "✅ Admin összesítő sikeresen nullázva."
+  });
+}
       if (interaction.commandName === "adminpanel") {
         await adminFeedback.sendPanel(interaction);
         return;

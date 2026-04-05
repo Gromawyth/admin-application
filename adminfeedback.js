@@ -1020,6 +1020,42 @@ await interaction.editReply({
   content: "✅ Az admin embedek frissítve lettek, a mentett értékelések megmaradtak."
 }).catch(() => {});
 }
+async function resetAdminSummary(client) {
+  summaryData = {};
+  summaryMessages = {};
+
+  saveData();
+
+  const channel = await client.channels.fetch(SUMMARY_CHANNEL_ID).catch(() => null);
+  if (!channel) return;
+
+  // régi embedek törlése
+  try {
+    const messages = await channel.messages.fetch({ limit: 100 });
+    for (const msg of messages.values()) {
+      if (msg.author.id === client.user.id) {
+        await msg.delete().catch(() => null);
+      }
+    }
+  } catch (err) {}
+
+  // újraépítés
+  for (const admin of admins) {
+    await sendOrUpdateSummaryEmbed(client, admin);
+  }
+}
+function registerAdminFeedbackEvents(client) {
+  client.on("systempanel:adminfeedbackAiSummaryChanged", async ({ guild }) => {
+    try {
+      if (!guild) return;
+      await rebuildAllSummaries(guild);
+      console.log("[ADMINFEEDBACK] AI összegzés állapot változott, összesítők frissítve.");
+    } catch (error) {
+      console.error("[ADMINFEEDBACK] AI összegzés frissítési hiba:", error);
+    }
+  });
+}
+module.exports.resetAdminSummary = resetAdminSummary;
 module.exports = {
   sendPanel,
   resetData,
@@ -1027,5 +1063,6 @@ module.exports = {
   handleButton,
   handleModal,
   rebuildAllSummaries,
-  refreshPublicPanel
+  refreshPublicPanel,
+  registerAdminFeedbackEvents
 };

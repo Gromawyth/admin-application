@@ -1219,7 +1219,55 @@ async function updateSummaryMessage(client, idea) {
 
   return await summaryChannel.send(payload);
 }
+async function rebuildAllIdeaSummaries(client) {
+  const data = loadData();
 
+  for (const idea of Object.values(data.ideas || {})) {
+    ensureIdeaDefaults(idea);
+
+    try {
+      if (typeof aiRefreshIdeaSummaryFromComments === "function") {
+        idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+      } else {
+        idea.aiSummary = cleanupShortText(
+          [
+            idea.description || "",
+            idea.communityStatus && idea.communityStatus !== "nincs"
+              ? `Közösségi visszajelzés: ${idea.communityStatus}.`
+              : "",
+            idea.communityNotes && idea.communityNotes !== "-"
+              ? idea.communityNotes
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+          520
+        ) || "Nincs összefoglaló.";
+      }
+    } catch (error) {
+      console.error("[IDEAS] rebuildAllIdeaSummaries aiSummary hiba:", error);
+      idea.aiSummary = cleanupShortText(
+        idea.description || idea.title || "Nincs összefoglaló.",
+        520
+      );
+    }
+
+    if (!getState("ideas_ai_decisions")) {
+      idea.aiDecisionReason = "⚙️ Kikapcsolva az AI hozzászólás.";
+    }
+
+    try {
+      const msg = await updateSummaryMessage(client, idea);
+      if (msg) {
+        idea.messageId = msg.id;
+      }
+    } catch (error) {
+      console.error("[IDEAS] rebuildAllIdeaSummaries updateSummaryMessage hiba:", error);
+    }
+  }
+
+  saveData(data);
+}
 function getForumFeedbackRecord(idea, threadId) {
   if (!idea.threadFeedbackMessages || typeof idea.threadFeedbackMessages !== "object") {
     idea.threadFeedbackMessages = {};
@@ -1589,7 +1637,14 @@ function registerIdeaSystem(client) {
     console.log("[IDEAS] Ötlet modul betöltve.");
     restoreDeletionSchedules(client);
   });
-
+  client.on("systempanel:ideasAiChanged", async () => {
+    try {
+      await rebuildAllIdeaSummaries(client);
+      console.log("[IDEAS] AI állapot változott, summary frissítve.");
+    } catch (error) {
+      console.error("[IDEAS] AI refresh hiba:", error);
+    }
+  });
   client.on("threadCreate", async (thread) => {
         if (!getState("ideas_enabled")) return;
     try {
@@ -1697,5 +1752,9 @@ function registerIdeaSystem(client) {
     }
   });
 }
+const aiEnabled = getState("ideas_ai_grouping");
 
+if (!aiEnabled) {
+  idea.aiSummary = "⚙️ Kikapcsolva az AI megjegyzés.";
+}
 module.exports = { registerIdeaSystem };

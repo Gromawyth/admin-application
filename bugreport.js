@@ -389,11 +389,11 @@ function buildBugEmbed(bug) {
         value: bug.handler || "-",
         inline: true,
       },
-      {
-        name: "🧠 AI rövid leírás",
-        value: aiShort,
-        inline: false,
-      },
+{
+  name: getState("bugreport_ai_summary") ? "🧠 AI rövid leírás" : "🧠 Rövid leírás",
+  value: aiShort,
+  inline: false,
+},
       {
         name: "💬 Fórum visszajelzés",
         value: communityStatus,
@@ -1328,7 +1328,38 @@ async function updateSummaryMessage(client, bug) {
 
   return await summaryChannel.send(payload);
 }
+async function rebuildAllBugSummaries(client) {
+  const data = loadData();
 
+  for (const bug of Object.values(data.bugs || {})) {
+    ensureBugDefaults(bug);
+
+    try {
+      bug.aiSummary = await aiRefreshBugSummaryFromComments(bug);
+    } catch (error) {
+      console.error("[BUGREPORT] rebuildAllBugSummaries aiSummary hiba:", error);
+      bug.aiSummary = cleanupShortText(
+        bug.description || bug.title || "Nincs összefoglaló.",
+        420
+      );
+    }
+
+    if (!getState("bugreport_ai_summary")) {
+      bug.aiDecisionReason = "⚙️ Kikapcsolva az AI hozzászólás.";
+    }
+
+    try {
+      const msg = await updateSummaryMessage(client, bug);
+      if (msg) {
+        bug.messageId = msg.id;
+      }
+    } catch (error) {
+      console.error("[BUGREPORT] rebuildAllBugSummaries updateSummaryMessage hiba:", error);
+    }
+  }
+
+  saveData(data);
+}
 async function sendFeedbackToAllThreads(client, bug, status, reason, handlerTag) {
   for (const threadId of bug.threads || []) {
     try {
@@ -1653,7 +1684,14 @@ function registerBugReport(client) {
     console.log("[BUGREPORT] Bugreport modul betöltve.");
     restoreDeletionSchedules(client);
   });
-
+  client.on("systempanel:bugreportAiSummaryChanged", async () => {
+    try {
+      await rebuildAllBugSummaries(client);
+      console.log("[BUGREPORT] AI összegzés állapot változott, summary frissítve.");
+    } catch (error) {
+      console.error("[BUGREPORT] AI összegzés refresh hiba:", error);
+    }
+  });
   client.on("threadCreate", async (thread) => {
     if (!getState("bugreport_enabled")) return;
     try {
@@ -1772,5 +1810,9 @@ function registerBugReport(client) {
     }
   });
 }
+const aiEnabled = getState("bugreport_ai_summary");
 
+if (!aiEnabled) {
+  bug.aiSummary = "⚙️ Kikapcsolva az AI megjegyzés.";
+}
 module.exports = { registerBugReport };

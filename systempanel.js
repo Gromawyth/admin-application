@@ -844,9 +844,35 @@ async function handleToggleAction(interaction, key) {
   const after = !before;
   setState(key, after);
 
-if (key === "logs_daily_stats" || key === "logs_enabled") {
-  interaction.client.emit("systempanel:logsDailyStatsChanged");
-}
+  if (key === "logs_daily_stats" || key === "logs_enabled") {
+    interaction.client.emit("systempanel:logsDailyStatsChanged");
+  }
+
+  if (key === "adminfeedback_ai_summary") {
+    interaction.client.emit("systempanel:adminfeedbackAiSummaryChanged", {
+      guild: interaction.guild,
+      enabled: after,
+    });
+  }
+
+  if (key === "bugreport_ai_summary") {
+    interaction.client.emit("systempanel:bugreportAiSummaryChanged", {
+      guild: interaction.guild,
+      enabled: after,
+    });
+  }
+
+  if (
+    key === "ideas_ai_grouping" ||
+    key === "ideas_ai_decisions" ||
+    key === "ideas_comment_insights"
+  ) {
+    interaction.client.emit("systempanel:ideasAiChanged", {
+      guild: interaction.guild,
+      key,
+      enabled: after,
+    });
+  }
 
   await logControlAction(
     interaction,

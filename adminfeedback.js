@@ -45,18 +45,24 @@ const admins = [
     desc:
       "Nincs még bemutatkozás."
   },
-  {
-    id: "2",
-    name: "ItzWolfi",
-    level: "Head Administrator",
-    desc:
-"Sziasztok! ItzWolfi vagyok, de nyugodtan hívhattok simán Wolfinak is." +
-"A szerveren Head Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminisztrátori csapat koordinálása." +
-"Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni." +
-"Konfliktusos esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést." +
-"Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára." +
-"Tudni kell rólam, hogy így is hajlandó vagyok a legújabb játékosnak segíteni. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám."
-  },
+{
+  id: "2",
+  name: "ItzWolfi",
+  level: "Head Administrator",
+  desc: `
+> *Sziasztok! ItzWolfi vagyok, de nyugodtan hívhattok simán Wolfinak is.*
+>
+> *A szerveren Head Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminisztrátori csapat koordinálása.*
+>
+> *Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni.*
+>
+> *Konfliktus esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést.*
+>
+> *Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára.*
+>
+> *Tudni kell rólam, hogy a legújabb játékosnak is szívesen segítek. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám.*
+`
+},
   {
     id: "3",
     name: "Berkut",
@@ -369,17 +375,17 @@ function buildRulesEmbed() {
       {
         name: "⚖️ Alapelvek",
         value:
-          "▫️ Egy játékos havonta legfeljebb **3 értékelést** adhat ugyanarra az adminra.\n" +
-          "▫️ Az értékelésnek valódi tapasztalaton kell alapulnia.\n" +
-          "▫️ Indoklás nélkül vagy troll célból ne küldj értékelést.",
+          "• Egy játékos havonta legfeljebb **3 értékelést** adhat ugyanarra az adminra.\n" +
+          "• Az értékelésnek valódi tapasztalaton kell alapulnia.\n" +
+          "• Indoklás nélkül vagy troll célból ne küldj értékelést.",
         inline: false
       },
       {
         name: "🔍 Fontos tudnivalók",
         value:
-          "▫️ A válaszok a vezetőség számára láthatók.\n" +
-          "▫️ A visszaélések szankciót vonhatnak maguk után.\n" +
-          "▫️ Minden beküldés naplózásra kerül.",
+          "• A válaszok a vezetőség számára láthatók.\n" +
+          "• A visszaélések szankciót vonhatnak maguk után.\n" +
+          "• Minden beküldés naplózásra kerül.",
         inline: false
       }
     )
@@ -444,7 +450,7 @@ function buildSummaryEmbed(admin, stats, aiSummary) {
     .setColor(0x2b2d31)
     .setTitle(`📌 ${admin.name}`)
     .setDescription(
-      `🏷️ **Szint:** ${admin.level}\n` +
+      `🔺 **Szint:** ${admin.level}\n` +
       `🔄 **Állapot:** Folyamatosan frissülő összesítő`
     )
     .addFields(

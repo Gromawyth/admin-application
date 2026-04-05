@@ -107,7 +107,10 @@ const CONFIG = {
   BYPASS_EXTRA_POINTS: 12,
   REPLY_TARGET_BONUS_POINTS: 8,
 
-  DATA_FILE: path.join(__dirname, "aimoderation-data.json"),
+DATA_FILE: path.join(
+  process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname,
+  "aimoderation-data.json"
+),
 
   RULES: [
     "Tilos más felhasználók piszkálása, zaklatása, szidása, fenyegetése, lejáratása, abuzálása, kifigurázása.",

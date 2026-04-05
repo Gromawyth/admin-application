@@ -42,7 +42,15 @@ const CONFIG = {
   },
 };
 
-const DATA_FILE = path.join(__dirname, "bugreport-data.json");
+const fs = require("fs");
+const path = require("path");
+
+const DATA_DIR =
+  process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, "data");
+
+const DATA_FILE = path.join(DATA_DIR, "bugreport-data.json");
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const openai =
   CONFIG.OPENAI_API_KEY && !String(CONFIG.OPENAI_API_KEY).includes("IDE_IRD")

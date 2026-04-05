@@ -12,7 +12,12 @@ const {
   ChannelType
 } = require("discord.js");
 
-const DATA_FILE = path.join(__dirname, "systempanel-data.json");
+const DATA_DIR =
+  process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, "data");
+
+const DATA_FILE = path.join(DATA_DIR, "systempanel-data.json");
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const DEFAULT_STATE = {
   panelChannelId: null,

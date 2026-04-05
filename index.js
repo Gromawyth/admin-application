@@ -518,6 +518,17 @@ function buildTicketModal(typeKey) {
 async function registerCommands() {
   const commands = [
 new SlashCommandBuilder()
+  .setName("clearall")
+  .setDescription("Az adott csatorna összes üzenetének törlése")
+  .addStringOption(option =>
+    option
+      .setName("kod")
+      .setDescription("Biztonsági kód")
+      .setRequired(true)
+  )
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+new SlashCommandBuilder()
   .setName("adminsummaryreset")
   .setDescription("Admin összesítő nullázása")
   .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
@@ -1122,6 +1133,74 @@ async function handleTicketClose(interaction) {
 
 client.on("interactionCreate", async (interaction) => {
   try {
+
+if (interaction.commandName === "clearall") {
+  const kod = interaction.options.getString("kod");
+
+  if (kod !== "Gromawyth123") {
+    return interaction.reply({
+      content: "❌ Hibás kód!",
+      ephemeral: true,
+    });
+  }
+
+  await interaction.reply({
+    content: "🧹 Üzenetek törlése folyamatban...",
+    ephemeral: true,
+  });
+
+  const channel = interaction.channel;
+
+  if (!channel || !channel.isTextBased()) {
+    return interaction.followUp({
+      content: "❌ Ez nem szöveges csatorna.",
+      ephemeral: true,
+    });
+  }
+
+  let deleted = 0;
+
+  try {
+    while (true) {
+      const messages = await channel.messages.fetch({ limit: 100 });
+
+      if (!messages.size) break;
+
+      const deletable = messages.filter(
+        msg => Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
+      );
+
+      if (deletable.size > 0) {
+        await channel.bulkDelete(deletable, true);
+        deleted += deletable.size;
+      }
+
+      const oldMessages = messages.filter(
+        msg => Date.now() - msg.createdTimestamp >= 14 * 24 * 60 * 60 * 1000
+      );
+
+      for (const msg of oldMessages.values()) {
+        await msg.delete().catch(() => {});
+        deleted++;
+      }
+
+      if (messages.size < 100) break;
+    }
+
+    await interaction.followUp({
+      content: `✅ Kész! Törölt üzenetek száma: **${deleted}**`,
+      ephemeral: true,
+    });
+
+  } catch (err) {
+    console.error(err);
+    await interaction.followUp({
+      content: "❌ Hiba történt törlés közben.",
+      ephemeral: true,
+    });
+  }
+}
+
 if (
   interaction.isButton() &&
   (

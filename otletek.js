@@ -18,7 +18,7 @@ const { getState } = require("./systempanel");
 // KONFIG
 // =========================
 const CONFIG = {
-  IDEA_FORUM_CHANNEL_ID: "1462418887755829453",
+  IDEA_FORUM_CHANNEL_ID: "1490479607336538193",
   IDEA_SUMMARY_CHANNEL_ID: "1486143766988324995",
 
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,

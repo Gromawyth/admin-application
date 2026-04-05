@@ -360,10 +360,6 @@ function buildFallbackIdeaSummaryText(idea) {
 }
 
 async function aiRefreshIdeaSummaryFromComments(idea) {
-  if (!getState("ideas_ai_summary")) {
-    return buildAiSummaryDisabledText();
-  }
-
   const fallback = buildFallbackIdeaSummaryText(idea);
 
   if (!openai) {
@@ -419,10 +415,10 @@ Csak maga a szöveg legyen a válasz.
 function buildIdeaEmbed(idea) {
   const style = getStatusStyle(idea.status);
 
-  const summaryText = cleanupShortText(
-    idea.aiSummary || idea.description || "Nincs összefoglaló.",
-    520
-  );
+const summaryText = cleanupShortText(
+  idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
+  520
+);
 
   const aiShort = getState("ideas_ai_summary")
     ? cleanupShortText(idea.aiSummary || "Nincs összefoglaló.", 240)
@@ -1321,14 +1317,14 @@ async function rebuildAllIdeaSummaries(client) {
   for (const idea of Object.values(data.ideas || {})) {
     ensureIdeaDefaults(idea);
 
-    try {
-      idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
-    } catch (error) {
-      console.error("[IDEAS] rebuildAllIdeaSummaries aiSummary hiba:", error);
-      idea.aiSummary = getState("ideas_ai_summary")
-        ? buildFallbackIdeaSummaryText(idea)
-        : buildAiSummaryDisabledText();
-    }
+try {
+  if (getState("ideas_ai_summary")) {
+    idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+  }
+} catch (error) {
+  console.error("[IDEAS] rebuildAllIdeaSummaries aiSummary hiba:", error);
+  idea.aiSummary = buildFallbackIdeaSummaryText(idea);
+}
 
     if (!getState("ideas_ai_decisions")) {
       idea.aiDecisionReason = buildAiCommentDisabledText();
@@ -1494,15 +1490,13 @@ async function processNewForumThread(client, thread) {
       idea.aiDecisionReason = result.decisionReason || idea.aiDecisionReason;
     }
 
-    if (getState("ideas_ai_summary")) {
-      try {
-        idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
-      } catch (error) {
-        console.error("[IDEAS] processNewForumThread match aiSummary hiba:", error);
-      }
-    } else {
-      idea.aiSummary = buildAiSummaryDisabledText();
-    }
+if (getState("ideas_ai_summary")) {
+  try {
+    idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+  } catch (error) {
+    console.error("[IDEAS] processNewForumThread match aiSummary hiba:", error);
+  }
+}
 
     try {
       const msg = await updateSummaryMessage(client, idea);
@@ -1534,9 +1528,7 @@ async function processNewForumThread(client, thread) {
 
   const ideaId = makeIdeaId();
 
-  const initialSummary = getState("ideas_ai_summary")
-    ? cleanupShortText(result.summary || description, 520)
-    : buildAiSummaryDisabledText();
+const initialSummary = cleanupShortText(result.summary || description, 520);
 
   const idea = {
     id: ideaId,
@@ -1660,11 +1652,9 @@ async function handleStatusChange(client, interaction, ideaId, status, manualRea
   }
 
   try {
-    if (getState("ideas_ai_summary")) {
-      idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
-    } else {
-      idea.aiSummary = buildAiSummaryDisabledText();
-    }
+if (getState("ideas_ai_summary")) {
+  idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+}
 
     const msg = await updateSummaryMessage(client, idea);
     if (msg) {

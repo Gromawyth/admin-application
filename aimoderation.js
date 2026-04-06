@@ -2962,6 +2962,27 @@ async function applyDecision({
 
   let performed = false;
 
+if (final.action === "delete") {
+  if (message?.deletable) {
+    const deleted = await safeDeleteMessage(message).catch(() => false);
+
+    if (deleted) {
+      profile.totals.deletions = (profile.totals.deletions || 0) + 1;
+      performed = true;
+    }
+  }
+
+  if (performed) {
+    await sendSingleUserNotice({
+      message,
+      member,
+      profile,
+      final,
+    }).catch(() => null);
+  }
+
+  return performed;
+}
 
 if (final.action === "timeout") {
   if (message?.deletable) {
@@ -3006,22 +3027,29 @@ if (final.action === "timeout") {
   }
 }
 
-  if (final.action === "kick") {
-    if (message?.deletable) {
-      await safeDeleteMessage(message).catch(() => null);
-      profile.totals.deletions = (profile.totals.deletions || 0) + 1;
-    }
-
-    const ok = await safeKick(member, reasonText);
-    if (ok) {
-      profile.totals.kicks = (profile.totals.kicks || 0) + 1;
-      profile.suspicion = Math.max(
-        0,
-        Number(profile.suspicion || 0) + Number(final.suspicionGain || 0) + 10
-      );
-      performed = true;
-    }
+if (final.action === "kick") {
+  if (message?.deletable) {
+    await safeDeleteMessage(message).catch(() => null);
+    profile.totals.deletions = (profile.totals.deletions || 0) + 1;
   }
+
+  const dmSent = await sendKickDM(member.user, final, member, message, profile).catch(() => false);
+
+  const ok = await safeKick(member, reasonText);
+  if (ok) {
+    profile.totals.kicks = (profile.totals.kicks || 0) + 1;
+    profile.suspicion = Math.max(
+      0,
+      Number(profile.suspicion || 0) + Number(final.suspicionGain || 0) + 10
+    );
+
+    console.log(
+      `[AIMOD] Kick DM állapot ${member.user?.tag || member.id}: ${dmSent ? "elküldve" : "nem sikerült"}`
+    );
+
+    performed = true;
+  }
+}
 
 if (final.action === "ban") {
   if (message?.deletable) {

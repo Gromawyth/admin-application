@@ -517,6 +517,33 @@ function buildTicketModal(typeKey) {
 
 async function registerCommands() {
   const commands = [
+
+new SlashCommandBuilder()
+  .setName("mute")
+  .setDescription("Kézi timeout / mute egy játékosra")
+  .addUserOption(option =>
+    option
+      .setName("felhasznalo")
+      .setDescription("A némítandó játékos")
+      .setRequired(true)
+  )
+  .addIntegerOption(option =>
+    option
+      .setName("perc")
+      .setDescription("Hány percre kapjon mute-ot")
+      .setRequired(true)
+      .setMinValue(1)
+      .setMaxValue(10080)
+  )
+  .addStringOption(option =>
+    option
+      .setName("indok")
+      .setDescription("A némítás oka")
+      .setRequired(true)
+      .setMaxLength(500)
+  )
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
+
 new SlashCommandBuilder()
   .setName("clearall")
   .setDescription("Az adott csatorna összes üzenetének törlése")

@@ -567,7 +567,22 @@ function getRawRiskValue(profile) {
 function getRiskPercent(profile) {
   return Math.max(0, Math.min(100, Math.round(getRawRiskValue(profile))));
 }
+function getRiskBar(percent) {
+  const clamped = Math.max(0, Math.min(100, Number(percent || 0)));
 
+  const positive = 100 - clamped;
+  const negative = clamped;
+
+  const posBlocks = Math.round((positive / 100) * 10);
+  const negBlocks = 10 - posBlocks;
+
+  return "🟩".repeat(posBlocks) + "🟥".repeat(negBlocks);
+}
+
+function formatRiskBlock(profile) {
+  const risk = getRiskPercent(profile);
+  return `${getRiskBar(risk)}\n**${risk}%** (${getRiskBand(profile)})`;
+}
 function getRecentIncidentCounts(profile) {
   const current = now();
   let last7d = 0;
@@ -1839,59 +1854,49 @@ function buildUnifiedEmbed({ member, profile }) {
         inline: false,
       },
       {
-        name: "📌 Visszaesési minta",
-        value: trimField(active.lastPatternSummary || "Jelenleg nincs külön kiemelt mintázat.", 1024),
-        inline: false,
-      },
-      {
-        name: "📜 Érintett szabály",
-        value: trimField(active.lastRuleBroken || "Nincs megadva.", 1024),
+        name: "📜 Szabály / indok",
+        value:
+          `Szabály: **${trimField(active.lastRuleBroken || "-", 256)}**\n` +
+          `Indok: **${trimField(active.lastReason || "-", 256)}**`,
         inline: false,
       },
       {
         name: "📎 Bizonyíték",
-        value: trimField(active.lastEvidence || "Nincs külön bizonyíték összefoglaló.", 1024),
+        value:
+          `Utolsó üzenet: ${trimField(active.lastMessageContent || "-", 256)}\n` +
+          `Csatorna: ${active.lastChannelId ? `<#${active.lastChannelId}>` : "-"}\n` +
+          `Részletek: ${trimField(active.lastEvidence || "-", 256)}`,
         inline: false,
       },
       {
-        name: "💬 Vizsgált üzenet",
-        value: trimField(active.lastMessageContent || "Nincs vizsgált üzenet eltárolva.", 1024),
+        name: "📊 Kockázat",
+        value: formatRiskBlock(profile),
+        inline: true,
+      },
+      {
+        name: "🕵️ Suspicion",
+        value: `**${suspicion}%**`,
+        inline: true,
+      },
+      {
+        name: "⏭️ Várható következő lépés",
+        value: trimField(getExpectedSanction(profile), 1024),
         inline: false,
       },
       {
-        name: "🗂️ Korábbi problémás üzenetek",
-        value: trimField(previousMessages, 1024),
-        inline: false,
-      },
-      {
-        name: "📊 Jelenlegi állapot",
-        value: `Kockázat: **${currentRisk}%**\nSuspicion: **${suspicion}%**\nSzint: **${getRiskBand(profile)}**`,
+        name: "📚 Előzmények (7 / 30 nap)",
+        value: `${summaries.seven}\n\n${summaries.thirty}`,
         inline: true,
       },
       {
-        name: "🗓️ Előzmények - 7 nap",
-        value: trimField(summaries.seven, 1024),
-        inline: true,
-      },
-      {
-        name: "🗓️ Előzmények - 30 nap",
-        value: trimField(summaries.thirty, 1024),
-        inline: true,
-      },
-      {
-        name: "🔨 Korábbi műveletek",
+        name: "📦 Összes intézkedés",
         value: trimField(summaries.actions, 1024),
         inline: true,
       },
       {
-        name: "🛡️ Moderációs mód",
-        value: `Mód: **${trimField(active.lastModerationMode || "balanced", 64)}**\nShield: **${trimField(active.lastShieldReason || "-", 256)}**`,
-        inline: true,
-      },
-      {
-        name: "🎯 Reply / bypass",
-        value: `Reply célpont: **${trimField(active.lastReplyTarget || "-", 128)}**\nBypass score: **${Number(active.lastBypassScore || 0)}**`,
-        inline: true,
+        name: "🧾 Korábbi problémás üzenetek",
+        value: trimField(previousMessages, 1024),
+        inline: false,
       },
       {
         name: "♻️ Visszaesés",
@@ -2078,7 +2083,220 @@ async function sendUnbanDM(user, customReason = "") {
   return notifyUserDM(user, embed);
 }
 
-async function sendBanDM(user, final, member, message) {
+async function rewriteManualMuteReason(originalReason, minutes, moderatorTag) {
+  const fallback = cleanText(originalReason || "Szabálysértés miatt ideiglenes némítást kaptál.", 300);
+
+  if (!openai || !process.env.OPENAI_API_KEY) {
+    return fallback;
+  }
+
+  try {
+    const response = await openai.responses.create({
+      model: CONFIG.AI_MODEL,
+      input: `
+Te egy Discord moderációs rendszer rövid magyar válaszgenerátora vagy.
+
+Feladat:
+- az alábbi staff indokot írd át rövid, normális, emberi hangvételű szöveggé
+- ne legyen túl hivatalos
+- ne legyen fenyegető
+- 1-2 mondat legyen
+- maradjon egyértelmű, hogy miért kapott timeoutot
+- ne használj felsorolást
+
+Időtartam: ${minutes} perc
+Staff: ${moderatorTag}
+Eredeti indok: ${fallback}
+
+Csak a kész magyar szöveget add vissza.
+      `,
+      reasoning: { effort: "low" },
+    });
+
+    const text = cleanText(response.output_text || "", 350);
+    return text || fallback;
+  } catch (error) {
+    console.error("[AIMOD] manual mute reason rewrite hiba:", error?.message || error);
+    return fallback;
+  }
+}
+
+async function sendAiTimeoutDM(user, final, member, message, profile) {
+  const timeoutMinutes =
+    Number(final.timeoutMinutes || 0) > 0
+      ? Number(final.timeoutMinutes)
+      : Math.max(1, Math.round(timeoutMsForSeverity(final.severity) / 60000));
+
+  const text = await aiWriteUserFacingMessage({
+    mode: "timeout_notice",
+    context:
+      `A felhasználó AI moderáció által timeoutot kapott. ` +
+      `Időtartam: ${timeoutMinutes} perc. ` +
+      `Szabály: ${final.ruleBroken}. ` +
+      `Indok: ${final.reason}. ` +
+      `Kockázat: ${getRiskPercent(profile)}%.`,
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(colorBySeverity(final.severity))
+    .setTitle("🔇 Időkorlátozás / Timeout")
+    .setDescription(text)
+    .addFields(
+      {
+        name: "⏱️ Időtartam",
+        value: `**${timeoutMinutes} perc**`,
+        inline: true,
+      },
+      {
+        name: "📊 Jelenlegi kockázat",
+        value: formatRiskBlock(profile),
+        inline: true,
+      },
+      {
+        name: "⏭️ Mire számíthatsz?",
+        value: trimField(getExpectedSanction(profile), 1024),
+        inline: false,
+      },
+      {
+        name: "📜 Megszegett szabály",
+        value: trimField(final.ruleBroken, 1024),
+        inline: false,
+      },
+      {
+        name: "🧾 Indoklás",
+        value: trimField(final.reason, 1024),
+        inline: false,
+      },
+      {
+        name: "📎 Bizonyíték",
+        value: trimField(
+          `Üzenet: "${cleanText(message?.content || "", 220)}"\nCsatorna: #${
+            message?.channel?.name || "ismeretlen"
+          }\nFelhasználó: ${
+            member?.user?.tag || member?.user?.username || "ismeretlen"
+          }`,
+          1024
+        ),
+        inline: false,
+      }
+    )
+    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
+    .setTimestamp(new Date());
+
+  return notifyUserDM(user, embed);
+}
+
+async function sendManualMuteDM(user, { minutes, moderatorTag, originalReason, aiReason, profile, member = null }) {
+  const text = await aiWriteUserFacingMessage({
+    mode: "timeout_notice",
+    staffText: aiReason || originalReason,
+    context:
+      `A felhasználó kézi staff mute-ot kapott. ` +
+      `Időtartam: ${minutes} perc. ` +
+      `Végrehajtotta: ${moderatorTag}. ` +
+      `Eredeti staff indok: ${originalReason}.`,
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0xe67e22)
+    .setTitle("🔇 Némítás / Timeout")
+    .setDescription(text)
+    .addFields(
+      {
+        name: "⏱️ Időtartam",
+        value: `**${minutes} perc**`,
+        inline: true,
+      },
+      {
+        name: "👮 Kiosztotta",
+        value: moderatorTag || "Staff",
+        inline: true,
+      },
+      {
+        name: "📊 Jelenlegi kockázat",
+        value: formatRiskBlock(profile),
+        inline: false,
+      },
+      {
+        name: "⏭️ Mire számíthatsz?",
+        value: trimField(getExpectedSanction(profile), 1024),
+        inline: false,
+      },
+      {
+        name: "📜 Intézkedés oka",
+        value: trimField(aiReason || originalReason || "Nincs megadva", 1024),
+        inline: false,
+      },
+      {
+        name: "📎 Bizonyíték / háttér",
+        value: trimField(
+          `Kézi staff intézkedés történt.${member?.user?.tag ? `\nFelhasználó: ${member.user.tag}` : ""}\nEredeti indok: ${originalReason}`,
+          1024
+        ),
+        inline: false,
+      }
+    )
+    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
+    .setTimestamp(new Date());
+
+  return notifyUserDM(user, embed);
+}
+
+async function sendKickDM(user, final, member, message, profile) {
+  const text = await aiWriteUserFacingMessage({
+    mode: "kick_notice",
+    context:
+      `A felhasználó AI moderáció által kicket kapott. ` +
+      `Szabály: ${final.ruleBroken}. ` +
+      `Indok: ${final.reason}. ` +
+      `Kockázat: ${getRiskPercent(profile)}%.`,
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0xe74c3c)
+    .setTitle("👢 Kirúgás / Kick")
+    .setDescription(text)
+    .addFields(
+      {
+        name: "📊 Jelenlegi kockázat",
+        value: `**${getRiskPercent(profile)}%** (${getRiskBand(profile)})`,
+        inline: true,
+      },
+      {
+        name: "⏭️ Mire számíthatsz?",
+        value: trimField(getExpectedSanction(profile), 1024),
+        inline: true,
+      },
+      {
+        name: "📜 Megszegett szabály",
+        value: trimField(final.ruleBroken, 1024),
+        inline: false,
+      },
+      {
+        name: "🧾 Indoklás",
+        value: trimField(final.reason, 1024),
+        inline: false,
+      },
+      {
+        name: "📎 Bizonyíték",
+        value: trimField(
+          `Üzenet: "${cleanText(message?.content || "", 220)}"\nCsatorna: #${
+            message?.channel?.name || "ismeretlen"
+          }\nFelhasználó: ${
+            member?.user?.tag || member?.user?.username || "ismeretlen"
+          }`,
+          1024
+        ),
+        inline: false,
+      }
+    )
+    .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
+    .setTimestamp(new Date());
+
+  return notifyUserDM(user, embed);
+}
+
+async function sendBanDM(user, final, member, message, profile) {
   const text = await aiWriteUserFacingMessage({
     mode: "ban_notice",
     context: `A felhasználó AI moderáció által bannt kapott. Szabály: ${final.ruleBroken}. Indok: ${final.reason}.`,
@@ -2089,6 +2307,16 @@ async function sendBanDM(user, final, member, message) {
     .setTitle("🔨 Kitiltás")
     .setDescription(text)
     .addFields(
+      {
+        name: "📊 Jelenlegi kockázat",
+        value: formatRiskBlock(profile),
+        inline: false,
+      },
+      {
+        name: "⏭️ Mi várható később?",
+        value: trimField(getExpectedSanction(profile), 1024),
+        inline: false,
+      },
       {
         name: "📜 Megszegett szabály",
         value: trimField(final.ruleBroken, 1024),
@@ -2139,7 +2367,7 @@ async function sendDeleteNoticeInChannel(message, member, profile, final) {
         },
         {
           name: "📊 Kockázati szint",
-          value: `**${getRiskPercent(profile)}%** (${getRiskBand(profile)})`,
+          value: formatRiskBlock(profile),
           inline: true,
         },
         {
@@ -2177,22 +2405,35 @@ async function sendWarnNoticeInChannel(message, member, profile, final) {
   try {
     const noticeText = await aiWriteUserFacingMessage({
       mode: "warn_notice",
-      context: `Figyelmeztetés. Szabály: ${final.ruleBroken}. Indok: ${final.reason}. Kockázat: ${getRiskPercent(profile)}%.`,
+      context: `A felhasználó figyelmeztetést kapott. Szabály: ${final.ruleBroken}. Indok: ${final.reason}.`,
     });
 
     const embed = new EmbedBuilder()
-      .setColor(colorBySeverity(final.severity))
-      .setTitle("🟡 AI figyelmeztetés")
+      .setColor(0xf1c40f)
+      .setTitle("⚠️ Figyelmeztetés")
       .setDescription(noticeText)
       .addFields(
         {
-          name: "📜 Indok",
+          name: "📜 Miért kaptad?",
           value: trimField(final.reason, 1024),
           inline: false,
         },
         {
+          name: "📎 Bizonyíték",
+          value: trimField(
+            `Üzenet: "${cleanText(message?.content || "", 220)}"\nSzabály: ${final.ruleBroken}`,
+            1024
+          ),
+          inline: false,
+        },
+        {
           name: "📊 Kockázati szint",
-          value: `**${getRiskPercent(profile)}%** (${getRiskBand(profile)})`,
+          value: formatRiskBlock(profile),
+          inline: true,
+        },
+        {
+          name: "⏭️ Mi várható később?",
+          value: trimField(getExpectedSanction(profile), 1024),
           inline: true,
         }
       )
@@ -2240,7 +2481,9 @@ async function sendWatchNoticeInChannel(message, member, profile, final) {
         },
         {
           name: "📊 Kockázat / suspicion",
-          value: `Risk: **${getRiskPercent(profile)}%**\nSuspicion: **${getSuspicionValue(profile)}%**`,
+          value:
+            `${formatRiskBlock(profile)}\n` +
+            `Suspicion: **${getSuspicionValue(profile)}%**`,
           inline: true,
         }
       )
@@ -2359,22 +2602,48 @@ async function applyDecision({
     }
   }
 
-  if (final.action === "timeout") {
-    if (message?.deletable) {
-      await safeDeleteMessage(message).catch(() => null);
-      profile.totals.deletions = (profile.totals.deletions || 0) + 1;
-    }
-
-    const ok = await safeTimeout(member, final.timeoutMinutes, reasonText);
-    if (ok) {
-      profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
-      profile.suspicion = Math.max(
-        0,
-        Number(profile.suspicion || 0) + Number(final.suspicionGain || 0) + 6
-      );
-      performed = true;
-    }
+if (final.action === "timeout") {
+  if (message?.deletable) {
+    await safeDeleteMessage(message).catch(() => null);
+    profile.totals.deletions = (profile.totals.deletions || 0) + 1;
   }
+
+  const timeoutMinutes =
+    Number(final.timeoutMinutes || 0) > 0
+      ? Number(final.timeoutMinutes)
+      : getDynamicTimeoutMinutes({
+          severity: final.severity,
+          points: final.points,
+          projectedRisk: final.projectedRisk,
+          suspicion: getSuspicionValue(profile),
+          profile,
+          safeMode: getState("aimod_safe_mode"),
+        });
+
+  const dmSent = await sendAiTimeoutDM(
+    member.user,
+    { ...final, timeoutMinutes },
+    member,
+    message,
+    profile
+  ).catch(() => false);
+
+  const ok = await safeTimeout(member, timeoutMinutes, reasonText);
+
+  if (ok) {
+    profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
+    profile.suspicion = Math.max(
+      0,
+      Number(profile.suspicion || 0) + Number(final.suspicionGain || 0)
+    );
+
+    console.log(
+      `[AIMOD] Timeout DM állapot ${member.user?.tag || member.id}: ${dmSent ? "elküldve" : "nem sikerült"}`
+    );
+
+    performed = true;
+  }
+}
 
   if (final.action === "kick") {
     if (message?.deletable) {
@@ -2393,25 +2662,30 @@ async function applyDecision({
     }
   }
 
-  if (final.action === "ban") {
-    if (message?.deletable) {
-      await safeDeleteMessage(message).catch(() => null);
-      profile.totals.deletions = (profile.totals.deletions || 0) + 1;
-    }
-
-    const ok = await safeBan(member, reasonText, 0);
-    if (ok) {
-      profile.totals.bans = (profile.totals.bans || 0) + 1;
-      profile.suspicion = Math.max(
-        0,
-        Number(profile.suspicion || 0) + Number(final.suspicionGain || 0) + 16
-      );
-      await sendBanDM(member.user, final, member, message).catch(() => null);
-      performed = true;
-    }
+if (final.action === "ban") {
+  if (message?.deletable) {
+    await safeDeleteMessage(message).catch(() => null);
+    profile.totals.deletions = (profile.totals.deletions || 0) + 1;
   }
 
-  return performed;
+const dmSent = await sendBanDM(member.user, final, member, message, profile).catch(() => false);
+
+  const ok = await safeBan(member, reasonText, 0);
+  if (ok) {
+    profile.totals.bans = (profile.totals.bans || 0) + 1;
+    profile.suspicion = Math.max(
+      0,
+      Number(profile.suspicion || 0) + Number(final.suspicionGain || 0) + 16
+    );
+
+    console.log(
+      `[AIMOD] Ban DM állapot ${member.user?.tag || member.id}: ${dmSent ? "elküldve" : "nem sikerült"}`
+    );
+    performed = true;
+  }
+}
+
+return performed;
 }
 
 async function processMessage(client, message) {
@@ -2713,6 +2987,11 @@ async function handleSlashCommand(client, interaction) {
     return true;
   }
 
+  if (interaction.commandName === "mute") {
+    await handleMuteCommand(client, interaction);
+    return true;
+  }
+
   return false;
 }
 
@@ -2817,7 +3096,178 @@ async function handleDelAiWarnCommand(client, interaction) {
       `📊 Új kockázat: **${getRiskPercent(profile)}%**`,
   });
 }
+async function handleMuteCommand(client, interaction) {
+  if (!interaction.guild) {
+    await interaction.reply({
+      content: "Ez a parancs csak szerveren használható.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
+  if (!hasStaffPermission(interaction)) {
+    await interaction.reply({
+      content: "Ehhez staff jogosultság kell.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral,
+  });
+
+  const targetUser = interaction.options.getUser("felhasznalo", true);
+  const minutes = interaction.options.getInteger("perc", true);
+  const originalReason = cleanText(
+    interaction.options.getString("indok", true),
+    500
+  );
+
+  const member =
+    interaction.guild.members.cache.get(targetUser.id) ||
+    (await interaction.guild.members.fetch(targetUser.id).catch(() => null));
+
+  if (!member) {
+    await interaction.editReply({
+      content: "❌ Nem találom ezt a felhasználót a szerveren.",
+    });
+    return;
+  }
+
+  if (member.user?.bot) {
+    await interaction.editReply({
+      content: "❌ Botot nem tudsz ezzel a paranccsal némítani.",
+    });
+    return;
+  }
+
+  if (member.id === interaction.user.id) {
+    await interaction.editReply({
+      content: "❌ Magadat nem némíthatod ezzel a paranccsal.",
+    });
+    return;
+  }
+
+  if (isStaff(member) || hasExemptRole(member)) {
+    await interaction.editReply({
+      content: "❌ Staff vagy védett felhasználó nem némítható ezzel a paranccsal.",
+    });
+    return;
+  }
+
+  if (!member.moderatable) {
+    await interaction.editReply({
+      content:
+        "❌ Ezt a felhasználót nem tudom timeoutolni. Valószínűleg magasabb rangja van vagy hiányzik a jogosultság.",
+    });
+    return;
+  }
+
+  const aiReason = await rewriteManualMuteReason(
+    originalReason,
+    minutes,
+    interaction.user.tag
+  );
+
+  const ok = await safeTimeout(
+    member,
+    minutes,
+    `Kézi mute • ${interaction.user.tag}: ${originalReason}`
+  );
+
+  if (!ok) {
+    await interaction.editReply({
+      content: "❌ Nem sikerült a mute / timeout végrehajtása.",
+    });
+    return;
+  }
+
+  const profile = getUserProfile(member.id);
+
+  let manualPoints = 0;
+  if (minutes <= 10) manualPoints = 12;
+  else if (minutes <= 30) manualPoints = 18;
+  else if (minutes <= 60) manualPoints = 24;
+  else if (minutes <= 180) manualPoints = 32;
+  else manualPoints = 40;
+
+  const suspicionAdd = Math.min(20, Math.max(6, Math.round(manualPoints * 0.45)));
+
+  addIncident(member.id, {
+    createdAt: Date.now(),
+    action: "timeout",
+    category: "staff_manual_timeout",
+    severity:
+      minutes >= 180 ? "magas" :
+      minutes >= 60 ? "közepes" :
+      "enyhe",
+    points: manualPoints,
+    suspicion: suspicionAdd,
+    confidence: 100,
+    source: "staff_manual",
+    reason: originalReason,
+    aiReason,
+    moderatorId: interaction.user.id,
+    moderatorTag: interaction.user.tag,
+    durationMinutes: minutes,
+  });
+
+  profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
+  profile.suspicion = Math.max(0, Number(profile.suspicion || 0)) + suspicionAdd;
+
+  profile.activeCase = {
+    ...(profile.activeCase || {}),
+    lastAction: `Kézi mute (${minutes} perc)`,
+    lastActionRaw: "timeout",
+    lastReason: aiReason || originalReason,
+    lastCategory: "Kézi staff timeout",
+    lastSeverity:
+      minutes >= 180 ? "magas" :
+      minutes >= 60 ? "közepes" :
+      "enyhe",
+    lastAnalysis:
+      `A felhasználó kézi mute-ot kapott ${minutes} percre. ` +
+      `Staff indok: ${originalReason}. AI átírt indok: ${aiReason}`,
+    lastPatternSummary: `Kézi staff beavatkozás ${interaction.user.tag} által.`,
+    lastRuleBroken: originalReason,
+    lastMessageContent: "-",
+    lastMessageId: null,
+    lastChannelId: interaction.channelId,
+    lastProjectedRisk: getRiskPercent(profile),
+    lastEvidence:
+      `Kézi mute • ${minutes} perc • Staff: ${interaction.user.tag} • Indok: ${originalReason}`,
+    lastModerationMode: "manual",
+    lastShieldReason: "",
+    lastBypassScore: 0,
+    lastReplyTarget: "",
+    lastUpdatedAt: Date.now(),
+    currentStatus: "Kézi mute / timeout",
+  };
+
+  saveStore();
+
+const dmSent = await sendManualMuteDM(member.user, {
+  minutes,
+  moderatorTag: interaction.user.tag,
+  originalReason,
+  aiReason,
+  profile,
+  member,
+}).catch(() => false);
+
+  await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+
+  await interaction.editReply({
+    content:
+      `✅ ${member.user.tag} némítva lett **${minutes}** percre.\n` +
+      `📄 Eredeti indok: ${originalReason}\n` +
+      `🤖 AI indok: ${aiReason}\n` +
+      `📈 Hozzáadott pont: **${manualPoints}**\n` +
+      `📊 Új risk:\n${formatRiskBlock(profile)}\n` +
+      `✉️ DM állapot: ${dmSent ? "✅ elküldve" : "⚠️ nem sikerült elküldeni"}`,
+  });
+}
 async function handleInteraction(client, interaction) {
   try {
     if (interaction.isButton()) {

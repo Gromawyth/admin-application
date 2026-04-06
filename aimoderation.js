@@ -3059,8 +3059,8 @@ return performed;
 
 async function processMessage(client, message) {
   try {
-  if (!getState("aimod_enabled")) return;
-  if (shouldIgnoreMessage(message)) return;
+    if (!getState("aimod_enabled")) return;
+    if (shouldIgnoreMessage(message)) return;
 
     const member =
       message.member ||
@@ -3087,7 +3087,12 @@ async function processMessage(client, message) {
         channelId: m.channelId,
       }));
 
-    const shield = falsePositiveShield(message, ruleScan, contextMessages, replyTarget);
+    const shield = falsePositiveShield(
+      message,
+      ruleScan,
+      contextMessages,
+      replyTarget
+    );
 
     if (shield.block) {
       profile.totals.shields = (profile.totals.shields || 0) + 1;
@@ -3157,199 +3162,367 @@ async function processMessage(client, message) {
       aiResult = {
         category: highestCategoryFromRule(ruleScan.hits),
         categoryHu: categoryToHu(highestCategoryFromRule(ruleScan.hits)),
-        severity: ruleScan.score >= 70 ? "magas" : ruleScan.score >= 35 ? "közepes" : "enyhe",
+        severity:
+          ruleScan.score >= 70
+            ? "magas"
+            : ruleScan.score >= 35
+              ? "közepes"
+              : "enyhe",
         confidence: Math.min(95, 35 + ruleScan.score),
         points: ruleScan.score,
-        ruleBroken: pickHighestRuleHit(ruleScan.hits)?.label || "Szabályszegés gyanú",
+        ruleBroken:
+          pickHighestRuleHit(ruleScan.hits)?.label || "Szabályszegés gyanú",
         reason: "A szabályalapú ellenőrzés problémás mintát talált.",
-        analysis: "A rendszer AI nélkül is egyértelmű szabálytalansági mintát talált a tartalomban.",
+        analysis:
+          "A rendszer AI nélkül is egyértelmű szabálytalansági mintát talált a tartalomban.",
         patternSummary: "Szabályalapú minta alapján detektált tartalom.",
         recommendedAction:
-          ruleScan.score >= 65 ? "timeout" : ruleScan.score >= 25 ? "delete" : "warn",
+          ruleScan.score >= 65
+            ? "timeout"
+            : ruleScan.score >= 25
+              ? "delete"
+              : "warn",
         timeoutMinutes: 0,
         shouldNotifyStaff: ruleScan.score >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG,
       };
     } else {
       return;
     }
-  if (isTargetedDegradingMessage(message.content)) {
- const repeatCount = countRecentTargetedInsults(profile, message.content || "");
 
-if (isTargetedDegradingMessage(message.content || "")) {
-  let forcedAction = "delete";
-  let severity = "enyhe";
-  let points = 42;
-  let suspicionGain = 8;
+    const currentRisk = getRiskPercent(profile);
+    const currentSuspicion = getSuspicionValue(profile);
 
-  if (repeatCount >= 1) {
-    forcedAction = "delete";
-    severity = "közepes";
-    points = 50;
-    suspicionGain = 12;
-  }
+    // =========================
+    // KÜLÖN ÁG: CÉLZOTT OBSZCÉN MINŐSÍTÉS
+    // =========================
+    if (isTargetedDegradingMessage(message.content || "")) {
+      const repeatCount = countRecentTargetedInsults(
+        profile,
+        message.content || ""
+      );
 
-  if (repeatCount >= 2) {
-    forcedAction = "warn";
-    severity = "közepes";
-    points = 56;
-    suspicionGain = 15;
-  }
+      let forcedAction = "delete";
+      let severity = "enyhe";
+      let points = 42;
+      let suspicionGain = 8;
 
-  if (repeatCount >= 3) {
-    forcedAction = "timeout";
-    severity = "közepes";
-    points = 68;
-    suspicionGain = 18;
-  }
+      if (repeatCount >= 1) {
+        forcedAction = "delete";
+        severity = "közepes";
+        points = 50;
+        suspicionGain = 12;
+      }
 
-  if (repeatCount >= 5) {
-    forcedAction = "kick";
-    severity = "magas";
-    points = 82;
-    suspicionGain = 24;
-  }
+      if (repeatCount >= 2) {
+        forcedAction = "delete";
+        severity = "közepes";
+        points = 58;
+        suspicionGain = 16;
+      }
 
-  if (repeatCount >= 7) {
-    forcedAction = "ban";
-    severity = "kritikus";
-    points = 96;
-    suspicionGain = 30;
-  }
+      if (repeatCount >= 3) {
+        forcedAction = "timeout";
+        severity = "közepes";
+        points = 68;
+        suspicionGain = 20;
+      }
 
-  const timeoutMinutes =
-    forcedAction === "timeout"
-      ? getDynamicTimeoutMinutes({
-          severity,
-          points,
-          projectedRisk: getRiskPercent(profile),
-          suspicion: getSuspicionValue(profile),
-          profile,
-          safeMode: getState("aimod_safe_mode"),
-        })
-      : 0;
+      if (repeatCount >= 5) {
+        forcedAction = "kick";
+        severity = "magas";
+        points = 82;
+        suspicionGain = 26;
+      }
 
-  const final = {
-    action: normalizeExclusiveAction(forcedAction),
-    category: "staff_abuse",
-    categoryHu: "Célzott szidalmazás / minősítés",
-    severity,
-    confidence: 92,
-    points,
-    projectedRisk: getRiskPercent(profile),
-    suspicionGain,
-    ruleBroken: "Célzott obszcén minősítés vagy szidalmazás.",
-    reason: "A rendszer célzott, sértő minősítést talált valakire vagy valamire.",
-    analysis:
-      repeatCount >= 2
-        ? "A felhasználó ismétlődően célzott obszcén minősítést használ."
-        : "A felhasználó célzott obszcén minősítést használt.",
-    patternSummary:
-      repeatCount >= 1
-        ? `Ismétlődő célzott minősítés (${repeatCount + 1}. eset rövid időn belül).`
-        : "Egyszeri célzott minősítés.",
-    shouldNotifyStaff: true,
-    moderationMode: getModerationMode(),
-    shieldReason: "",
-    bypassScore: 0,
-    replyTarget: "",
-    timeoutMinutes,
-  };
-}
+      if (repeatCount >= 7) {
+        forcedAction = "ban";
+        severity = "kritikus";
+        points = 96;
+        suspicionGain = 32;
+      }
 
-    const performed = await applyDecision({
-      client,
-      message,
-      member,
-      profile,
-      final,
-    });
+      if (getState("aimod_safe_mode")) {
+        if (forcedAction === "ban") forcedAction = "kick";
+        else if (forcedAction === "kick") forcedAction = "timeout";
+      }
 
-    if (!performed) return;
+      const timeoutMinutes =
+        forcedAction === "timeout"
+          ? getDynamicTimeoutMinutes({
+              severity,
+              points,
+              projectedRisk: currentRisk,
+              suspicion: currentSuspicion,
+              profile,
+              safeMode: getState("aimod_safe_mode"),
+            })
+          : 0;
 
-    addIncident(member.id, {
-      type: final.action,
-      createdAt: now(),
-      points: final.points,
-      suspicion: final.suspicionGain,
-      severity: final.severity,
-      category: final.category,
-      content: cleanText(message.content || "", 500),
-      messageId: message.id,
-      channelId: message.channelId,
-      confidence: final.confidence,
-      moderationMode: final.moderationMode,
-    });
+      const final = {
+        action: normalizeExclusiveAction(forcedAction),
+        category: "staff_abuse",
+        categoryHu: "Célzott szidalmazás / minősítés",
+        severity,
+        confidence: 92,
+        points,
+        projectedRisk: currentRisk,
+        suspicionGain,
+        ruleBroken: "Célzott obszcén minősítés vagy szidalmazás.",
+        reason:
+          "A rendszer célzott, sértő minősítést talált valakire vagy valamire.",
+        analysis:
+          repeatCount >= 2
+            ? "A felhasználó ismétlődően célzott obszcén minősítést használ."
+            : "A felhasználó célzott obszcén minősítést használt.",
+        patternSummary:
+          repeatCount >= 1
+            ? `Ismétlődő célzott minősítés (${repeatCount + 1}. eset rövid időn belül).`
+            : "Egyszeri célzott minősítés.",
+        shouldNotifyStaff: true,
+        moderationMode: getModerationMode(),
+        shieldReason: "",
+        bypassScore: Number(bypass?.score || 0),
+        replyTarget: replyTarget?.targetTag || "",
+        timeoutMinutes,
+        behaviorLabels: [],
+      };
 
-    saveStore();
-    await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
-    return;
-  }
+      const performed = await applyDecision({
+        client,
+        message,
+        member,
+        profile,
+        final,
+      });
 
-if (!isTargetedDegradingMessage(message.content || "") && isContextualProfanity(message.content || "")) {
-  const mildRepeatCount = (profile.recentMessages || []).filter((m) => {
-    const sameWindow = Date.now() - Number(m.createdAt || 0) <= 10 * 60 * 1000;
-    if (!sameWindow) return false;
-    return isContextualProfanity(m.content || "");
-  }).length;
+      if (!performed) return;
 
-  let forcedAction = "warn";
-  let severity = "enyhe";
-  let points = 18;
-  let suspicionGain = 4;
+      profile.behaviorScore = Math.max(
+        0,
+        Number(profile.behaviorScore || 0) + Math.round(final.points / 8)
+      );
+      profile.escalationLevel = getEscalationTrend(profile).level;
 
-  if (mildRepeatCount >= 2) {
-    forcedAction = "delete";
-    points = 26;
-    suspicionGain = 8;
-  }
+      addIncident(member.id, {
+        type: final.action,
+        createdAt: now(),
+        points: final.points,
+        suspicion: final.suspicionGain,
+        severity: final.severity,
+        category: final.category,
+        content: cleanText(message.content || "", 500),
+        messageId: message.id,
+        channelId: message.channelId,
+        confidence: final.confidence,
+        moderationMode: final.moderationMode,
+      });
 
-  if (mildRepeatCount >= 4) {
-    forcedAction = "timeout";
-    severity = "közepes";
-    points = 42;
-    suspicionGain = 12;
-  }
+      setActiveCase(profile, {
+        lastAction: actionToLabel(final.action),
+        lastActionRaw: final.action,
+        lastReason: final.reason,
+        lastCategory: final.categoryHu,
+        lastSeverity: final.severity,
+        lastAnalysis: final.analysis,
+        lastPatternSummary: final.patternSummary,
+        lastRuleBroken: final.ruleBroken,
+        lastMessageContent: cleanText(message.content || "", 1000),
+        lastMessageId: message.id,
+        lastChannelId: message.channelId,
+        lastProjectedRisk: final.projectedRisk,
+        lastEvidence: buildEvidenceText(
+          message,
+          ruleScan,
+          final,
+          bypass,
+          replyTarget
+        ),
+        lastModerationMode: final.moderationMode,
+        lastShieldReason: final.shieldReason,
+        lastBypassScore: final.bypassScore,
+        lastReplyTarget: final.replyTarget,
+        currentStatus:
+          final.action === "ban"
+            ? "Kitiltva"
+            : final.action === "kick"
+              ? "Kirúgva"
+              : final.action === "timeout"
+                ? "Időkorlátozva"
+                : final.action === "delete"
+                  ? "Üzenet törölve"
+                  : final.action === "warn"
+                    ? "Figyelmeztetve"
+                    : final.action === "watch"
+                      ? "Megfigyelés alatt"
+                      : "Megfigyelés",
+      });
 
-  const timeoutMinutes =
-    forcedAction === "timeout"
-      ? getDynamicTimeoutMinutes({
-          severity,
-          points,
-          projectedRisk: currentRisk,
-          suspicion: currentSuspicion,
-          profile,
-          safeMode: getState("aimod_safe_mode"),
-        })
-      : 0;
+      saveStore();
 
-  final = {
-    action: normalizeExclusiveAction(forcedAction),
-    category: "harassment",
-    categoryHu: "Nyers, trágár kommunikáció",
-    severity,
-    confidence: 84,
-    points,
-    projectedRisk: currentRisk,
-    suspicionGain,
-    ruleBroken: "Indokolatlanul trágár kommunikáció.",
-    reason: "A rendszer nem célzott, de nyers és közösségromboló megfogalmazást talált.",
-    analysis:
-      mildRepeatCount >= 2
-        ? "A felhasználó rövid időn belül többször használ trágár megfogalmazást."
-        : "A felhasználó nyers, trágár megfogalmazást használt.",
-    patternSummary:
-      mildRepeatCount >= 2
-        ? `Ismétlődő nyers beszéd (${mildRepeatCount + 1}. eset rövid időn belül).`
-        : "Egyszeri nyers beszéd.",
-    shouldNotifyStaff: false,
-    moderationMode: getModerationMode(),
-    shieldReason: "",
-    bypassScore: Number(bypass?.score || 0),
-    replyTarget: replyTarget?.targetTag || "",
-    timeoutMinutes,
-  };
-}
+      if (
+        final.shouldNotifyStaff ||
+        final.points >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG
+      ) {
+        await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+      }
 
+      return;
+    }
+
+    // =========================
+    // KÜLÖN ÁG: ENYHE, NEM CÉLZOTT TRÁGÁRSÁG
+    // =========================
+    if (
+      !isTargetedDegradingMessage(message.content || "") &&
+      isContextualProfanity(message.content || "")
+    ) {
+      const mildRepeatCount = (profile.recentMessages || []).filter((m) => {
+        const sameWindow =
+          Date.now() - Number(m.createdAt || 0) <= 10 * 60 * 1000;
+        if (!sameWindow) return false;
+        return isContextualProfanity(m.content || "");
+      }).length;
+
+      let forcedAction = "warn";
+      let severity = "enyhe";
+      let points = 18;
+      let suspicionGain = 4;
+
+      if (mildRepeatCount >= 2) {
+        forcedAction = "delete";
+        points = 26;
+        suspicionGain = 8;
+      }
+
+      if (mildRepeatCount >= 4) {
+        forcedAction = "timeout";
+        severity = "közepes";
+        points = 42;
+        suspicionGain = 12;
+      }
+
+      if (getState("aimod_safe_mode") && forcedAction === "timeout") {
+        forcedAction = "delete";
+      }
+
+      const timeoutMinutes =
+        forcedAction === "timeout"
+          ? getDynamicTimeoutMinutes({
+              severity,
+              points,
+              projectedRisk: currentRisk,
+              suspicion: currentSuspicion,
+              profile,
+              safeMode: getState("aimod_safe_mode"),
+            })
+          : 0;
+
+      const final = {
+        action: normalizeExclusiveAction(forcedAction),
+        category: "harassment",
+        categoryHu: "Nyers, trágár kommunikáció",
+        severity,
+        confidence: 84,
+        points,
+        projectedRisk: currentRisk,
+        suspicionGain,
+        ruleBroken: "Indokolatlanul trágár kommunikáció.",
+        reason:
+          "A rendszer nem célzott, de nyers és közösségromboló megfogalmazást talált.",
+        analysis:
+          mildRepeatCount >= 2
+            ? "A felhasználó rövid időn belül többször használ trágár megfogalmazást."
+            : "A felhasználó nyers, trágár megfogalmazást használt.",
+        patternSummary:
+          mildRepeatCount >= 2
+            ? `Ismétlődő nyers beszéd (${mildRepeatCount + 1}. eset rövid időn belül).`
+            : "Egyszeri nyers beszéd.",
+        shouldNotifyStaff: false,
+        moderationMode: getModerationMode(),
+        shieldReason: "",
+        bypassScore: Number(bypass?.score || 0),
+        replyTarget: replyTarget?.targetTag || "",
+        timeoutMinutes,
+        behaviorLabels: [],
+      };
+
+      const performed = await applyDecision({
+        client,
+        message,
+        member,
+        profile,
+        final,
+      });
+
+      if (!performed) return;
+
+      profile.behaviorScore = Math.max(
+        0,
+        Number(profile.behaviorScore || 0) + Math.round(final.points / 8)
+      );
+      profile.escalationLevel = getEscalationTrend(profile).level;
+
+      addIncident(member.id, {
+        type: final.action,
+        createdAt: now(),
+        points: final.points,
+        suspicion: final.suspicionGain,
+        severity: final.severity,
+        category: final.category,
+        content: cleanText(message.content || "", 500),
+        messageId: message.id,
+        channelId: message.channelId,
+        confidence: final.confidence,
+        moderationMode: final.moderationMode,
+      });
+
+      setActiveCase(profile, {
+        lastAction: actionToLabel(final.action),
+        lastActionRaw: final.action,
+        lastReason: final.reason,
+        lastCategory: final.categoryHu,
+        lastSeverity: final.severity,
+        lastAnalysis: final.analysis,
+        lastPatternSummary: final.patternSummary,
+        lastRuleBroken: final.ruleBroken,
+        lastMessageContent: cleanText(message.content || "", 1000),
+        lastMessageId: message.id,
+        lastChannelId: message.channelId,
+        lastProjectedRisk: final.projectedRisk,
+        lastEvidence: buildEvidenceText(
+          message,
+          ruleScan,
+          final,
+          bypass,
+          replyTarget
+        ),
+        lastModerationMode: final.moderationMode,
+        lastShieldReason: final.shieldReason,
+        lastBypassScore: final.bypassScore,
+        lastReplyTarget: final.replyTarget,
+        currentStatus:
+          final.action === "timeout"
+            ? "Időkorlátozva"
+            : final.action === "delete"
+              ? "Üzenet törölve"
+              : "Figyelmeztetve",
+      });
+
+      saveStore();
+
+      if (
+        final.shouldNotifyStaff ||
+        final.points >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG
+      ) {
+        await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+      }
+
+      return;
+    }
+
+    // =========================
+    // NORMÁL ÁG
+    // =========================
     const final = finalDecision({
       profile,
       ruleScan,
@@ -3375,7 +3548,13 @@ if (!isTargetedDegradingMessage(message.content || "") && isContextualProfanity(
           lastMessageId: message.id,
           lastChannelId: message.channelId,
           lastProjectedRisk: final.projectedRisk,
-          lastEvidence: buildEvidenceText(message, ruleScan, final, bypass, replyTarget),
+          lastEvidence: buildEvidenceText(
+            message,
+            ruleScan,
+            final,
+            bypass,
+            replyTarget
+          ),
           lastModerationMode: final.moderationMode,
           lastShieldReason: final.shieldReason,
           lastBypassScore: final.bypassScore,
@@ -3431,7 +3610,13 @@ if (!isTargetedDegradingMessage(message.content || "") && isContextualProfanity(
       lastMessageId: message.id,
       lastChannelId: message.channelId,
       lastProjectedRisk: final.projectedRisk,
-      lastEvidence: buildEvidenceText(message, ruleScan, final, bypass, replyTarget),
+      lastEvidence: buildEvidenceText(
+        message,
+        ruleScan,
+        final,
+        bypass,
+        replyTarget
+      ),
       lastModerationMode: final.moderationMode,
       lastShieldReason: final.shieldReason,
       lastBypassScore: final.bypassScore,
@@ -3454,7 +3639,10 @@ if (!isTargetedDegradingMessage(message.content || "") && isContextualProfanity(
 
     saveStore();
 
-    if (final.shouldNotifyStaff || final.points >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG) {
+    if (
+      final.shouldNotifyStaff ||
+      final.points >= CONFIG.MIN_INCIDENT_SCORE_FOR_LOG
+    ) {
       await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
     }
   } catch (error) {
@@ -3806,7 +3994,7 @@ const dmSent = await sendManualMuteDM(member.user, {
       `✉️ DM állapot: ${dmSent ? "✅ elküldve" : "⚠️ nem sikerült elküldeni"}`,
   });
 }
-async function handleInteraction(client, interaction) {
+async function handleInteraction(client, interaction) { // idáig!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   try {
     if (interaction.isButton()) {
       if (!interaction.customId.startsWith("aimod:")) return;

@@ -225,6 +225,19 @@ function getUserProfile(userId) {
       suspicion: 0,
       behaviorScore: 0,
       escalationLevel: 0,
+      lastIncidentAt: 0,
+      noticeState: {
+        lastNoticeAt: 0,
+        lastNoticeAction: "",
+        lastNoticeMessageId: null,
+      },
+      rehab: {
+        score: 0,
+        goodDays: 0,
+        level: "nincs",
+        lastCheckAt: 0,
+        lastImprovedAt: 0,
+      },
       activeCase: {
         lastAction: "Nincs",
         lastActionRaw: "ignore",
@@ -269,6 +282,14 @@ function getUserProfile(userId) {
   if (typeof profile.suspicion !== "number") profile.suspicion = 0;
   if (typeof profile.behaviorScore !== "number") profile.behaviorScore = 0;
   if (typeof profile.escalationLevel !== "number") profile.escalationLevel = 0;
+  if (typeof profile.lastIncidentAt !== "number") profile.lastIncidentAt = 0;
+
+  profile.noticeState = {
+    lastNoticeAt: 0,
+    lastNoticeAction: "",
+    lastNoticeMessageId: null,
+    ...(profile.noticeState || {}),
+  };
 
   profile.activeCase = {
     lastAction: "Nincs",
@@ -306,6 +327,15 @@ function getUserProfile(userId) {
     ...(profile.totals || {}),
   };
 
+  profile.rehab = {
+    score: 0,
+    goodDays: 0,
+    level: "nincs",
+    lastCheckAt: 0,
+    lastImprovedAt: 0,
+    ...(profile.rehab || {}),
+  };
+
   return profile;
 }
 
@@ -332,6 +362,14 @@ function addIncident(userId, incident) {
   if (profile.incidents.length > CONFIG.MAX_PROFILE_INCIDENTS) {
     profile.incidents = profile.incidents.slice(-CONFIG.MAX_PROFILE_INCIDENTS);
   }
+
+  profile.lastIncidentAt = Date.now();
+
+  profile.rehab = profile.rehab || {};
+  profile.rehab.score = Math.max(0, Number(profile.rehab.score || 0) - 18);
+  profile.rehab.goodDays = 0;
+  profile.rehab.level = "visszaeső";
+  profile.rehab.lastCheckAt = Date.now();
 }
 
 function isStaff(member) {
@@ -561,10 +599,19 @@ function getRawRiskValue(profile) {
   risk += (profile.totals?.bans || 0) * 35;
   risk -= (profile.totals?.forgiveness || 0) * 10;
 
+  const rehabScore = Number(profile.rehab?.score || 0);
+  risk -= rehabScore * 0.35;
+
   return Math.max(0, risk);
 }
 
 function getRiskPercent(profile) {
+  applyDailyDecay(profile);
+  const rehabChanged = applyRehabProgress(profile);
+  if (rehabChanged) {
+    saveStore();
+  }
+
   return Math.max(0, Math.min(100, Math.round(getRawRiskValue(profile))));
 }
 function getRiskBar(percent) {
@@ -577,6 +624,58 @@ function getRiskBar(percent) {
   const negBlocks = 10 - posBlocks;
 
   return "🟩".repeat(posBlocks) + "🟥".repeat(negBlocks);
+}
+function applyDailyDecay(profile) {
+  const now = Date.now();
+
+  if (!profile.lastDecay) {
+    profile.lastDecay = now;
+    return;
+  }
+
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  const daysPassed = Math.floor((now - profile.lastDecay) / ONE_DAY);
+
+  if (daysPassed <= 0) return;
+
+  const lastIncident = profile.lastIncidentAt || 0;
+  const daysSinceIncident = Math.floor((now - lastIncident) / ONE_DAY);
+
+  for (let d = 0; d < daysPassed; d++) {
+
+    let suspicionDecay = 0.98;
+    let pointsDecay = 0.995;
+
+    // 🔥 JÓ VISELKEDÉS BOOST
+
+    if (daysSinceIncident >= 3) {
+      suspicionDecay = 0.95;
+      pointsDecay = 0.98;
+    }
+
+    if (daysSinceIncident >= 7) {
+      suspicionDecay = 0.90;
+      pointsDecay = 0.95;
+    }
+
+    if (daysSinceIncident >= 14) {
+      suspicionDecay = 0.85;
+      pointsDecay = 0.90;
+    }
+
+    // alkalmazás
+    profile.suspicion = Math.max(0, (profile.suspicion || 0) * suspicionDecay);
+
+    if (profile.incidents && profile.incidents.length > 0) {
+      profile.incidents.forEach(inc => {
+        if (inc.points) inc.points *= pointsDecay;
+      });
+    }
+  }
+
+  profile.lastDecay = now;
+
+  saveStore();
 }
 
 function formatRiskBlock(profile) {
@@ -641,7 +740,73 @@ function getSuspicionValue(profile) {
 
   return Math.max(0, Math.round(value));
 }
+function getRehabLevel(score) {
+  if (score >= 80) return "megbízható";
+  if (score >= 55) return "stabil";
+  if (score >= 30) return "javuló";
+  if (score >= 10) return "figyelt";
+  return "nincs";
+}
 
+function applyRehabProgress(profile) {
+  const now = Date.now();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+
+  if (!profile.rehab) {
+    profile.rehab = {
+      score: 0,
+      goodDays: 0,
+      level: "nincs",
+      lastCheckAt: now,
+      lastImprovedAt: 0,
+    };
+  }
+
+  if (!profile.rehab.lastCheckAt) {
+    profile.rehab.lastCheckAt = now;
+    return false;
+  }
+
+  const daysPassed = Math.floor((now - profile.rehab.lastCheckAt) / ONE_DAY);
+  if (daysPassed <= 0) return false;
+
+  const lastIncidentAt = Number(profile.lastIncidentAt || 0);
+  const daysSinceIncident =
+    lastIncidentAt > 0 ? Math.floor((now - lastIncidentAt) / ONE_DAY) : 9999;
+
+  let changed = false;
+
+  for (let i = 0; i < daysPassed; i++) {
+    let dailyGain = 0;
+
+    if (daysSinceIncident >= 1) dailyGain = 2;
+    if (daysSinceIncident >= 3) dailyGain = 3;
+    if (daysSinceIncident >= 7) dailyGain = 4;
+    if (daysSinceIncident >= 14) dailyGain = 5;
+    if (daysSinceIncident >= 30) dailyGain = 6;
+
+    if (dailyGain > 0) {
+      profile.rehab.score = Math.min(100, Number(profile.rehab.score || 0) + dailyGain);
+      profile.rehab.goodDays = Number(profile.rehab.goodDays || 0) + 1;
+      profile.rehab.lastImprovedAt = now;
+      changed = true;
+    }
+  }
+
+  profile.rehab.level = getRehabLevel(profile.rehab.score);
+  profile.rehab.lastCheckAt = now;
+
+  return changed;
+}
+
+function getRehabDisplay(profile) {
+  const rehab = profile.rehab || {};
+  return (
+    `Szint: **${rehab.level || "nincs"}**\n` +
+    `Pont: **${Number(rehab.score || 0)}**\n` +
+    `Nyugodt napok: **${Number(rehab.goodDays || 0)}**`
+  );
+}
 function isWatchActive(profile) {
   return Boolean(
     CONFIG.WATCH_MODE_ENABLED && Number(profile.watchUntil || 0) > now()
@@ -862,7 +1027,81 @@ function actionRank(action) {
   };
   return map[action] ?? 0;
 }
+function normalizeExclusiveAction(action) {
+  const normalized = normalizeAction(action);
 
+  // Egy user-facing notice legyen, ne warn + delete együtt
+  if (["delete", "timeout", "kick", "ban", "unban"].includes(normalized)) {
+    return normalized;
+  }
+
+  if (normalized === "warn") return "warn";
+  if (normalized === "watch") return "watch";
+  if (normalized === "ignore") return "ignore";
+
+  return normalized;
+}
+
+function getNoticeTypeForAction(action) {
+  switch (action) {
+    case "warn":
+      return "warn";
+    case "watch":
+      return "watch";
+    case "delete":
+      return "delete";
+    default:
+      return null;
+  }
+}
+
+function shouldSendUserNotice(profile, action, message) {
+  if (!profile.noticeState) {
+    profile.noticeState = {
+      lastNoticeAt: 0,
+      lastNoticeAction: "",
+      lastNoticeMessageId: null,
+    };
+  }
+
+  const currentMessageId = message?.id || null;
+  const lastMessageId = profile.noticeState.lastNoticeMessageId || null;
+
+  // Ugyanarra a konkrét üzenetre ne küldje ki még egyszer
+  if (currentMessageId && lastMessageId && currentMessageId === lastMessageId) {
+    return false;
+  }
+
+  profile.noticeState.lastNoticeAt = Date.now();
+  profile.noticeState.lastNoticeAction = action || "";
+  profile.noticeState.lastNoticeMessageId = currentMessageId;
+
+  return true;
+}
+
+async function sendSingleUserNotice({ message, member, profile, final }) {
+  const noticeType = getNoticeTypeForAction(final.action);
+  if (!noticeType) return;
+
+  if (!shouldSendUserNotice(profile, noticeType, message)) {
+    return;
+  }
+
+  if (noticeType === "warn") {
+    await sendWarnNoticeInChannel(message, member, profile, final).catch(() => null);
+    return;
+  }
+
+  if (noticeType === "watch") {
+    await sendWatchNoticeInChannel(message, member, profile, final).catch(() => null);
+    return;
+  }
+
+  if (noticeType === "delete") {
+    await sendDeleteNoticeInChannel(message, member, profile, final).catch(() => null);
+    return;
+  }
+}
 function downgradeAction(action) {
   if (action === "ban") return "kick";
   if (action === "kick") return "timeout";
@@ -919,34 +1158,14 @@ function canModerateTarget(member) {
 }
 
 function extractJson(text) {
-  function getPlainUserFacingFallback(mode, staffText = "", context = "") {
-  const note = cleanText(staffText || "", 220);
-
-  if (note) return note;
-
-  switch (mode) {
-    case "delete_notice":
-      return "Az üzenetedet a moderáció törölte. Kérlek figyelj jobban a szabályokra.";
-    case "warn_notice":
-      return "Figyelmeztetést kaptál. Kérlek figyelj jobban a kommunikációra.";
-    case "watch_notice":
-      return "A rendszer megfigyelési jelzést adott az üzenetedre. Kérlek figyelj jobban a szabályokra.";
-    case "apology":
-      return "Elnézést kérünk, a moderáció tévesen kezelt egy helyzetet.";
-    case "unban":
-      return "A korábbi korlátozásodat feloldottuk.";
-    case "ban_notice":
-      return "A fiókod szabályszegés miatt korlátozásra került.";
-    default:
-      return cleanText(context || "Moderációs értesítés.", 220);
-  }
-}
   const raw = String(text || "").trim();
   const firstBrace = raw.indexOf("{");
   const lastBrace = raw.lastIndexOf("}");
+
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
     return "{}";
   }
+
   return raw.slice(firstBrace, lastBrace + 1);
 }
 
@@ -1523,18 +1742,26 @@ function finalDecision({
     replyTarget,
   });
 
-  let points = Math.max(
-    Number(aiResult.points || 0),
-    Number(ruleScan.score || 0),
-    Number(highestRule?.points || 0)
-  );
+let points = Math.max(
+  Number(aiResult.points || 0),
+  Number(ruleScan.score || 0),
+  Number(highestRule?.points || 0)
+);
 
-  points += behavior.score;
-  points += feedbackDelta > 0 ? Math.round(feedbackDelta * 0.4) : 0;
-  points += escalation.level * 6;
-  if (replyTarget?.targetIsStaff) points += CONFIG.REPLY_TARGET_BONUS_POINTS;
-  if (suspicion >= CONFIG.SUSPICION_WARN_THRESHOLD) points += 6;
-  if (suspicion >= CONFIG.SUSPICION_TIMEOUT_THRESHOLD) points += 10;
+points += behavior.score;
+points += feedbackDelta > 0 ? Math.round(feedbackDelta * 0.4) : 0;
+points += escalation.level * 6;
+if (replyTarget?.targetIsStaff) points += CONFIG.REPLY_TARGET_BONUS_POINTS;
+if (suspicion >= CONFIG.SUSPICION_WARN_THRESHOLD) points += 6;
+if (suspicion >= CONFIG.SUSPICION_TIMEOUT_THRESHOLD) points += 10;
+
+const rehabScore = Number(profile.rehab?.score || 0);
+if (rehabScore >= 20) points -= 4;
+if (rehabScore >= 40) points -= 6;
+if (rehabScore >= 60) points -= 8;
+if (rehabScore >= 80) points -= 10;
+
+points = Math.max(0, points);
 
   const recentCounts = getRecentIncidentCounts(profile);
   if (recentCounts.serious7d >= 2) points += 18;
@@ -1543,6 +1770,8 @@ function finalDecision({
   if ((profile.totals?.kicks || 0) >= 1) points += 24;
 
   let action = normalizeAction(aiResult.recommendedAction);
+  action = normalizeAction(action);
+action = normalizeExclusiveAction(action);
   let confidence = Number(aiResult.confidence || 0);
 
   const hasImmediateScam = ruleScan.hits.some((h) => h.key === "scam");
@@ -1899,6 +2128,11 @@ function buildUnifiedEmbed({ member, profile }) {
         inline: false,
       },
       {
+  name: "🟢 Rehab állapot",
+  value: trimField(getRehabDisplay(profile), 1024),
+  inline: true,
+},
+      {
         name: "♻️ Visszaesés",
         value: repeated
           ? "Igen, a felhasználónál ismétlődő vagy fokozódó szabálysértési minta látszik."
@@ -2152,6 +2386,11 @@ async function sendAiTimeoutDM(user, final, member, message, profile) {
         value: formatRiskBlock(profile),
         inline: true,
       },
+      {
+  name: "🟢 Profil állapot",
+  value: trimField(getRehabDisplay(profile), 1024),
+  inline: false,
+},
       {
         name: "⏭️ Mire számíthatsz?",
         value: trimField(getExpectedSanction(profile), 1024),
@@ -2571,36 +2810,6 @@ async function applyDecision({
 
   let performed = false;
 
-  if (final.action === "watch") {
-    extendWatch(profile);
-    profile.suspicion = Math.max(
-      0,
-      Number(profile.suspicion || 0) + CONFIG.WATCH_BASE_POINTS + Number(final.suspicionGain || 0)
-    );
-    performed = true;
-  }
-
-  if (final.action === "warn") {
-    profile.totals.warnings = (profile.totals.warnings || 0) + 1;
-    profile.suspicion = Math.max(
-      0,
-      Number(profile.suspicion || 0) + Number(final.suspicionGain || 0)
-    );
-    performed = true;
-  }
-
-  if (final.action === "delete") {
-    const deleted = await safeDeleteMessage(message);
-    if (deleted) {
-      profile.totals.deletions = (profile.totals.deletions || 0) + 1;
-      profile.suspicion = Math.max(
-        0,
-        Number(profile.suspicion || 0) + Number(final.suspicionGain || 0)
-      );
-      await sendDeleteNoticeInChannel(message, member, profile, final).catch(() => null);
-      performed = true;
-    }
-  }
 
 if (final.action === "timeout") {
   if (message?.deletable) {
@@ -2683,6 +2892,14 @@ const dmSent = await sendBanDM(member.user, final, member, message, profile).cat
     );
     performed = true;
   }
+}
+if (performed) {
+  await sendSingleUserNotice({
+    message,
+    member,
+    profile,
+    final,
+  });
 }
 
 return performed;
@@ -2872,15 +3089,6 @@ async function processMessage(client, message) {
       moderationMode: final.moderationMode,
     });
 
-    if (final.action === "warn") {
-      await sendWarnNoticeInChannel(message, member, profile, final).catch(() => null);
-    }
-
-    if (final.action === "watch") {
-      extendWatch(profile);
-      await sendWatchNoticeInChannel(message, member, profile, final).catch(() => null);
-    }
-
     setActiveCase(profile, {
       lastAction: actionToLabel(final.action),
       lastActionRaw: final.action,
@@ -3006,6 +3214,7 @@ function resetAiRiskProfile(userId) {
     suspicion: 0,
     behaviorScore: 0,
     escalationLevel: 0,
+    
     activeCase: {
       lastAction: "AI kockázat törölve",
       lastReason: "Staff kézzel lenullázta a kockázatot.",

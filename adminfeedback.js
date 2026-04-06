@@ -402,7 +402,7 @@ function buildAdminPanelEmbed(admin, stats) {
     .setColor(0x5865F2)
     .setTitle(`🟢 ${admin.name}`)
     .setDescription(
-      `🔺 **Szint:** ${admin.level}\n\n💬 **Bemutatkozás:**\n${admin.desc}`
+      `🔺 **Szint:** ${admin.level}\n\n💬 **Bemutatkozás:**${admin.desc}`
     )
     .addFields(
       {

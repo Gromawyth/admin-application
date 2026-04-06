@@ -51,15 +51,10 @@ const admins = [
   level: "Head Administrator",
   desc: `
 > *Sziasztok! ItzWolfi vagyok, de nyugodtan hívhattok simán Wolfinak is.*
->
 > *A szerveren Head Administrator szerepet töltök be, ahol a fő feladatom a közösség stabil működésének fenntartása és az adminisztrátori csapat koordinálása.*
->
 > *Számomra kiemelten fontos a korrekt és átlátható döntéshozatal, ezért minden helyzetben igyekszem pártatlanul, higgadtan és a szabályoknak megfelelően eljárni.*
->
 > *Konfliktus esetén mindig meghallgatom az érintett feleket, és csak ezután hozok döntést.*
->
 > *Nagy hangsúlyt fektetek arra, hogy a szerver egy élvezhető és igazságos környezet maradjon minden játékos számára.*
->
 > *Tudni kell rólam, hogy a legújabb játékosnak is szívesen segítek. Ha kérdésed van, vagy segítségre van szükséged, nyugodtan fordulj hozzám.*
 `
 },
@@ -613,26 +608,23 @@ async function sendPanel(interaction) {
     await createOrUpdateSummary(interaction.guild, admin.id);
   }
 
-  const rulesEmbed = buildRulesEmbed();
+const rulesEmbed = buildRulesEmbed();
 
-  if (!rulesMessageId) {
-    const msg = await interaction.channel.send({
-      embeds: [rulesEmbed]
-    });
-    rulesMessageId = msg.id;
-    saveData();
-  } else {
-    try {
-      const msg = await interaction.channel.messages.fetch(rulesMessageId);
-      await msg.edit({ embeds: [rulesEmbed] });
-    } catch {
-      const msg = await interaction.channel.send({
-        embeds: [rulesEmbed]
-      });
-      rulesMessageId = msg.id;
-      saveData();
+if (rulesMessageId) {
+  try {
+    const oldRulesMsg = await interaction.channel.messages.fetch(rulesMessageId).catch(() => null);
+    if (oldRulesMsg) {
+      await oldRulesMsg.delete().catch(() => {});
     }
-  }
+  } catch {}
+}
+
+const newRulesMsg = await interaction.channel.send({
+  embeds: [rulesEmbed]
+});
+
+rulesMessageId = newRulesMsg.id;
+saveData();
 
   await interaction.reply({
     content: "✅ Az admin értékelő panelek kiküldve és frissítve.",

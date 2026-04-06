@@ -2234,11 +2234,19 @@ async function safeDeleteMessage(message) {
 
 async function safeTimeout(member, minutes, reason) {
   try {
-    if (!getState("aimod_allow_timeout")) return false;
-    if (!member?.moderatable) return false;
+    if (!getState("aimod_allow_timeout")) {
+      console.log("[AIMOD] timeout tiltva a panelben");
+      return false;
+    }
+
+    if (!member?.moderatable) {
+      console.log("[AIMOD] member nem moderálható:", member?.user?.tag || member?.id);
+      return false;
+    }
 
     const ms = Math.max(60_000, Number(minutes || 1) * 60_000);
     await member.timeout(ms, reason);
+    console.log("[AIMOD] timeout sikeres:", member?.user?.tag || member?.id, minutes);
     return true;
   } catch (error) {
     console.error("[AIMOD] timeout hiba:", error);

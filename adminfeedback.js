@@ -42,8 +42,9 @@ const admins = [
     id: "1",
     name: "Lana",
     level: "Manager",
-    desc:
-      "Nincs még bemutatkozás."
+    desc: `
+      > *Nincs még bemutatkozás.*
+      `
   },
 {
   id: "2",
@@ -62,31 +63,35 @@ const admins = [
     id: "3",
     name: "Berkut",
     level: "Senior Administrator",
-    desc:
-      "Nincs még bemutatkozás."
+    desc:`
+      > *Nincs még bemutatkozás.*
+      `
   },
   {
     id: "4",
     name: "Gromawyth",
     level: "Lead Administrator",
-    desc:
-      "Nincs még bemutatkozás."
+    desc:`
+      > *Nincs még bemutatkozás.*
+      `
   },
   {
     id: "5",
     name: "Szepy",
     level: "Administrator 5(?)",
-    desc:
-"Gépészmérnök hallgató vagyok, akinek legfőbb eszméi közé tartozik az esélyegyenlőség, a kölcsönös segítségnyújtás és tisztelet, valamint a szabályok szerinti munkavégzés." +
-"Tapasztalattal rendelkezem a vendéglátásban, ezért kooperatív és segítőkész vagyok, ugyanakkor komolyan veszem a szabályok betartását és az etikett követését, és empátiával fordulok a segítséget kérők felé." +
-"Bátran lehet hozzám fordulni, a legjobb tudásom szerint nyújtok segítséget."
+    desc:`
+> *Gépészmérnök hallgató vagyok, akinek legfőbb eszméi közé tartozik az esélyegyenlőség, a kölcsönös segítségnyújtás és tisztelet, valamint a szabályok szerinti munkavégzés.*
+> *Tapasztalattal rendelkezem a vendéglátásban, ezért kooperatív és segítőkész vagyok, ugyanakkor komolyan veszem a szabályok betartását és az etikett követését, és empátiával fordulok a segítséget kérők felé.*
+> *Bátran lehet hozzám fordulni, a legjobb tudásom szerint nyújtok segítséget.*
+`
   },
   {
     id: "6",
     name: "Bounty",
     level: "Administrator 5(?)",
-    desc:
-      "Nincs még bemutatkozás."
+    desc:`
+      > *Nincs még bemutatkozás.*
+      `
   }
 ];
 

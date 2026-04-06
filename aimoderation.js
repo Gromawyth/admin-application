@@ -1236,7 +1236,64 @@ function isTargetedInsult(content) {
   const lower = String(content || "").toLowerCase();
   return includesAnyWord(lower, INSULT_WORDS) && includesAnyWord(lower, TARGET_WORDS);
 }
+function containsInsultWord(content = "") {
+  const lower = String(content || "").toLowerCase();
+  return includesAnyWord(lower, INSULT_WORDS);
+}
 
+function containsTargetWord(content = "") {
+  const lower = String(content || "").toLowerCase();
+  return includesAnyWord(lower, TARGET_WORDS);
+}
+
+function isContextualProfanity(content = "") {
+  const lower = String(content || "").toLowerCase().trim();
+
+  // Csúnya szó van benne, de nincs célpont
+  if (!containsInsultWord(lower)) return false;
+  if (containsTargetWord(lower)) return false;
+
+  // ne legyen közvetlen megszólítás vagy támadó minta
+  if (/(te\b|ti\b|neked\b|nektek\b|ő egy\b|ez a\b|olyan vagy\b)/i.test(lower)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isTargetedDegradingMessage(content = "") {
+  const lower = String(content || "").toLowerCase().trim();
+
+  if (!containsInsultWord(lower) || !containsTargetWord(lower)) return false;
+
+  // célzott minősítés tipikus minták
+  if (
+    /\b(szar|fos|retkes|bohóc|szutyok|szenny|hulladék|nyomorék|idióta|semmirekellő)\b.{0,20}\b(szerver|admin|adminok|moderátor|moderátorok|staff|vezetőség|fejlesztő|fejlesztők|közösség|játékos|játékosok|internalgaming)\b/i.test(lower) ||
+    /\b(szerver|admin|adminok|moderátor|moderátorok|staff|vezetőség|fejlesztő|fejlesztők|közösség|játékos|játékosok|internalgaming)\b.{0,20}\b(szar|fos|retkes|bohóc|szutyok|szenny|hulladék|nyomorék|idióta|semmirekellő)\b/i.test(lower)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function countRecentTargetedInsults(profile, currentContent = "") {
+  const nowTs = Date.now();
+  const normalized = String(currentContent || "").toLowerCase().trim();
+
+  return (profile.recentMessages || []).filter((m) => {
+    const sameWindow = nowTs - Number(m.createdAt || 0) <= 15 * 60 * 1000;
+    if (!sameWindow) return false;
+
+    const text = String(m.content || "").toLowerCase().trim();
+
+    // ugyanaz vagy nagyon hasonló célzott minősítés
+    if (text === normalized) return true;
+    if (isTargetedDegradingMessage(text)) return true;
+
+    return false;
+  }).length;
+}
 function isStrongDirectAbuse(content) {
   const lower = String(content || "").toLowerCase();
   return /(kurva any[aá]d|bazdmeg te|rohadj meg|dögölj meg|nyomorék geci|retkes szar)/i.test(lower);
@@ -1295,7 +1352,23 @@ function scanRules(message, recentSameUser = []) {
   let score = 0;
 
   if (!content.trim()) return { hits, score };
+  if (isContextualProfanity(content)) {
+    hits.push({
+      key: "watch",
+      points: 8,
+      label: "Szövegkörnyezetbe illő nyers beszéd",
+    });
+    score += 8;
+  }
 
+  if (isTargetedDegradingMessage(content)) {
+    hits.push({
+      key: "targeted_degrading",
+      points: 32,
+      label: "Célzott obszcén minősítés / szidalmazás",
+    });
+    score += 32;
+  }
   if (REGEX.doxxing.test(content)) {
     hits.push({
       key: "doxxing",
@@ -3028,7 +3101,99 @@ async function processMessage(client, message) {
     } else {
       return;
     }
+  if (isTargetedDegradingMessage(message.content)) {
+    const repeatCount = countRecentTargetedInsults(profile, message.content);
 
+    let forcedAction = "delete";
+    let severity = "enyhe";
+    let points = 32;
+    let suspicionGain = 8;
+    let timeoutMinutes = 0;
+
+    if (repeatCount >= 2) {
+      forcedAction = "warn";
+      severity = "közepes";
+      points = 42;
+      suspicionGain = 12;
+    }
+
+    if (repeatCount >= 4) {
+      forcedAction = "timeout";
+      severity = "közepes";
+      points = 58;
+      suspicionGain = 18;
+      timeoutMinutes = 60;
+    }
+
+    if (repeatCount >= 6) {
+      forcedAction = "kick";
+      severity = "magas";
+      points = 78;
+      suspicionGain = 24;
+    }
+
+    if (repeatCount >= 8) {
+      forcedAction = "ban";
+      severity = "kritikus";
+      points = 96;
+      suspicionGain = 32;
+    }
+
+    const final = {
+      action: forcedAction,
+      category: "staff_abuse",
+      categoryHu: "Célzott szidalmazás / minősítés",
+      severity,
+      confidence: 92,
+      points,
+      projectedRisk: getRiskPercent(profile),
+      suspicionGain,
+      ruleBroken: "Célzott obszcén minősítés vagy szidalmazás.",
+      reason: "A rendszer célzott, sértő minősítést talált valakire vagy valamire.",
+      analysis:
+        repeatCount >= 2
+          ? "A felhasználó ismétlődően célzott obszcén minősítést használ."
+          : "A felhasználó célzott obszcén minősítést használt.",
+      patternSummary:
+        repeatCount >= 2
+          ? `Ismétlődő célzott minősítés (${repeatCount + 1}. eset rövid időn belül).`
+          : "Egyszeri célzott minősítés.",
+      shouldNotifyStaff: true,
+      moderationMode: getModerationMode(),
+      shieldReason: "",
+      bypassScore: 0,
+      replyTarget: "",
+      timeoutMinutes,
+    };
+
+    const performed = await applyDecision({
+      client,
+      message,
+      member,
+      profile,
+      final,
+    });
+
+    if (!performed) return;
+
+    addIncident(member.id, {
+      type: final.action,
+      createdAt: now(),
+      points: final.points,
+      suspicion: final.suspicionGain,
+      severity: final.severity,
+      category: final.category,
+      content: cleanText(message.content || "", 500),
+      messageId: message.id,
+      channelId: message.channelId,
+      confidence: final.confidence,
+      moderationMode: final.moderationMode,
+    });
+
+    saveStore();
+    await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+    return;
+  }
     const final = finalDecision({
       profile,
       ruleScan,

@@ -709,7 +709,15 @@ function formatRiskBlock(profile) {
 
   return `╭ Kockázat\n${bar} **${risk}%**\n╰ Állapot: **${status}**`;
 }
+function getFeedbackDelta(userId) {
+  const ok = Number(store.feedback?.reviewOk?.[userId] || 0);
+  const mistakes = Number(store.feedback?.mistake?.[userId] || 0);
 
+  return Math.max(
+    -CONFIG.FEEDBACK_WEIGHT_LIMIT,
+    Math.min(CONFIG.FEEDBACK_WEIGHT_LIMIT, ok * 2 - mistakes * 4)
+  );
+}
 function getSuspicionDecayWeight(ageMs) {
   const d = CONFIG.SUSPICION_DECAY_DAYS * 24 * 60 * 60 * 1000;
   if (ageMs <= d) return 1;

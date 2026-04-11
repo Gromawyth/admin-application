@@ -847,7 +847,6 @@ function extendWatch(profile, ms = CONFIG.WATCH_WINDOW_MS) {
 function buildImmediateRuleDecision(message, profile) {
   const content = String(message?.content || "").trim();
   const lower = content.toLowerCase();
-  const normalized = normalizeBypassText(content);
 
   if (!content) return null;
 
@@ -857,32 +856,31 @@ function buildImmediateRuleDecision(message, profile) {
 
   const targetedDegrading = isTargetedDegradingMessage(content);
 
-  const directHarassment =
+  const familyInsultDetected = containsCanonical(content, FAMILY_INSULT_WORDS);
+
+  const directInsultDetected =
+    containsInsultWord(content) &&
     (
-      containsInsultWord(lower) &&
-      /\b(te|ti|neked|nektek|ő|ők|vagytok|vagy|takarodj|kuss|dögölj meg|dogolj meg|rohadj meg)\b/i.test(lower)
-    ) ||
-    /(anyad|anyadat|anyatok|kurvaanyad)/i.test(normalized);
+      containsTargetWord(content) ||
+      /\b(te|ti|neked|nektek|vagy|vagytok|takarodj|kuss)\b/i.test(lower)
+    );
 
-  const rawStaffAbuse =
-    REGEX.staffAbuse.test(content) ||
-    /\b(szar szerver|fos szerver|szar admin|fos admin|retkes admin|bohóc admin|szutyok szerver|szenny szerver)\b/i.test(lower);
+  const recentFamilyInsultCount = (profile.recentMessages || [])
+    .slice(-6)
+    .filter((m) => containsCanonical(m.content || "", FAMILY_INSULT_WORDS))
+    .length;
 
-  const bypassStaffAbuse =
-    /(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)/i.test(normalized) ||
-    /(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)/i.test(normalized);
+  const directHarassment = familyInsultDetected || directInsultDetected;
 
   const softStaffFriction =
-    /\b(admin|adminok|staff|moder[aá]tor|moderátor|vezetőség|fejleszt[őo]k?|szerver|rendszer)\b/i.test(lower) &&
+    /\b(admin|adminok|staff|moder[aá]tor|moderátor|vezetőség|fejleszt[őo]k?|szerver|rendszer|internalgaming)\b/i.test(lower) &&
     /\b(gáz|vicc|nevetséges|komolytalan|káosz|szétesett|gyenge|borzalmas|agyrém|szánalmas|kellemetlen|fárasztó)\b/i.test(lower) &&
-    !rawStaffAbuse &&
-    !bypassStaffAbuse;
+    !targetedDegrading;
 
   const softPersonalFriction =
     /\b(te|ti|neked|nektek|vagy|vagytok)\b/i.test(lower) &&
     /\b(idegesítő|komolytalan|gyerekes|fárasztó|nevetséges|okoskodsz|provokálsz|túltolod|nagyon sok vagy|unalmas)\b/i.test(lower) &&
-    !directHarassment &&
-    !containsInsultWord(lower);
+    !directHarassment;
 
   const provocativeDisruption =
     /\b(fejezd be|hagyd abba|ne kezdd megint|megint ezt csinálod|nagyon unalmas ez már|megint a hiszti|ezt hagyd|ne told túl)\b/i.test(lower);
@@ -890,27 +888,27 @@ function buildImmediateRuleDecision(message, profile) {
   const notBelongingBehavior =
     /\b(kussoljon mindenki|kuss legyen|mindenki fogja be|szétspamellek|tele fogom floodolni|szét fogom baszni a chatet)\b/i.test(lower);
 
-  if (targetedDegrading || rawStaffAbuse || bypassStaffAbuse) {
+  if (targetedDegrading) {
     let action = "delete";
     let severity = "közepes";
-    let points = 52;
+    let points = 54;
     let suspicionGain = 14;
 
-    if (repeatCount >= 2 || watchActive || currentRisk >= 45) {
+    if (repeatCount >= 1 || watchActive || currentRisk >= 45) {
       action = "timeout";
       severity = "közepes";
       points = 68;
       suspicionGain = 20;
     }
 
-    if (repeatCount >= 4 || currentRisk >= 70) {
+    if (repeatCount >= 3 || currentRisk >= 70) {
       action = "kick";
       severity = "magas";
       points = 84;
       suspicionGain = 28;
     }
 
-    if (repeatCount >= 6 || currentRisk >= 90) {
+    if (repeatCount >= 5 || currentRisk >= 90) {
       action = "ban";
       severity = "kritikus";
       points = 96;
@@ -926,18 +924,15 @@ function buildImmediateRuleDecision(message, profile) {
       points,
       suspicionGain,
       ruleBroken: "Célzott szerver / staff / közösség szidalmazása.",
-      reason:
-        bypassStaffAbuse
-          ? "A rendszer obfuszkált szerver / staff szidalmazást talált."
-          : "A rendszer célzott, nem odatartozó és degradáló minősítést talált.",
+      reason: "A rendszer célzott szerver / staff / közösség elleni sértő minősítést talált.",
       analysis:
         repeatCount >= 1
           ? "A felhasználó célzott, sértő minősítést használt, ráadásul ez nem első eset."
           : "A felhasználó célzott, sértő minősítést használt a szerverre, staffra vagy közösségre.",
       patternSummary:
         repeatCount >= 1
-          ? `Azonnali törlendő célzott minősítés, ismétléssel (${repeatCount + 1}).`
-          : "Azonnali törlendő célzott minősítés.",
+          ? `Ismétlődő célzott szerver / staff szidalmazás (${repeatCount + 1}).`
+          : "Azonnali törlendő célzott szerver / staff szidalmazás.",
       timeoutMinutes: 0,
       shouldNotifyStaff: true,
       forceWatch: true,
@@ -945,24 +940,27 @@ function buildImmediateRuleDecision(message, profile) {
   }
 
   if (directHarassment) {
+    const repeatedHarassment =
+      repeatCount >= 1 || recentFamilyInsultCount >= 1;
+
     return {
-      action: watchActive || currentRisk >= 45 ? "timeout" : "delete",
+      action: repeatedHarassment || watchActive || currentRisk >= 45 ? "timeout" : "delete",
       category: "harassment",
       categoryHu: "Célzott sértegetés",
-      severity: watchActive || currentRisk >= 45 ? "közepes" : "közepes",
-      confidence: 94,
-      points: watchActive || currentRisk >= 45 ? 60 : 48,
-      suspicionGain: watchActive || currentRisk >= 45 ? 18 : 12,
+      severity: "közepes",
+      confidence: 96,
+      points: repeatedHarassment || watchActive || currentRisk >= 45 ? 62 : 50,
+      suspicionGain: repeatedHarassment || watchActive || currentRisk >= 45 ? 18 : 12,
       ruleBroken: "Célzott sértegetés / szidalmazás.",
-      reason:
-        /(anyad|anyadat|anyatok|kurvaanyad)/i.test(normalized)
-          ? "A rendszer 'anyád' jellegű sértést talált, akár obfuszkált formában is."
-          : "A rendszer közvetlen sértő megszólítást talált.",
-      analysis: "A felhasználó más személy felé irányuló sértő hangnemet használt.",
-      patternSummary:
-        watchActive || currentRisk >= 45
-          ? "Korábbi feszültség után már timeout szintű célzott sértés."
-          : "Azonnali törlendő célzott sértés.",
+      reason: familyInsultDetected
+        ? "A rendszer családi sértést talált, akár obfuszkált formában is."
+        : "A rendszer közvetlen, célzott sértést talált.",
+      analysis: repeatedHarassment
+        ? "A felhasználó rövid időn belül ismételten célzott sértést használt."
+        : "A felhasználó más személy felé irányuló sértő hangnemet használt.",
+      patternSummary: repeatedHarassment
+        ? "Ismétlődő célzott sértés."
+        : "Azonnali törlendő célzott sértés.",
       timeoutMinutes: 0,
       shouldNotifyStaff: true,
       forceWatch: true,
@@ -997,68 +995,6 @@ function buildImmediateRuleDecision(message, profile) {
   }
 
   return null;
-}
-function normalizeBypassText(content = "") {
-  return String(content || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[0]/g, "o")
-    .replace(/[1!|]/g, "i")
-    .replace(/[3]/g, "e")
-    .replace(/[4@]/g, "a")
-    .replace(/[5$]/g, "s")
-    .replace(/[7]/g, "t")
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/([a-z])\1{2,}/g, "$1")
-    .replace(/\s+/g, "");
-}
-
-function detectBypassPatterns(content = "") {
-  const normalized = normalizeBypassText(content);
-  let score = 0;
-  const hits = [];
-
-  const bypassWords = [
-    {
-      regex: /(kurvaanyad|anyad|anyadat|anyatok)/i,
-      label: "Obfuszkált családi sértés",
-    },
-    {
-      regex: /(rohadjmeg|dogoljmeg|nyomorek|retkes|szarhazi|geci|csicska)/i,
-      label: "Obfuszkált sértés",
-    },
-    {
-      regex: /(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)/i,
-      label: "Obfuszkált szerver / staff szidalmazás",
-    },
-    {
-      regex: /(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)/i,
-      label: "Obfuszkált szerver / staff szidalmazás",
-    },
-    {
-      regex: /(discordgg|discordcominvite)/i,
-      label: "Obfuszkált meghívó / reklám",
-    },
-    {
-      regex: /(freenitro|giftlink|loginhere|token|steamajandek)/i,
-      label: "Obfuszkált scam minta",
-    },
-  ];
-
-  for (const item of bypassWords) {
-    if (item.regex.test(normalized)) {
-      hits.push(item.label);
-      score += CONFIG.BYPASS_EXTRA_POINTS;
-    }
-  }
-
-  if (/([a-záéíóöőúüű])\1{5,}/i.test(String(content || ""))) {
-    hits.push("Széthúzott / ismételt karakteres megkerülés");
-    score += 6;
-  }
-
-  return { score, hits, normalized };
 }
 
 function falsePositiveShield(message, ruleScan, contextMessages = [], replyTarget = null) {
@@ -1565,132 +1501,227 @@ const REGEX = {
   repeatChars: /(.)\1{9,}/i,
 };
 
+const TARGET_WORDS = [
+  "te", "ti", "neked", "nektek", "rólad", "rolad", "róluk", "roluk",
+  "vagy", "vagytok", "ő", "o", "ők", "ok",
+  "admin", "adminok", "staff", "moderator", "moderátor", "fejleszto", "fejlesztő",
+  "vezetoseg", "vezetőség", "tulaj", "owner",
+  "szerver", "server", "rendszer", "kozosseg", "közösség", "internalgaming"
+];
+
 const MILD_PROFANITY_WORDS = [
-  "basszus", "basszuska", "basszameg", "bassza meg", "basszák meg", "basszad", "basszad meg", "basszátok", "basszátok meg",
-  "baszki", "baszkik", "baszd", "baszd meg", "baszmeg", "bazdmeg", "bazmeg", "bmeg", "bakker", "franc", "francba", "francot",
-  "a francba", "az istenit", "az istenit neki", "a mindenit", "a kurva", "akurva", "kurva", "kurvára", "kurvara", "kurva élet",
-  "kurvaelet", "kurva életbe", "kurvaeletbe", "geci", "gecibe", "gecire", "gecis", "geciség", "geciseg",
-  "fasz", "faszba", "faszom", "faszomat", "faszért", "faszert", "faszkivan", "fasz kivan", "tele van a faszom",
-  "kivan a faszom", "teli van a faszom", "faszom kivan", "faszom tele van", "picsa", "picsába", "picsaba",
-  "fasz se", "fasz tudja", "a fasz tudja", "ki a faszt", "mi a fasz", "mi a faszom", "hol a faszba", "mit a fasz",
-  "szar", "szar ez", "szar az egész", "szar az egesz", "ez szar", "rohadt szar", "kurva szar", "fos", "fos ez",
-  "fos az egész", "fos az egesz", "egy fos", "egy rakás szar", "egy rakas szar", "rakás fos", "rakas fos",
-  "szopás", "szopas", "szívás", "szivas", "rohadjon meg", "rohadj meg", "a rohadt", "rohadt", "rohadék", "rohadek",
-  "kapja be", "bekaphatja", "bekaphatod", "bekaphatjátok", "kapd be", "kapjátok be", "szopjál", "szopjal", "szopj",
-  "idegbaj", "agyfasz", "agyf*sz", "agyfaszt kapok", "agyrém", "agyrem", "idegesít", "idegesit", "felbasz", "felbaszott",
-  "felbaszod", "felbasz engem", "felidegesít", "felidegesit", "kikészít", "kikeszit", "elegem van", "nagyon elegem van",
-  "hányadék", "hanyadek", "okádék", "okadek", "gusztustalan", "undorító", "undorito", "szenny", "szutyok", "mocsok"
+  "basszus", "bassza", "basszameg", "bassza meg", "baszki", "baszd", "baszd meg",
+  "baszmeg", "bazdmeg", "bazmeg", "bmeg", "bakker", "franc", "francba",
+  "a francba", "az istenit", "a mindenit",
+  "kurva", "kurvara", "kurvára", "kurvaelet", "kurva elet", "kurvaélet",
+  "geci", "gecire", "gecibe", "fasz", "faszba", "faszom", "faszomat", "picsa",
+  "szar", "szarba", "fos", "szopas", "szopás", "baszas", "baszás"
 ];
 
 const INSULT_WORDS = [
-  "anyád", "anyad", "anyádat", "anyadat", "anyátok", "anyatok", "kurva anyád", "kurva anyad", "a kurva anyád", "a kurva anyad",
-  "nyomorék", "nyomorek", "nyomorult", "nyomoronc", "retkes", "tetves", "mocskos", "rohadt", "rohadék", "rohadek", "rothadt",
-  "idióta", "idiota", "hülye", "hulye", "hülyék", "hulyek", "ostoba", "barom", "barmok", "marha", "ökör", "okor", "balfasz",
-  "balfék", "balfek", "balek", "agyhalott", "agyatlan", "gyökér", "gyoker", "kretén", "kreten", "debil", "degenerált", "degeneralt",
-  "senkiházi", "senkihazi", "semmirekellő", "semmirekello", "haszontalan", "értéktelen", "ertektelen", "szánalmas", "szanalmas",
-  "nevetséges", "nevetseges", "bohóc", "bohoc", "csicska", "patkány", "patkany", "féreg", "fereg", "tetű", "tetu", "csíra", "csira",
-  "suttyó", "suttyo", "tapló", "taplo", "paraszt", "tahó", "taho", "bunkó", "bunko", "proli", "csöves", "csoves", "csóró", "csoro",
-  "lúzer", "luzer", "vesztes", "alja", "aljadék", "aljadek", "hitvány", "hitvany", "gerinctelen", "sunyi", "hazug", "kamus",
-  "képmutató", "kepmutato", "seggnyaló", "seggnyalo", "seggfej", "seggarc", "faszfej", "faszarc", "faszkalap", "faszláda", "faszlada",
-  "faszparaszt", "faszszopó", "faszszopo", "gecifej", "geciarc", "gecizsák", "gecizsak", "geciláda", "gecilada", "szarfej", "szararc",
-  "fosfej", "fosarc", "kutyafej", "kutyageci", "kutyafasz", "disznó", "diszno", "disznófej", "disznofej", "majom", "majomarc", "majomfej",
-  "állat", "allat", "vadbarom", "szuka", "ribanc", "lotyó", "lotyo", "ringyó", "ringyo", "cafka", "fattyú", "fattyu", "korcs",
-  "pszichopata", "elmebeteg", "őrült", "orult", "zakkant", "bolond", "undorító", "undorito", "gusztustalan", "hányadék", "hanyadek",
-  "okádék", "okadek", "szutyok", "szenny", "mocsok", "retkes geci", "nyomorék geci", "nyomorek geci", "rohadt geci", "mocskos geci",
-  "szánalmas gyökér", "szanalmas gyoker", "semmirekellő bohóc", "semmirekello bohoc", "bunkó fasz", "bunko fasz", "sötét fasz", "sotet fasz",
-  "agyhalott geci", "retkes paraszt", "rohadt paraszt", "csicska fasz", "senkiházi geci", "senkihazi geci", "hulladék geci", "hulladek geci",
-  "patkány geci", "patkany geci", "idióta fasz", "idiota fasz", "hülyepicsa", "hulyepicsa", "hülyefasz", "hulyefasz"
+  "anyad", "anyadat", "anyatok", "kurvaanyad", "kurva anyad",
+  "nyomorek", "retkes", "patkany", "patkány", "semmirekello", "semmirekellő",
+  "szarhazi", "szarházi", "csicska", "idiota", "idióta", "hulye", "hülye",
+  "balfasz", "faszfej", "faszkalap", "gecifej", "geciarc",
+  "szarfej", "szararc", "fosfej", "fosarc", "bohoc", "bohóc", "majom",
+  "majomfej", "majomarc", "kutyafeju", "kutyafejű", "allat", "állat",
+  "vadbarom", "barom", "diszno", "disznó", "korcs", "fattyu", "fattyú",
+  "ribanc", "lotyo", "lotyó", "ringyo", "ringyó", "cafka",
+  "pszichopata", "elmebeteg", "orult", "őrült", "zakkant", "bolond",
+  "undorito", "undorító", "gusztustalan", "hanyadek", "hányadék",
+  "okadek", "okádék", "szutyok", "szenny", "mocsok",
+  "dogoljmeg", "dögöljmeg", "rohadjmeg", "pusztuljel", "pusztulj"
 ];
 
-const TARGET_WORDS = [
-  "szerver", "server", "internalgaming", "admin", "adminok", "adminisztrátor", "adminisztrator",
-  "moderátor", "moderator", "moderátorok", "moderatorok", "staff", "vezetőség", "vezetoseg",
-  "fejlesztő", "fejleszto", "fejlesztők", "fejlesztok", "közösség", "kozosseg", "játékos",
-  "jatekos", "játékosok", "jatekosok", "csapat", "rendszer", "bot", "projekt"
+const FAMILY_INSULT_WORDS = [
+  "anyad", "anyadat", "anyatok", "kurvaanyad", "a kurva anyad", "te anyad"
 ];
+
+const STAFF_ABUSE_WORDS = [
+  "szarszerver", "fosszerver", "hulladekszerver", "szutyokszerver", "szennyszerver",
+  "szaradmin", "fosadmin", "bohocadmin", "retkesadmin", "szutyokadmin",
+  "szarstaff", "fosstaff", "bohocstaff", "retkesstaff",
+  "szarrendszer", "fosrendszer", "hulladekrendszer", "szennyrendszer",
+  "viccszerver", "viccstaff", "viccadmin"
+];
+
+const THREAT_WORDS = [
+  "megollek", "megöllek", "megverlek", "szetszedlek", "szétszedlek",
+  "kinyirlak", "kinyírlak", "elkaplak", "megtalallak", "megtalállak",
+  "megkereslek", "kicsinallak", "kicsinállak"
+];
+
+function canonicalCharMap(text = "") {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[0]/g, "o")
+    .replace(/[1!|]/g, "i")
+    .replace(/[2]/g, "z")
+    .replace(/[3]/g, "e")
+    .replace(/[4@]/g, "a")
+    .replace(/[5$]/g, "s")
+    .replace(/[6]/g, "g")
+    .replace(/[7]/g, "t")
+    .replace(/[8]/g, "b")
+    .replace(/[9]/g, "g");
+}
+
+function normalizeModerationText(text = "", options = {}) {
+  const { compact = false } = options;
+
+  let t = canonicalCharMap(text)
+    .replace(/([a-z])\1{2,}/g, "$1$1");
+
+  if (compact) {
+    return t.replace(/[^a-z0-9]/g, "");
+  }
+
+  return t
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function canonicalTerm(term = "") {
+  return normalizeModerationText(term, { compact: true });
+}
+
+function containsCanonical(content = "", terms = []) {
+  const compact = normalizeModerationText(content, { compact: true });
+  return terms.some((term) => {
+    const needle = canonicalTerm(term);
+    return needle && compact.includes(needle);
+  });
+}
+
+function collectCanonicalHits(content = "", terms = [], limit = 8) {
+  const compact = normalizeModerationText(content, { compact: true });
+  const hits = [];
+
+  for (const term of terms) {
+    const needle = canonicalTerm(term);
+    if (!needle) continue;
+    if (compact.includes(needle)) {
+      hits.push(term);
+      if (hits.length >= limit) break;
+    }
+  }
+
+  return hits;
+}
 
 const MILD_PROFANITY_PATTERNS = [
-  /\b(bassz(?:us|a|ad|atok|átok|ad meg|a meg))\b/i,
-  /\b(ba[sz]+d?me?g|baz+me?g|bmeg)\b/i,
-  /\b(kurv+a|kurv+ára|kurv+ara|a\s*kurva)\b/i,
-  /\b(gec+i|gec+ibe|gec+ire|gec+is)\b/i,
-  /\b(fasz+|faszom|faszba|faszért|faszert)\b/i,
-  /\b(pics+a|picsába|picsaba)\b/i,
-  /\b(szar+|szaros)\b/i,
-  /\b(fos+|fosadék|fosadek)\b/i,
-  /\b(agyfasz|agyf\*?sz)\b/i,
-  /\b(felbasz|felbaszott|felbaszod)\b/i,
-  /\b(elegem\s+van|tele\s+van\s+a\s+faszom|kivan\s+a\s+faszom)\b/i,
+  /\b(a\s+kurva\s+elet|a\s+kurva\s+eletbe|az\s+istenit|a\s+mindenit)\b/i,
+  /\b(lofasz|lófasz|faszom\s+kivan|tele\s+van\s+a\s+faszom)\b/i,
 ];
 
 const INSULT_PATTERNS = [
-  /\b(kurva\s+anyád|kurva\s+anyad|a\s+kurva\s+anyád|a\s+kurva\s+anyad)\b/i,
-  /\b(anyád|anyad|anyádat|anyadat|anyátok|anyatok)\b/i,
-  /\b(nyomorék|nyomorek|retkes|tetves|mocskos|rohadék|rohadek|rohadt)\b/i,
-  /\b(idióta|idiota|hülye|hulye|ostoba|barom|marha|ökör|okor|balfasz|balfék|balfek)\b/i,
-  /\b(agyhalott|agyatlan|gyökér|gyoker|kretén|kreten|debil|degenerált|degeneralt)\b/i,
-  /\b(senkiházi|senkihazi|semmirekellő|semmirekello|haszontalan|értéktelen|ertektelen)\b/i,
-  /\b(szánalmas|szanalmas|nevetséges|nevetseges|bohóc|bohoc|csicska)\b/i,
-  /\b(patkány|patkany|féreg|fereg|tetű|tetu|csíra|csira|suttyó|suttyo|tapló|taplo)\b/i,
-  /\b(paraszt|tahó|taho|bunkó|bunko|proli|csöves|csoves|csóró|csoro|lúzer|luzer)\b/i,
-  /\b(faszfej|faszarc|faszkalap|faszláda|faszlada|faszparaszt|faszszopó|faszszopo)\b/i,
-  /\b(gecifej|geciarc|gecizsák|gecizsak|geciláda|gecilada|szarfej|szararc|fosfej|fosarc)\b/i,
-  /\b(kutyafej|kutyageci|disznó|diszno|majom|majomarc|majomfej|állat|allat|vadbarom)\b/i,
-  /\b(ribanc|lotyó|lotyo|ringyó|ringyo|cafka|fattyú|fattyu|korcs)\b/i,
-  /\b(pszichopata|elmebeteg|őrült|orult|zakkant|bolond)\b/i,
-  /\b(undorító|undorito|gusztustalan|hányadék|hanyadek|okádék|okadek|szutyok|szenny|mocsok)\b/i,
-  /\b(dögölj\s+meg|dogolj\s+meg|rohadj\s+meg|pusztulj(\s+el)?)\b/i,
+  /\b(kurva\s+any[aá]d|a\s+kurva\s+any[aá]d)\b/i,
+  /\b(d[oö]g[oö]lj\s+meg|dogolj\s+meg|rohadj\s+meg|pusztulj(\s+el)?)\b/i,
+  /\b(te\s+nyomor[eé]k|te\s+retkes|te\s+csicska|te\s+barom|te\s+boh[oó]c)\b/i,
+  /\b(szarh[aá]zi|semmirekell[oő]|faszfej|faszkalap|gecifej|geciarc)\b/i,
 ];
 
-function containsFromWordList(content = "", words = []) {
-  const lower = String(content || "").toLowerCase();
-  return words.some((word) => lower.includes(word));
+function containsTargetWord(content = "") {
+  return containsCanonical(content, TARGET_WORDS);
 }
 
-function matchesAnyPattern(content = "", patterns = []) {
-  const text = String(content || "");
-  return patterns.some((pattern) => pattern.test(text));
+function isContextualProfanity(content = "") {
+  const lower = normalizeModerationText(content);
+
+  if (!containsMildProfanity(lower) && !containsInsultWord(lower)) return false;
+  if (containsTargetWord(lower)) return false;
+
+  if (/(te\b|ti\b|neked\b|nektek\b|o\b|ok\b|ez a\b|olyan vagy\b|vagytok\b)/i.test(lower)) {
+    return false;
+  }
+
+  return true;
 }
 
-function includesAnyWord(text, words) {
-  return words.some((word) => text.includes(word));
+function isTargetedDegradingMessage(content = "") {
+  const normalizedLoose = normalizeModerationText(content);
+  const normalizedCompact = normalizeModerationText(content, { compact: true });
+
+  if (!normalizedCompact) return false;
+
+  const strongTargetPatterns = [
+    /\b(szerver|server|internalgaming)\b.{0,18}\b(szar|fos|hulladek|szutyok|szenny|bohoc|vicc|retkes|nyomorek)\b/i,
+    /\b(admin|adminok|staff|moderator|fejleszto|vezetoseg)\b.{0,18}\b(szar|fos|hulladek|szutyok|szenny|bohoc|vicc|retkes|nyomorek)\b/i,
+    /\b(szar|fos|hulladek|szutyok|szenny|bohoc|vicc|retkes|nyomorek)\b.{0,18}\b(szerver|server|internalgaming|admin|adminok|staff|moderator|fejleszto|vezetoseg)\b/i,
+  ];
+
+  if (strongTargetPatterns.some((p) => p.test(normalizedLoose))) return true;
+  if (containsCanonical(content, STAFF_ABUSE_WORDS)) return true;
+
+  return containsInsultWord(content) && containsTargetWord(content);
+}
+
+function detectBypassPatterns(content = "") {
+  const raw = String(content || "");
+  const normalizedLoose = normalizeModerationText(raw);
+  const normalizedCompact = normalizeModerationText(raw, { compact: true });
+
+  let score = 0;
+  const hits = [];
+
+  const familyHits = collectCanonicalHits(raw, FAMILY_INSULT_WORDS, 3);
+  const insultHits = collectCanonicalHits(raw, INSULT_WORDS, 5);
+  const staffHits = collectCanonicalHits(raw, STAFF_ABUSE_WORDS, 4);
+  const threatHits = collectCanonicalHits(raw, THREAT_WORDS, 3);
+
+  if (familyHits.length) {
+    hits.push("Obfuszkált családi sértés");
+    score += 16;
+  }
+
+  if (insultHits.length) {
+    hits.push("Obfuszkált sértés");
+    score += 12;
+  }
+
+  if (staffHits.length) {
+    hits.push("Obfuszkált szerver / staff szidalmazás");
+    score += 14;
+  }
+
+  if (threatHits.length) {
+    hits.push("Obfuszkált fenyegetés");
+    score += 16;
+  }
+
+  if (/(?:[a-zA-ZÁ-Űá-ű0-9][\s._,\-~*|`'"]){2,}[a-zA-ZÁ-Űá-ű0-9]/.test(raw)) {
+    hits.push("Széthúzott karakteres megkerülés");
+    score += 6;
+  }
+
+  if (/([a-zA-ZÁ-Űá-ű])\1{3,}/.test(raw)) {
+    hits.push("Nyújtott karakteres megkerülés");
+    score += 5;
+  }
+
+  if (/[0134578@$!|]/.test(raw) && (familyHits.length || insultHits.length || staffHits.length || threatHits.length)) {
+    hits.push("Leetspeak megkerülés");
+    score += 5;
+  }
+
+  if (normalizedCompact.length >= 8 && normalizedCompact !== normalizedLoose.replace(/\s+/g, "")) {
+    hits.push("Összerántott / tisztított obfuszkáció");
+    score += 3;
+  }
+
+  return {
+    score,
+    hits: [...new Set(hits)],
+    normalized: normalizedCompact,
+  };
 }
 
 function isTargetedInsult(content) {
   const lower = String(content || "").toLowerCase();
   return containsInsultWord(lower) && containsTargetWord(lower);
-}
-
-function containsMildProfanity(content = "") {
-  return (
-    containsFromWordList(content, MILD_PROFANITY_WORDS) ||
-    matchesAnyPattern(content, MILD_PROFANITY_PATTERNS)
-  );
-}
-
-function containsInsultWord(content = "") {
-  return (
-    containsFromWordList(content, INSULT_WORDS) ||
-    matchesAnyPattern(content, INSULT_PATTERNS)
-  );
-}
-
-function containsTargetWord(content = "") {
-  const lower = String(content || "").toLowerCase();
-  return TARGET_WORDS.some((word) => lower.includes(word));
-}
-
-function isContextualProfanity(content = "") {
-  const lower = String(content || "").toLowerCase().trim();
-
-  if (!containsMildProfanity(lower) && !containsInsultWord(lower)) return false;
-  if (containsTargetWord(lower)) return false;
-
-  if (/(te\b|ti\b|neked\b|nektek\b|ő\b|ez a\b|olyan vagy\b|vagytok\b)/i.test(lower)) {
-    return false;
-  }
-
-  return true;
 }
 
 function isTargetedDegradingMessage(content = "") {

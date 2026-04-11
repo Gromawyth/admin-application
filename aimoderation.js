@@ -2569,16 +2569,6 @@ function buildUnifiedEmbed({ member, profile }) {
         inline: false,
       },
       {
-        name: "📊 Kockázat",
-        value: formatRiskBlock(profile),
-        inline: false,
-      },
-      {
-  name: "\u200B",
-  value: "\u200B",
-  inline: false,
-},
-      {
         name: "📦 Előzmények (30 nap)",
         value: summaries.thirty,
         inline: false,
@@ -2586,6 +2576,11 @@ function buildUnifiedEmbed({ member, profile }) {
       {
         name: "🧾 Korábbi problémás üzenetek",
         value: trimField(previousMessages, 1024),
+        inline: false,
+      },
+       {
+        name: "📊 Kockázat",
+        value: formatRiskBlock(profile),
         inline: false,
       }
     )
@@ -4362,6 +4357,8 @@ async function handleSlashCommand(client, interaction) {
 function resetAiRiskProfile(userId) {
   const oldProfile = getUserProfile(userId);
 
+  delete store.caseMessages[userId];
+
   store.users[userId] = {
     incidents: [],
     recentMessages: [],
@@ -4370,19 +4367,46 @@ function resetAiRiskProfile(userId) {
     suspicion: 0,
     behaviorScore: 0,
     escalationLevel: 0,
-    
+    lastIncidentAt: 0,
+    lastDecay: Date.now(),
+
+    noticeState: {
+      lastNoticeAt: 0,
+      lastNoticeAction: "",
+      lastNoticeMessageId: null,
+    },
+
+    rehab: {
+      score: 0,
+      goodDays: 0,
+      level: "nincs",
+      lastCheckAt: Date.now(),
+      lastImprovedAt: 0,
+    },
+
     activeCase: {
       lastAction: "AI kockázat törölve",
+      lastActionRaw: "ignore",
       lastReason: "Staff kézzel lenullázta a kockázatot.",
       lastCategory: "Manuális törlés",
       lastSeverity: "enyhe",
       lastAnalysis:
         "A felhasználó AI moderációs előzményei és kockázati profilja kézzel lenullázásra kerültek.",
       lastPatternSummary: "A korábbi AI incidensek törölve lettek.",
+      lastRuleBroken: "Kézi staff nullázás",
       lastMessageContent: "",
+      lastMessageId: null,
+      lastChannelId: null,
+      lastProjectedRisk: 0,
+      lastEvidence: "",
+      lastModerationMode: "manual",
+      lastShieldReason: "",
+      lastBypassScore: 0,
+      lastReplyTarget: "",
       lastUpdatedAt: Date.now(),
       currentStatus: "Kockázat lenullázva",
     },
+
     totals: {
       warnings: 0,
       deletions: 0,
@@ -4396,6 +4420,7 @@ function resetAiRiskProfile(userId) {
     },
   };
 
+  saveStore();
   return oldProfile;
 }
 

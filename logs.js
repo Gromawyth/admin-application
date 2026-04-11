@@ -1167,38 +1167,38 @@ client.on("guildMemberUpdate", async (regi, uj) => {
 
     const reason = entry?.reason || "Nincs megadva";
 
-    if (ujTimeout > Date.now()) {
-      const vege = Math.floor(ujTimeout / 1000);
-      const durationMs = Math.max(0, ujTimeout - Date.now());
+if (ujTimeout > Date.now()) {
+  const vege = Math.floor(ujTimeout / 1000);
+  const durationMs = Math.max(0, ujTimeout - Date.now());
 
-      const refreshedMember =
-        uj.guild.members.cache.get(uj.id) ||
-        (await uj.guild.members.fetch(uj.id).catch(() => null));
+  const refreshedMember =
+    uj.guild.members.cache.get(uj.id) ||
+    (await uj.guild.members.fetch(uj.id).catch(() => null));
 
-      if (refreshedMember) {
-        await aiModeration.applyManualModerationAndLog(client, refreshedMember, {
-          action: "timeout",
-          moderatorTag,
-          reason,
-          durationText: aiModeration.formatDuration(durationMs),
-          source: "Kézi timeout",
-        }).catch((error) => {
-          console.error("[LOGS] kézi timeout -> AI sync hiba:", error);
-        });
-      }
+  if (refreshedMember) {
+    await aiModeration.applyManualModerationAndLog(client, refreshedMember, {
+      action: "timeout",
+      moderatorTag,
+      reason,
+      durationText: aiModeration.formatDuration(durationMs),
+      source: "Kézi timeout",
+    }).catch((error) => {
+      console.error("[LOGS] kézi timeout -> AI sync hiba:", error);
+    });
+  }
 
-      const embed = internalEmbed("Tag timeoutot kapott", SZINEK.FIGYELMEZTETES, "🔇")
-        .setDescription(`${uj.user} időkorlátozást kapott.`)
-        .addFields(
-          { name: "👤 Felhasználó", value: `${uj.user.tag} (${uj.id})`, inline: false },
-          { name: "🛠️ Végrehajtotta", value: moderatorTag, inline: false },
-          { name: "⏱️ Lejárat", value: `<t:${vege}:f>\n<t:${vege}:R>`, inline: false },
-          { name: "📄 Indok", value: reason, inline: false }
-        );
+  const embed = internalEmbed("Tag timeoutot kapott", SZINEK.FIGYELMEZTETES, "🔇")
+    .setDescription(`${uj.user} időkorlátozást kapott.`)
+    .addFields(
+      { name: "👤 Felhasználó", value: `${uj.user.tag} (${uj.id})`, inline: false },
+      { name: "🛠️ Végrehajtotta", value: moderatorTag, inline: false },
+      { name: "⏱️ Lejárat", value: `<t:${vege}:f>\n<t:${vege}:R>`, inline: false },
+      { name: "📄 Indok", value: reason, inline: false }
+    );
 
-      await kuldEmbed(client, "mod", embed);
-      return;
-    }
+  await kuldEmbed(client, "mod", embed);
+  return;
+}
 
     if (regiTimeout > 0 && ujTimeout === 0) {
       const embed = internalEmbed("Timeout feloldva", SZINEK.SIKER, "🔊")

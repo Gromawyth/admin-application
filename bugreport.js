@@ -1815,4 +1815,52 @@ function registerBugReport(client) {
     }
   });
 }
+// =========================
+// ❌ BUGREPORT FULL RESET
+// =========================
+if (interaction.isChatInputCommand() && interaction.commandName === "bugreset") {
+  const password = interaction.options.getString("jelszo");
+
+  if (password !== "Gromawyth123") {
+    return interaction.reply({
+      content: "❌ Hibás jelszó.",
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  const member = interaction.member;
+
+  if (!member.permissions.has("Administrator")) {
+    return interaction.reply({
+      content: "❌ Nincs jogosultságod.",
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  try {
+    // JSON RESET
+    const fresh = createDefaultData();
+    saveData(fresh);
+
+    // SUMMARY TÖRLÉS
+    const summaryChannel = await interaction.guild.channels
+      .fetch(CONFIG.BUG_SUMMARY_CHANNEL_ID)
+      .catch(() => null);
+
+    if (summaryChannel && summaryChannel.isTextBased()) {
+      const messages = await summaryChannel.messages.fetch({ limit: 100 });
+
+      for (const msg of messages.values()) {
+        await msg.delete().catch(() => {});
+      }
+    }
+
+    return interaction.editReply("🧹 Bugreport teljesen nullázva.");
+  } catch (err) {
+    console.error("BUG RESET ERROR:", err);
+    return interaction.editReply("❌ Hiba történt.");
+  }
+}
 module.exports = { registerBugReport };

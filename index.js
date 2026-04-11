@@ -517,7 +517,25 @@ function buildTicketModal(typeKey) {
 
 async function registerCommands() {
   const commands = [
+new SlashCommandBuilder()
+  .setName("bugreset")
+  .setDescription("Bugreport rendszer teljes törlése")
+  .addStringOption(option =>
+    option
+      .setName("kod")
+      .setDescription("Biztonsági kód")
+      .setRequired(true)
+  ),
 
+new SlashCommandBuilder()
+  .setName("ideareset")
+  .setDescription("Ötlet rendszer teljes törlése")
+  .addStringOption(option =>
+    option
+      .setName("kod")
+      .setDescription("Biztonsági kód")
+      .setRequired(true)
+  ),
 new SlashCommandBuilder()
   .setName("mute")
   .setDescription("Kézi timeout / mute egy játékosra")

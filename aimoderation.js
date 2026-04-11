@@ -1571,8 +1571,7 @@ function canonicalCharMap(text = "") {
 function normalizeModerationText(text = "", options = {}) {
   const { compact = false } = options;
 
-  let t = canonicalCharMap(text)
-    .replace(/([a-z])\1{2,}/g, "$1$1");
+  let t = canonicalCharMap(text).replace(/([a-z])\1{2,}/g, "$1$1");
 
   if (compact) {
     return t.replace(/[^a-z0-9]/g, "");
@@ -1590,6 +1589,7 @@ function canonicalTerm(term = "") {
 
 function containsCanonical(content = "", terms = []) {
   const compact = normalizeModerationText(content, { compact: true });
+
   return terms.some((term) => {
     const needle = canonicalTerm(term);
     return needle && compact.includes(needle);
@@ -1603,6 +1603,7 @@ function collectCanonicalHits(content = "", terms = [], limit = 8) {
   for (const term of terms) {
     const needle = canonicalTerm(term);
     if (!needle) continue;
+
     if (compact.includes(needle)) {
       hits.push(term);
       if (hits.length >= limit) break;
@@ -1610,6 +1611,25 @@ function collectCanonicalHits(content = "", terms = [], limit = 8) {
   }
 
   return hits;
+}
+
+function containsFromWordList(content = "", words = []) {
+  return containsCanonical(content, words);
+}
+
+function matchesAnyPattern(content = "", patterns = []) {
+  const raw = String(content || "");
+  const normalizedLoose = normalizeModerationText(content);
+  const normalizedCompact = normalizeModerationText(content, { compact: true });
+
+  return patterns.some((pattern) => {
+    pattern.lastIndex = 0;
+    return (
+      pattern.test(raw) ||
+      pattern.test(normalizedLoose) ||
+      pattern.test(normalizedCompact)
+    );
+  });
 }
 
 const MILD_PROFANITY_PATTERNS = [
@@ -1623,6 +1643,7 @@ const INSULT_PATTERNS = [
   /\b(te\s+nyomor[eé]k|te\s+retkes|te\s+csicska|te\s+barom|te\s+boh[oó]c)\b/i,
   /\b(szarh[aá]zi|semmirekell[oő]|faszfej|faszkalap|gecifej|geciarc)\b/i,
 ];
+
 function containsMildProfanity(content = "") {
   return (
     containsFromWordList(content, MILD_PROFANITY_WORDS) ||
@@ -1639,17 +1660,25 @@ function containsInsultWord(content = "") {
     matchesAnyPattern(content, INSULT_PATTERNS)
   );
 }
+
 function containsTargetWord(content = "") {
   return containsCanonical(content, TARGET_WORDS);
 }
 
 function isContextualProfanity(content = "") {
-  const lower = normalizeModerationText(content);
+  const normalized = normalizeModerationText(content);
 
-  if (!containsMildProfanity(lower) && !containsInsultWord(lower)) return false;
-  if (containsTargetWord(lower)) return false;
+  if (!containsMildProfanity(normalized) && !containsInsultWord(normalized)) {
+    return false;
+  }
 
-  if (/(te\b|ti\b|neked\b|nektek\b|o\b|ok\b|ez a\b|olyan vagy\b|vagytok\b)/i.test(lower)) {
+  if (containsTargetWord(normalized)) {
+    return false;
+  }
+
+  if (
+    /\b(te|ti|neked|nektek|o|ok|ez a|olyan vagy|vagytok)\b/i.test(normalized)
+  ) {
     return false;
   }
 
@@ -1717,12 +1746,18 @@ function detectBypassPatterns(content = "") {
     score += 5;
   }
 
-  if (/[0134578@$!|]/.test(raw) && (familyHits.length || insultHits.length || staffHits.length || threatHits.length)) {
+  if (
+    /[0134578@$!|]/.test(raw) &&
+    (familyHits.length || insultHits.length || staffHits.length || threatHits.length)
+  ) {
     hits.push("Leetspeak megkerülés");
     score += 5;
   }
 
-  if (normalizedCompact.length >= 8 && normalizedCompact !== normalizedLoose.replace(/\s+/g, "")) {
+  if (
+    normalizedCompact.length >= 8 &&
+    normalizedCompact !== normalizedLoose.replace(/\s+/g, "")
+  ) {
     hits.push("Összerántott / tisztított obfuszkáció");
     score += 3;
   }
@@ -1732,49 +1767,6 @@ function detectBypassPatterns(content = "") {
     hits: [...new Set(hits)],
     normalized: normalizedCompact,
   };
-}
-
-function isTargetedInsult(content) {
-  const lower = String(content || "").toLowerCase();
-  return containsInsultWord(lower) && containsTargetWord(lower);
-}
-
-function isTargetedDegradingMessage(content = "") {
-  const lower = String(content || "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!lower) return false;
-
-  const strongTargetPatterns = [
-    /\b(szerver|server|internalgaming)\b.{0,20}\b(szar|fos|hullad[eé]k|szutyok|szenny|boh[oó]c|retkes|nyomor[eé]k|vicc)\b/i,
-    /\b(szar|fos|hullad[eé]k|szutyok|szenny|boh[oó]c|retkes|nyomor[eé]k|vicc)\b.{0,20}\b(szerver|server|internalgaming)\b/i,
-
-    /\b(admin|adminok|adminisztr[aá]tor|moder[aá]tor|moderator|staff|vezet[oő]s[eé]g|fejleszt[oő])\b.{0,20}\b(szar|fos|hullad[eé]k|boh[oó]c|retkes|nyomor[eé]k|csicska|szutyok|szenny)\b/i,
-    /\b(szar|fos|hullad[eé]k|boh[oó]c|retkes|nyomor[eé]k|csicska|szutyok|szenny)\b.{0,20}\b(admin|adminok|adminisztr[aá]tor|moder[aá]tor|moderator|staff|vezet[oő]s[eé]g|fejleszt[oő])\b/i,
-
-    /\b(ez a|ilyen|ez)\s+(szerver|server)\s+(egy\s+)?(szar|fos|vicc|hullad[eé]k)\b/i,
-    /\b(szerver|server)\s+(egy\s+)?(szar|fos|vicc|hullad[eé]k)\b/i,
-    /\binternalgaming\s+(egy\s+)?(szar|fos|vicc|hullad[eé]k)\b/i,
-  ];
-
-  if (strongTargetPatterns.some((rx) => rx.test(lower))) {
-    return true;
-  }
-
-  const hasInsult = containsInsultWord(lower) || containsMildProfanity(lower);
-  const hasTarget = containsTargetWord(lower);
-
-  if (!hasInsult || !hasTarget) return false;
-
-  if (
-    /\b(te|ti|neked|nektek|vagytok|olyan vagy|egy rakás|egy nagy)\b/i.test(lower)
-  ) {
-    return true;
-  }
-
-  return false;
 }
 
 function countRecentTargetedInsults(profile, currentContent = "") {

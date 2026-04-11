@@ -703,7 +703,10 @@ function applyDailyDecay(profile) {
 }
 
 function formatRiskBlock(profile) {
-  const risk = Math.max(0, Math.min(100, Math.round(Number(profile?.behaviorScore || 0))));
+  const liveRisk = getRiskPercent(profile);
+  profile.behaviorScore = liveRisk;
+
+  const risk = Math.max(0, Math.min(100, Math.round(liveRisk)));
   const filled = Math.round(risk / 10);
 
   let bar = "";
@@ -842,22 +845,28 @@ function extendWatch(profile, ms = CONFIG.WATCH_WINDOW_MS) {
 function buildImmediateRuleDecision(message, profile) {
   const content = String(message?.content || "").trim();
   const lower = content.toLowerCase();
+  const normalized = normalizeBypassText(content);
 
   if (!content) return null;
 
   const targetedDegrading = isTargetedDegradingMessage(content);
   const directHarassment =
-    containsInsultWord(lower) &&
-    /\b(te|ti|neked|nektek|ő|ők|vagytok|vagy|takarodj|kuss|dögölj meg|dogolj meg|rohadj meg)\b/i.test(lower);
+    (containsInsultWord(lower) &&
+      /\b(te|ti|neked|nektek|ő|ők|vagytok|vagy|takarodj|kuss|dögölj meg|dogolj meg|rohadj meg)\b/i.test(lower)) ||
+    /(anyad|anyadat|anyatok|kurvaanyad)/i.test(normalized);
 
   const rawStaffAbuse =
     REGEX.staffAbuse.test(content) ||
     /\b(szar szerver|fos szerver|szar admin|fos admin|retkes admin|bohóc admin|szutyok szerver|szenny szerver)\b/i.test(lower);
 
+  const bypassStaffAbuse =
+    /(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)/i.test(normalized) ||
+    /(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)/i.test(normalized);
+
   const notBelongingBehavior =
     /\b(kussoljon mindenki|kuss legyen|mindenki fogja be|szétspamellek|tele fogom floodolni|szét fogom baszni a chatet)\b/i.test(lower);
 
-  if (targetedDegrading || rawStaffAbuse) {
+  if (targetedDegrading || rawStaffAbuse || bypassStaffAbuse) {
     const repeatCount = countRecentTargetedInsults(profile, content);
 
     let action = "delete";
@@ -895,7 +904,10 @@ function buildImmediateRuleDecision(message, profile) {
       points,
       suspicionGain,
       ruleBroken: "Célzott szerver / staff / közösség szidalmazása.",
-      reason: "A rendszer célzott, nem odatartozó és degradáló minősítést talált.",
+      reason:
+        bypassStaffAbuse
+          ? "A rendszer obfuszkált szerver / staff szidalmazást talált."
+          : "A rendszer célzott, nem odatartozó és degradáló minősítést talált.",
       analysis:
         repeatCount >= 1
           ? "A felhasználó célzott, sértő minősítést használt, ráadásul ez nem első eset."
@@ -916,11 +928,14 @@ function buildImmediateRuleDecision(message, profile) {
       category: "harassment",
       categoryHu: "Célzott sértegetés",
       severity: "közepes",
-      confidence: 92,
+      confidence: 94,
       points: 48,
       suspicionGain: 12,
       ruleBroken: "Célzott sértegetés / szidalmazás.",
-      reason: "A rendszer közvetlen sértő megszólítást talált.",
+      reason:
+        /(anyad|anyadat|anyatok|kurvaanyad)/i.test(normalized)
+          ? "A rendszer 'anyád' jellegű sértést talált, akár obfuszkált formában is."
+          : "A rendszer közvetlen sértő megszólítást talált.",
       analysis: "A felhasználó más személy felé irányuló sértő hangnemet használt.",
       patternSummary: "Azonnali törlendő célzott sértés.",
       timeoutMinutes: 0,
@@ -955,14 +970,62 @@ function normalizeBypassText(content = "") {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[\*_~`|.,;:!?()[\]{}<>\/\\'"\-]+/g, "")
     .replace(/[0]/g, "o")
     .replace(/[1!|]/g, "i")
     .replace(/[3]/g, "e")
     .replace(/[4@]/g, "a")
     .replace(/[5$]/g, "s")
     .replace(/[7]/g, "t")
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/([a-z])\1{2,}/g, "$1")
     .replace(/\s+/g, "");
+}
+
+function detectBypassPatterns(content = "") {
+  const normalized = normalizeBypassText(content);
+  let score = 0;
+  const hits = [];
+
+  const bypassWords = [
+    {
+      regex: /(kurvaanyad|anyad|anyadat|anyatok)/i,
+      label: "Obfuszkált családi sértés",
+    },
+    {
+      regex: /(rohadjmeg|dogoljmeg|nyomorek|retkes|szarhazi|geci|csicska)/i,
+      label: "Obfuszkált sértés",
+    },
+    {
+      regex: /(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)/i,
+      label: "Obfuszkált szerver / staff szidalmazás",
+    },
+    {
+      regex: /(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)/i,
+      label: "Obfuszkált szerver / staff szidalmazás",
+    },
+    {
+      regex: /(discordgg|discordcominvite)/i,
+      label: "Obfuszkált meghívó / reklám",
+    },
+    {
+      regex: /(freenitro|giftlink|loginhere|token|steamajandek)/i,
+      label: "Obfuszkált scam minta",
+    },
+  ];
+
+  for (const item of bypassWords) {
+    if (item.regex.test(normalized)) {
+      hits.push(item.label);
+      score += CONFIG.BYPASS_EXTRA_POINTS;
+    }
+  }
+
+  if (/([a-záéíóöőúüű])\1{5,}/i.test(String(content || ""))) {
+    hits.push("Széthúzott / ismételt karakteres megkerülés");
+    score += 6;
+  }
+
+  return { score, hits, normalized };
 }
 
 function detectBypassPatterns(content = "") {
@@ -2533,6 +2596,11 @@ function buildUnifiedEmbed({ member, profile }) {
   );
 
   const active = profile.activeCase || {};
+  const liveRisk = getRiskPercent(profile);
+  profile.behaviorScore = liveRisk;
+
+  const quotedMessage = trimField(active.lastMessageContent || "-", 220);
+  const metaNote = trimField(active.lastEvidence || "-", 700);
 
   return new EmbedBuilder()
     .setColor(colorBySeverity(active.lastSeverity || "enyhe"))
@@ -2563,14 +2631,14 @@ function buildUnifiedEmbed({ member, profile }) {
       {
         name: "📎 Bizonyíték",
         value:
-          `Üzenet: ${trimField(active.lastMessageContent || "-", 256)}\n` +
+          `Üzenet:\n>>> ${quotedMessage}\n` +
           `Csatorna: ${active.lastChannelId ? `<#${active.lastChannelId}>` : "-"}\n` +
-          `Részletek: ${trimField(active.lastEvidence || "-", 256)}`,
+          `Megjegyzés:\n${metaNote}`,
         inline: false,
       },
       {
         name: "📦 Előzmények (30 nap)",
-        value: summaries.thirty,
+        value: `${summaries.thirty}\n\n${trimField(summaries.actions, 700)}`,
         inline: false,
       },
       {
@@ -2578,7 +2646,17 @@ function buildUnifiedEmbed({ member, profile }) {
         value: trimField(previousMessages, 1024),
         inline: false,
       },
-       {
+      {
+        name: "🕵️ Suspicion",
+        value: `**${suspicion}**`,
+        inline: true,
+      },
+      {
+        name: "📈 Risk sáv",
+        value: `**${getRiskBand(profile)}**`,
+        inline: true,
+      },
+      {
         name: "📊 Kockázat",
         value: formatRiskBlock(profile),
         inline: false,
@@ -3543,6 +3621,15 @@ if (final.action === "watch") {
     lastMessageId: message.id,
     lastChannelId: message.channelId,
     lastProjectedRisk: getRiskPercent(profile),
+    lastEvidence:
+      `Csatorna: ${message.channel ? `<#${message.channel.id}>` : "-"}\n` +
+      `Pont: ${Number(final.points || CONFIG.WATCH_BASE_POINTS)}\n` +
+      `Risk: ${getRiskPercent(profile)}%\n` +
+      `Watch vége: ${
+        profile.watchUntil > Date.now()
+          ? `<t:${Math.floor(profile.watchUntil / 1000)}:R>`
+          : "nincs"
+      }`,
     lastUpdatedAt: Date.now(),
     currentStatus: "Megfigyelés / watch",
   };
@@ -3550,6 +3637,7 @@ if (final.action === "watch") {
   saveStore();
 
   await sendSingleUserNotice({ message, member, profile, final }).catch(() => null);
+  await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
   await logWatchIncident(client, message, member, profile, final).catch(() => null);
 
   return;
@@ -4290,39 +4378,39 @@ function highestCategoryFromRule(hits = []) {
 }
 
 function buildEvidenceText(message, ruleScan, final, bypass, replyTarget) {
-  const hitText = (ruleScan.hits || [])
-    .map((h) => `• ${h.label} (${h.points})`)
-    .join("\n") || "Nincs szabályalapú találat.";
+  const topRuleHits = (ruleScan.hits || [])
+    .slice(0, 3)
+    .map((h) => h.label);
 
-  const behaviorText =
-    Array.isArray(final.behaviorLabels) && final.behaviorLabels.length
-      ? final.behaviorLabels.map((x) => `• ${x}`).join("\n")
-      : "Nincs külön viselkedési extra.";
+  const bypassHits = (bypass?.hits || []).slice(0, 3);
 
   return cleanText(
     [
-      `Csatorna: #${message?.channel?.name || "ismeretlen"}`,
-      `Confidence: ${Number(final.confidence || 0)}`,
+      topRuleHits.length
+        ? `Fő találatok: ${topRuleHits.join(", ")}`
+        : "Fő találat: nincs",
       `Pont: ${Number(final.points || 0)}`,
-      `Projected risk: ${Number(final.projectedRisk || 0)}%`,
-      `Moderációs mód: ${final.moderationMode || "balanced"}`,
-      `Bypass score: ${Number(bypass?.score || 0)}`,
-      `Reply célpont: ${
-        replyTarget?.targetTag ||
-        (replyTarget?.targetId ? replyTarget.targetId : "nincs")
+      `Bizalom: ${Number(final.confidence || 0)}%`,
+      `Várható risk: ${Number(final.projectedRisk || 0)}%`,
+      `Bypass: ${
+        bypassHits.length
+          ? bypassHits.join(", ")
+          : Number(bypass?.score || 0) > 0
+            ? `${Number(bypass.score)} pont`
+            : "nem"
       }`,
-      `Reply staff: ${replyTarget?.targetIsStaff ? "igen" : "nem"}`,
-      `Feedback delta: ${Number(final.feedbackDelta || 0)}`,
-      `Escalation: ${final.escalationLabel || "nincs"}`,
-      `\nRule találatok:\n${hitText}`,
-      `\nViselkedési jelek:\n${behaviorText}`,
-      bypass?.hits?.length
-        ? `\nBypass találatok:\n${bypass.hits.map((x) => `• ${x}`).join("\n")}`
+      `Válasz célpont: ${
+        replyTarget?.targetTag ||
+        (replyTarget?.targetId ? "ismeretlen tag" : "nincs")
+      }`,
+      `Staff felé ment: ${replyTarget?.targetIsStaff ? "igen" : "nem"}`,
+      Array.isArray(final.behaviorLabels) && final.behaviorLabels.length
+        ? `Viselkedési jel: ${final.behaviorLabels.slice(0, 3).join(", ")}`
         : "",
     ]
       .filter(Boolean)
       .join("\n"),
-    1500
+    700
   );
 }
 
@@ -4859,8 +4947,90 @@ async function handleInteraction(client, interaction) { // idáig!!!!!!!!!!!!!!!
     } catch {}
   }
 }
+async function refreshDecayedCaseEmbeds(client) {
+  const logChannel = await getLogChannel(client);
+  if (!logChannel) return;
 
+  let changedAnything = false;
+
+  for (const [userId, messageId] of Object.entries(store.caseMessages || {})) {
+    if (!messageId) continue;
+
+    const profile = store.users?.[userId];
+    if (!profile) continue;
+
+    const oldRisk = Number(profile.behaviorScore || 0);
+    const newRisk = getRiskPercent(profile);
+
+    let dirty = false;
+
+    if (oldRisk !== newRisk) {
+      profile.behaviorScore = newRisk;
+      dirty = true;
+    }
+
+    if (Number(profile.activeCase?.lastProjectedRisk || 0) !== newRisk) {
+      profile.activeCase = {
+        ...(profile.activeCase || {}),
+        lastProjectedRisk: newRisk,
+        lastUpdatedAt: Date.now(),
+      };
+      dirty = true;
+    }
+
+    if (
+      profile.activeCase?.lastActionRaw === "watch" &&
+      !isWatchActive(profile) &&
+      /watch/i.test(String(profile.activeCase?.currentStatus || ""))
+    ) {
+      profile.activeCase = {
+        ...(profile.activeCase || {}),
+        currentStatus: "Megfigyelés",
+        lastUpdatedAt: Date.now(),
+      };
+      dirty = true;
+    }
+
+    if (!dirty) continue;
+
+    const member =
+      logChannel.guild.members.cache.get(userId) ||
+      (await logChannel.guild.members.fetch(userId).catch(() => null)) ||
+      {
+        id: userId,
+        user: {
+          tag: "Ismeretlen",
+          username: "Ismeretlen",
+        },
+      };
+
+    const caseMessage = await logChannel.messages.fetch(messageId).catch(() => null);
+    if (!caseMessage) continue;
+
+    const embed = buildUnifiedEmbed({ member, profile });
+    const components = buildButtons(userId, profile.activeCase?.lastActionRaw || "");
+
+    await caseMessage.edit({
+      embeds: [embed],
+      components,
+    }).catch(() => null);
+
+    changedAnything = true;
+  }
+
+  if (changedAnything) {
+    saveStore();
+  }
+}
 function registerAiModeration(client) {
+  client.once("ready", () => {
+    setInterval(() => {
+      refreshDecayedCaseEmbeds(client).catch((error) => {
+        console.error("[AIMOD] decay embed refresh hiba:", error);
+      });
+    }, 10 * 60 * 1000);
+  });
+
   client.on("messageCreate", async (message) => {
     await processMessage(client, message);
   });

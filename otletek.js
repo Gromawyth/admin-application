@@ -29,8 +29,8 @@ const CONFIG = {
   USE_AI_FOR_LONG_COMMENTS_ONLY: true,
   MIN_COMMENT_LENGTH_FOR_AI: 160,
 
-  AI_MATCH_CONFIDENCE: 0.74,
-  FALLBACK_SIMILARITY_THRESHOLD: 0.60,
+AI_MATCH_CONFIDENCE: 0.90,
+FALLBACK_SIMILARITY_THRESHOLD: 0.78,
 
   MAX_OPEN_IDEAS_FOR_AI: 20,
   MAX_TRAINING_EXAMPLES: 25,
@@ -677,17 +677,21 @@ Te egy Discord ötletkezelő rendszer segédje vagy.
 
 Feladat:
 - döntsd el, hogy az új ötlet ugyanahhoz a meglévő NYITOTT ötlethez tartozik-e
-- ha igen, add vissza a meglévő ötlet id-ját
-- ha nem, a matchIdeaId legyen null
-- a canonicalTitle legyen rövid, tiszta és emberi
-- a summary legyen 2-3 rövid, érthető magyar mondat
-- a decisionReason legyen 1 rövid mondat
+- csak akkor vond össze, ha egyértelműen ugyanarról a funkcióról / rendszerről / panelről / témáról szól
+- ha a téma más rendszerre, más panelre, más funkcióra vagy más hibapontra vonatkozik, akkor NEM ugyanaz
+- ha bizonytalan vagy, inkább NE vond össze
 
-Fontos:
-- ne csak szavakat figyelj, hanem a lényeget
-- ha az ötlet másképp megfogalmazva, de ugyanarról szól, vond össze
+Nagyon fontos példák:
+- "nem jó az inventory" NEM ugyanaz, mint "nem jó a bank panel"
+- "bank UI hiba" NEM ugyanaz, mint "inventory item áthelyezés hiba"
+- csak a valóban azonos témákat vond össze
+
+Elvárások:
+- a canonicalTitle legyen rövid, tiszta és emberi
+- a summary legyen 2 rövid magyar mondat
+- a decisionReason legyen 1 rövid mondat
 - ne írj túl hivatalosan
-- ne írj regényt
+- ne találgass
 
 Korábbi példák:
 ${JSON.stringify(examples, null, 2)}
@@ -704,7 +708,7 @@ Csak JSON-t adj vissza:
   "matchIdeaId": "idea_xxx" vagy null,
   "confidence": 0 és 1 közötti szám,
   "canonicalTitle": "rövid cím",
-  "summary": "2-3 mondatos összefoglaló",
+  "summary": "2 rövid mondatos összefoglaló",
   "decisionReason": "rövid egyszerű leírás"
 }
 `;
@@ -1452,14 +1456,14 @@ async function processForumReply(client, message) {
   } catch (error) {
     console.error("[IDEAS] processForumReply -> aiAnalyzeIdeaComment hiba:", error);
     analysis = {
-      meaningful: content.length >= 18,
-      type: content.length >= 18 ? "other_meaningful" : "smalltalk",
+      meaningful: content.length >= 10,
+      type: content.length >= 10 ? "other_meaningful" : "smalltalk",
       reaction: "neutral",
-      summary: content.length >= 18 ? cleanupShortText(content, 180) : "",
+      summary: content.length >= 10 ? cleanupShortText(content, 180) : "",
     };
   }
 
-  if (!analysis?.meaningful) return;
+  if (!analysis || (!analysis.meaningful && content.length < 10)) return;
 
   const userId = message.author.id;
   const newReaction = analysis.reaction || "neutral";

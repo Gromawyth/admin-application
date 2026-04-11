@@ -23,8 +23,8 @@ const CONFIG = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   OPENAI_MODEL: "gpt-5-mini",
 
-  AI_MATCH_CONFIDENCE: 0.72,
-  FALLBACK_SIMILARITY_THRESHOLD: 0.58,
+AI_MATCH_CONFIDENCE: 0.89,
+FALLBACK_SIMILARITY_THRESHOLD: 0.76,
 
   MAX_OPEN_BUGS_FOR_AI: 25,
   MAX_TRAINING_EXAMPLES: 30,
@@ -359,15 +359,32 @@ function getSupportTextBug(bug) {
 function buildBugEmbed(bug) {
   const style = getStatusStyle(bug.status);
 
-  const summaryText = cleanupShortText(
-    bug.aiSummary || bug.description || "Nincs összefoglaló.",
-    520
+  const summaryBase = cleanupShortText(
+    bug.description || bug.canonicalTitle || bug.title || "Nincs összefoglaló.",
+    420
   );
 
-  const aiShort = cleanupShortText(
-    bug.aiDecisionReason || bug.aiSummary || "Nincs rövid leírás.",
-    220
-  );
+  const aiExtra = getState("bugreport_ai_summary")
+    ? cleanupShortText(
+        bug.aiSummary || bug.aiDecisionReason || "",
+        220
+      )
+    : "";
+
+  let summaryText = summaryBase;
+
+  if (
+    aiExtra &&
+    aiExtra !== "-" &&
+    aiExtra !== "Nincs összefoglaló." &&
+    aiExtra !== summaryBase
+  ) {
+    const cleanBase = summaryBase.replace(/[.!?\s]+$/, "");
+    const cleanExtra = aiExtra.charAt(0).toLowerCase() + aiExtra.slice(1);
+    summaryText = `${cleanBase}, ${cleanExtra}`;
+  }
+
+  summaryText = limitText(summaryText, 4000);
 
   const decisionText =
     bug.status === "Nyitott"
@@ -388,7 +405,7 @@ function buildBugEmbed(bug) {
 
   return new EmbedBuilder()
     .setTitle(`${style.emoji} BUG: ${limitText(bug.canonicalTitle || bug.title, 200)}`)
-    .setDescription(limitText(summaryText, 4000))
+    .setDescription(summaryText)
     .addFields(
       {
         name: "📊 Jelentések száma",
@@ -404,11 +421,6 @@ function buildBugEmbed(bug) {
         name: "👤 Kezelő",
         value: bug.handler || "-",
         inline: true,
-      },
-      {
-        name: getState("bugreport_ai_summary") ? "🧠 AI rövid leírás" : "🧠 Rövid leírás",
-        value: aiShort,
-        inline: false,
       },
       {
         name: "🤝 Közösségi reakció",
@@ -621,18 +633,21 @@ Te egy Discord bugrendszer segédje vagy.
 
 Feladat:
 - döntsd el, hogy az új hibajelentés ugyanahhoz a meglévő NYITOTT bughoz tartozik-e
-- ha igen, add vissza a meglévő bug id-ját
-- ha nem, a matchBugId legyen null
+- csak akkor vond össze, ha egyértelműen ugyanarról a rendszerről, panelről, funkcióról vagy hibapontról van szó
+- ha a téma más rendszerre vagy más panelre vonatkozik, akkor NEM ugyanaz a bug
+- ha bizonytalan vagy, inkább ne vond össze
+
+Nagyon fontos példák:
+- "nem jó az inventory" NEM ugyanaz, mint "nem jó a bank panel"
+- "inventory item drag hiba" NEM ugyanaz, mint "bank utalás gomb nem reagál"
+- csak az egyértelműen azonos hibákat vond össze
+
+Elvárások:
 - a summary legyen rövid, egyszerű magyar szöveg
 - a decisionReason legyen rövid, hétköznapi, könnyen érthető magyar szöveg
 - a canonicalTitle legyen rövid és tiszta
-
-Fontos:
-- ne használj bonyolult vagy technikai szavakat
 - ne írj okoskodó stílusban
-- ne használd azt, hogy reprodukálható / nem reprodukálható
-- maximum 2-4 mondat summary
-- maximum 2 rövid mondat decisionReason
+- ne találgass
 
 Korábbi példák:
 ${JSON.stringify(examples, null, 2)}
@@ -863,21 +878,22 @@ Csak JSON:
 }
 
 async function aiRefreshBugSummaryFromComments(bug) {
-    if (!getState("bugreport_ai_summary")) {
+  if (!getState("bugreport_ai_summary")) {
     return cleanupShortText(
-      bug.description || bug.aiSummary || bug.title || "Nincs összefoglaló.",
+      [
+        bug.description || "",
+        bug.communityNotes && bug.communityNotes !== "-" ? bug.communityNotes : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
       420
     );
   }
+
   const fallback = cleanupShortText(
     [
       bug.description || "",
-      bug.communityStatus && bug.communityStatus !== "nincs"
-        ? `Fórumos visszajelzés: ${bug.communityStatus}.`
-        : "",
-      bug.communityNotes && bug.communityNotes !== "-"
-        ? bug.communityNotes
-        : "",
+      bug.communityNotes && bug.communityNotes !== "-" ? bug.communityNotes : "",
     ]
       .filter(Boolean)
       .join(" "),
@@ -889,37 +905,30 @@ async function aiRefreshBugSummaryFromComments(bug) {
   }
 
   const prompt = `
-Te egy Discord bugkezelő rendszer rövid magyar összefoglaló generátora vagy.
+Te egy Discord bugkezelő rendszer rövid magyar összegzője vagy.
 
 Feladat:
-- írj 2-4 rövid, természetes magyar mondatot
-- ez a szöveg lesz a bug embed főcím alatti leírása
-- lehet kicsit hosszabb és informatívabb
-- de ne legyen túl hosszú és ne legyen regény
-- vedd figyelembe az eredeti hibaleírást és a fórumos hozzászólások lényegét is
-- ha a kommentek szerint a hiba több embernél is előjön, írd bele
-- ha a kommentek szerint már megoldódott vagy semmis, azt is építsd bele természetesen
-- ne használj listát
-- ne írj technikai vagy túl hivatalos stílusban
-- ne írj címet, csak maga a leírás legyen
-- a szöveg jól nézzen ki embed leírásként
+- csak azt írd le, ami ténylegesen szerepel a bug leírásában vagy a kommentekben
+- ne találgass
+- ne írj olyat, hogy "valószínűleg", "feltehetően", "lehet", "intermittáló", "felhasználóspecifikus"
+- ne magyarázd, hogy szerinted miért történik
+- ne adj technikai következtetéseket
+- röviden írd le:
+  1. mi a bejegyzés / milyen hibáról szól
+  2. ha vannak visszajelzések, azok mit mondanak
+- maximum 2-3 rövid mondat
+- egyszerű, emberi magyar szöveg kell
 
 Bug címe:
 ${bug.canonicalTitle || bug.title || "Ismeretlen bug"}
 
-Eredeti leírás:
+Bug leírása:
 ${bug.description || "Nincs leírás."}
 
-Jelenlegi rövid összefoglaló:
-${bug.aiSummary || "Nincs."}
+Közösségi visszajelzések:
+${bug.communityNotes || "-"}
 
-Fórumos érdemi hozzászólások:
-${getCommentContextForAI(bug)}
-
-Közösségi állapot:
-${bug.communityStatus || "nincs"}
-
-Csak a kész magyar szöveget add vissza.
+Csak maga a kész szöveg legyen a válasz.
 `;
 
   try {
@@ -932,7 +941,7 @@ Csak a kész magyar szöveget add vissza.
     const text = compactText(response.output_text || "");
     if (!text) return fallback;
 
-    return cleanupShortText(text, 520);
+    return cleanupShortText(text, 420);
   } catch (error) {
     console.error("[BUGREPORT] aiRefreshBugSummaryFromComments hiba:", error?.message || error);
     return fallback;
@@ -1289,14 +1298,14 @@ async function processForumReply(client, message) {
   } catch (error) {
     console.error("[BUGREPORT] processForumReply -> aiAnalyzeForumComment hiba:", error);
     analysis = {
-      meaningful: content.length >= 18,
-      type: content.length >= 18 ? "other_meaningful" : "smalltalk",
+      meaningful: content.length >= 10,
+      type: content.length >= 10 ? "other_meaningful" : "smalltalk",
       reaction: "neutral",
-      summary: content.length >= 18 ? cleanupShortText(content, 180) : "",
+      summary: content.length >= 10 ? cleanupShortText(content, 180) : "",
     };
   }
 
-  if (!analysis?.meaningful) return;
+  if (!analysis || (!analysis.meaningful && content.length < 10)) return;
 
   const userId = message.author.id;
   const newReaction = analysis.reaction || "neutral";

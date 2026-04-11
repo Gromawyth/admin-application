@@ -1772,7 +1772,7 @@ function registerIdeaSystem(client) {
       // ❌ IDEA RESET (SLASH)
       // =========================
       if (interaction.isChatInputCommand() && interaction.commandName === "ideareset") {
-        const password = interaction.options.getString("jelszo");
+        const password = interaction.options.getString("kod");
 
         if (String(password).trim() !== "Gromawyth123") {
           return interaction.reply({

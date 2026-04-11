@@ -1718,7 +1718,7 @@ function registerBugReport(client) {
   client.on("interactionCreate", async (interaction) => {
         if (!getState("bugreport_enabled")) return;
         if (interaction.isChatInputCommand() && interaction.commandName === "bugreset") {
-  const password = interaction.options.getString("jelszo");
+  const password = interaction.options.getString("kod");
 
 if (String(password).trim() !== "Gromawyth123") {
     return interaction.reply({

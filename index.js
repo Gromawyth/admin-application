@@ -73,8 +73,6 @@ const ideaSystem = require("./otletek");
 const aiModeration = require("./aimoderation");
 const systemPanel = require("./systempanel");
 const { getState } = require("./systempanel");
-const embedStudio = require("./embedstudio");
-embedStudio.registerEmbedStudio(client);
 systemPanel.registerSystemPanel(client);
 bugReport.registerBugReport(client);
 ideaSystem.registerIdeaSystem(client);
@@ -654,9 +652,8 @@ new SlashCommandBuilder()
 
       .setName("sendticketpanels")
       .setDescription("Kirakja a ticket paneleket ebbe a csatornába.")
-      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
 
-      embedStudio.getEmbedCommand()
   
     ].map(cmd => cmd.toJSON());
 

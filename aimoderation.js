@@ -1253,6 +1253,138 @@ function capActionForSafeMode(action) {
 
   return current;
 }
+function getModerationMode() {
+  const safeMode = getState("aimod_safe_mode");
+
+  if (safeMode) return "safe";
+
+  return "balanced";
+}
+async function applyModerationDecision(client, message, profile, final) {
+  const member = message.member;
+
+  if (!member) return;
+
+  // ne moderáljon ha nem tud
+  if (!canModerateTarget(member)) return;
+
+  const action = final.action;
+
+  try {
+    // =========================
+    // DELETE
+    // =========================
+    if (action === "delete") {
+      if (CONFIG.ALLOW_DELETE) {
+        await message.delete().catch(() => null);
+        profile.totals.deletions++;
+      }
+    }
+
+    // =========================
+    // TIMEOUT
+    // =========================
+    if (action === "timeout") {
+      if (CONFIG.ALLOW_TIMEOUT) {
+        const ms = (final.timeoutMinutes || 10) * 60 * 1000;
+
+        await member.timeout(ms, final.reason || "AI Moderation")
+          .catch(() => null);
+
+        profile.totals.timeouts++;
+      }
+    }
+
+    // =========================
+    // KICK
+    // =========================
+    if (action === "kick") {
+      if (CONFIG.ALLOW_KICK) {
+        await member.kick(final.reason || "AI Moderation")
+          .catch(() => null);
+
+        profile.totals.kicks++;
+      }
+    }
+
+    // =========================
+    // BAN
+    // =========================
+    if (action === "ban") {
+      if (CONFIG.ALLOW_BAN) {
+        await member.ban({
+          reason: final.reason || "AI Moderation",
+        }).catch(() => null);
+
+        profile.totals.bans++;
+      }
+    }
+
+    // =========================
+    // WATCH
+    // =========================
+    if (action === "watch") {
+      extendWatch(profile);
+
+      profile.suspicion += final.suspicionGain || 5;
+      profile.totals.watches++;
+    }
+
+    // =========================
+    // INCIDENT LOG
+    // =========================
+    addIncident(member.id, {
+      type: action,
+      category: final.category,
+      severity: final.severity,
+      points: final.points,
+      suspicion: final.suspicionGain || 0,
+      reason: final.reason,
+      ruleBroken: final.ruleBroken,
+      content: cleanText(message.content || "", 400),
+      messageId: message.id,
+      channelId: message.channelId,
+      createdAt: Date.now(),
+    });
+
+    // =========================
+    // PROFILE UPDATE
+    // =========================
+    profile.behaviorScore = getRiskPercent(profile);
+
+    profile.activeCase = {
+      ...(profile.activeCase || {}),
+      lastAction: actionToLabel(action),
+      lastActionRaw: action,
+      lastReason: final.reason || "",
+      lastCategory: final.categoryHu || categoryToHu(final.category),
+      lastSeverity: final.severity,
+      lastAnalysis: final.analysis || "",
+      lastPatternSummary: final.patternSummary || "",
+      lastRuleBroken: final.ruleBroken || "",
+      lastMessageContent: cleanText(message.content || "", 500),
+      lastMessageId: message.id,
+      lastChannelId: message.channelId,
+      lastProjectedRisk: profile.behaviorScore,
+      lastUpdatedAt: Date.now(),
+    };
+
+    saveStore();
+
+    // =========================
+    // USER NOTICE
+    // =========================
+    await sendSingleUserNotice({
+      message,
+      member,
+      profile,
+      final,
+    }).catch(() => null);
+
+  } catch (err) {
+    console.error("[AIMOD] applyModerationDecision hiba:", err);
+  }
+}
 function getRecentIncidentCounts(profile) {
   const nowTime = Date.now();
 

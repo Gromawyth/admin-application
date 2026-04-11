@@ -831,9 +831,7 @@ function applyRehabProgress(profile) {
 function getRehabDisplay(profile) {
   const rehab = profile.rehab || {};
   return (
-    `Szint: **${rehab.level || "nincs"}**\n` +
-    `Pont: **${Number(rehab.score || 0)}**\n` +
-    `Nyugodt napok: **${Number(rehab.goodDays || 0)}**`
+    `Szint: **${rehab.level || "nincs"}**\n`
   );
 }
 function isWatchActive(profile) {
@@ -1037,41 +1035,6 @@ function detectBypassPatterns(content = "") {
     {
       regex: /(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)/i,
       label: "Obfuszkált szerver / staff szidalmazás",
-    },
-    {
-      regex: /(discordgg|discordcominvite)/i,
-      label: "Obfuszkált meghívó / reklám",
-    },
-    {
-      regex: /(freenitro|giftlink|loginhere|token|steamajandek)/i,
-      label: "Obfuszkált scam minta",
-    },
-  ];
-
-  for (const item of bypassWords) {
-    if (item.regex.test(normalized)) {
-      hits.push(item.label);
-      score += CONFIG.BYPASS_EXTRA_POINTS;
-    }
-  }
-
-  if (/([a-záéíóöőúüű])\1{5,}/i.test(String(content || ""))) {
-    hits.push("Széthúzott / ismételt karakteres megkerülés");
-    score += 6;
-  }
-
-  return { score, hits, normalized };
-}
-
-function detectBypassPatterns(content = "") {
-  const normalized = normalizeBypassText(content);
-  let score = 0;
-  const hits = [];
-
-  const bypassWords = [
-    {
-      regex: /(kurvaanyad|rohadjmeg|dogoljmeg|dogoljmeg|nyomorek|retkes|szarhazi|geci|csicska)/i,
-      label: "Obfuszkált sértés",
     },
     {
       regex: /(discordgg|discordcominvite)/i,
@@ -1381,17 +1344,17 @@ async function applyModerationDecision(client, message, profile, final) {
   if (!canModerateTarget(member)) return;
 
   const action = final.action;
-
+const shouldDeleteTriggerMessage = ["delete", "timeout", "kick", "ban"].includes(action);
   try {
     // =========================
     // DELETE
     // =========================
-    if (action === "delete") {
-      if (CONFIG.ALLOW_DELETE) {
-        await message.delete().catch(() => null);
-        profile.totals.deletions++;
-      }
-    }
+if (shouldDeleteTriggerMessage && CONFIG.ALLOW_DELETE) {
+  const deleted = await message.delete().catch(() => null);
+  if (deleted || action === "delete") {
+    profile.totals.deletions++;
+  }
+}
 
     // =========================
     // TIMEOUT
@@ -3509,6 +3472,9 @@ async function sendWatchNoticeInChannel(message, member, profile, final) {
   if (!getState("aimod_allow_delete_notice")) return;
 
   try {
+    const liveRisk = getRiskPercent(profile);
+    const suspicion = getSuspicionValue(profile);
+
     const noticeText = await aiWriteUserFacingMessage({
       mode: "watch_notice",
       context: `A felhasználó watch módba került. Szabály: ${final.ruleBroken}. Indok: ${final.reason}.`,
@@ -3525,10 +3491,8 @@ async function sendWatchNoticeInChannel(message, member, profile, final) {
           inline: false,
         },
         {
-          name: "📊 Kockázat / suspicion",
-          value:
-            `${formatRiskBlock(profile)}\n` +
-            `Suspicion: **${getSuspicionValue(profile)}%**`,
+          name: "📊 Kockázat",
+          value: `${formatRiskBlock(profile)}\nSuspicion: **${suspicion}**`,
           inline: true,
         }
       )
@@ -4496,8 +4460,23 @@ async function handleSlashCommand(client, interaction) {
   return false;
 }
 
-function resetAiRiskProfile(userId) {
+async function resetAiRiskProfile(client, userId) {
   const oldProfile = getUserProfile(userId);
+  const oldMessageId = store.caseMessages?.[userId] || null;
+
+  if (oldMessageId) {
+    try {
+      const logChannel = await getLogChannel(client);
+      if (logChannel) {
+        const oldMsg = await logChannel.messages.fetch(oldMessageId).catch(() => null);
+        if (oldMsg) {
+          await oldMsg.delete().catch(() => null);
+        }
+      }
+    } catch (error) {
+      console.error("[AIMOD] régi case embed törlés hiba:", error);
+    }
+  }
 
   delete store.caseMessages[userId];
 
@@ -4614,7 +4593,7 @@ async function handleDelAiWarnCommand(client, interaction) {
   const beforeProfile = getUserProfile(member.id);
   const beforeRisk = getRiskPercent(beforeProfile);
 
-  resetAiRiskProfile(member.id);
+await resetAiRiskProfile(client, member.id);
 
   const profile = getUserProfile(member.id);
   saveStore();

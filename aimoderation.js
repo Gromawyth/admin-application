@@ -161,10 +161,14 @@ function loadStore() {
     if (!raw.trim()) return getDefaultStore();
 
     const parsed = JSON.parse(raw);
+
     return {
       users: parsed.users || {},
       bannedUsers: parsed.bannedUsers || {},
-      feedback: parsed.feedback || { reviewOk: {}, mistake: {} },
+      feedback: parsed.feedback || {
+        reviewOk: {},
+        mistake: {},
+      },
       caseMessages: parsed.caseMessages || {},
     };
   } catch (error) {
@@ -849,10 +853,17 @@ function buildImmediateRuleDecision(message, profile) {
 
   if (!content) return null;
 
+  const repeatCount = countRecentTargetedInsults(profile, content);
+  const watchActive = isWatchActive(profile);
+  const currentRisk = getRiskPercent(profile);
+
   const targetedDegrading = isTargetedDegradingMessage(content);
+
   const directHarassment =
-    (containsInsultWord(lower) &&
-      /\b(te|ti|neked|nektek|ő|ők|vagytok|vagy|takarodj|kuss|dögölj meg|dogolj meg|rohadj meg)\b/i.test(lower)) ||
+    (
+      containsInsultWord(lower) &&
+      /\b(te|ti|neked|nektek|ő|ők|vagytok|vagy|takarodj|kuss|dögölj meg|dogolj meg|rohadj meg)\b/i.test(lower)
+    ) ||
     /(anyad|anyadat|anyatok|kurvaanyad)/i.test(normalized);
 
   const rawStaffAbuse =
@@ -863,32 +874,45 @@ function buildImmediateRuleDecision(message, profile) {
     /(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)/i.test(normalized) ||
     /(szerver|server|rendszer|admin|adminok|staff|moderator|vezeteseg|fejleszto)(szar|fos|hulladek|szutyok|szenny|bohoc|retkes|nyomorek|vicc)/i.test(normalized);
 
+  const softStaffFriction =
+    /\b(admin|adminok|staff|moder[aá]tor|moderátor|vezetőség|fejleszt[őo]k?|szerver|rendszer)\b/i.test(lower) &&
+    /\b(gáz|vicc|nevetséges|komolytalan|káosz|szétesett|gyenge|borzalmas|agyrém|szánalmas|kellemetlen|fárasztó)\b/i.test(lower) &&
+    !rawStaffAbuse &&
+    !bypassStaffAbuse;
+
+  const softPersonalFriction =
+    /\b(te|ti|neked|nektek|vagy|vagytok)\b/i.test(lower) &&
+    /\b(idegesítő|komolytalan|gyerekes|fárasztó|nevetséges|okoskodsz|provokálsz|túltolod|nagyon sok vagy|unalmas)\b/i.test(lower) &&
+    !directHarassment &&
+    !containsInsultWord(lower);
+
+  const provocativeDisruption =
+    /\b(fejezd be|hagyd abba|ne kezdd megint|megint ezt csinálod|nagyon unalmas ez már|megint a hiszti|ezt hagyd|ne told túl)\b/i.test(lower);
+
   const notBelongingBehavior =
     /\b(kussoljon mindenki|kuss legyen|mindenki fogja be|szétspamellek|tele fogom floodolni|szét fogom baszni a chatet)\b/i.test(lower);
 
   if (targetedDegrading || rawStaffAbuse || bypassStaffAbuse) {
-    const repeatCount = countRecentTargetedInsults(profile, content);
-
     let action = "delete";
     let severity = "közepes";
     let points = 52;
     let suspicionGain = 14;
 
-    if (repeatCount >= 2) {
+    if (repeatCount >= 2 || watchActive || currentRisk >= 45) {
       action = "timeout";
       severity = "közepes";
       points = 68;
       suspicionGain = 20;
     }
 
-    if (repeatCount >= 4) {
+    if (repeatCount >= 4 || currentRisk >= 70) {
       action = "kick";
       severity = "magas";
       points = 84;
       suspicionGain = 28;
     }
 
-    if (repeatCount >= 6) {
+    if (repeatCount >= 6 || currentRisk >= 90) {
       action = "ban";
       severity = "kritikus";
       points = 96;
@@ -924,39 +948,50 @@ function buildImmediateRuleDecision(message, profile) {
 
   if (directHarassment) {
     return {
-      action: "delete",
+      action: watchActive || currentRisk >= 45 ? "timeout" : "delete",
       category: "harassment",
       categoryHu: "Célzott sértegetés",
-      severity: "közepes",
+      severity: watchActive || currentRisk >= 45 ? "közepes" : "közepes",
       confidence: 94,
-      points: 48,
-      suspicionGain: 12,
+      points: watchActive || currentRisk >= 45 ? 60 : 48,
+      suspicionGain: watchActive || currentRisk >= 45 ? 18 : 12,
       ruleBroken: "Célzott sértegetés / szidalmazás.",
       reason:
         /(anyad|anyadat|anyatok|kurvaanyad)/i.test(normalized)
           ? "A rendszer 'anyád' jellegű sértést talált, akár obfuszkált formában is."
           : "A rendszer közvetlen sértő megszólítást talált.",
       analysis: "A felhasználó más személy felé irányuló sértő hangnemet használt.",
-      patternSummary: "Azonnali törlendő célzott sértés.",
+      patternSummary:
+        watchActive || currentRisk >= 45
+          ? "Korábbi feszültség után már timeout szintű célzott sértés."
+          : "Azonnali törlendő célzott sértés.",
       timeoutMinutes: 0,
       shouldNotifyStaff: true,
       forceWatch: true,
     };
   }
 
-  if (notBelongingBehavior) {
+  if (softStaffFriction || softPersonalFriction || provocativeDisruption || notBelongingBehavior) {
+    const escalateSoft = watchActive || currentRisk >= CONFIG.WATCH_THRESHOLD || repeatCount >= 1;
+
     return {
-      action: "watch",
+      action: escalateSoft ? "delete" : "watch",
       category: "other",
-      categoryHu: "Nem odatartozó viselkedés",
-      severity: "enyhe",
-      confidence: 82,
-      points: 26,
-      suspicionGain: 8,
-      ruleBroken: "Nem odatartozó, zavaró viselkedés.",
-      reason: "A rendszer olyan mintát talált, ami könnyen átmehet rendbontásba.",
-      analysis: "Az üzenet zavaró vagy provokatív jellegű, ezért a rendszer megfigyelési állapotot ad.",
-      patternSummary: "Watch szintű zavaró viselkedés.",
+      categoryHu: "Provokatív / figyelendő viselkedés",
+      severity: escalateSoft ? "közepes" : "enyhe",
+      confidence: escalateSoft ? 86 : 78,
+      points: escalateSoft ? 32 : 18,
+      suspicionGain: escalateSoft ? 12 : 7,
+      ruleBroken: "Provokatív, konfliktusgerjesztő vagy nem odatartozó viselkedés.",
+      reason: escalateSoft
+        ? "A rendszer szerint ez már nem első figyelmeztető jellegű megnyilvánulás."
+        : "A rendszer konfliktus felé tartó, de még nem teljesen egyértelmű sértő mintát talált.",
+      analysis: escalateSoft
+        ? "A felhasználó ismételten vagy emelt kockázati állapotban provokatív hangnemet használt, ezért már törlés indokolt."
+        : "Az üzenet még nem a legerősebb sértési szint, de egyértelműen feszült, provokatív és figyelendő.",
+      patternSummary: escalateSoft
+        ? "Watch utáni vagy magasabb risk melletti újabb provokatív üzenet."
+        : "Watch szintű felvezető konfliktus / passzív-agresszív minta.",
       timeoutMinutes: 0,
       shouldNotifyStaff: true,
       forceWatch: true,
@@ -2647,16 +2682,6 @@ function buildUnifiedEmbed({ member, profile }) {
         inline: false,
       },
       {
-        name: "🕵️ Suspicion",
-        value: `**${suspicion}**`,
-        inline: true,
-      },
-      {
-        name: "📈 Risk sáv",
-        value: `**${getRiskBand(profile)}**`,
-        inline: true,
-      },
-      {
         name: "📊 Kockázat",
         value: formatRiskBlock(profile),
         inline: false,
@@ -2668,7 +2693,7 @@ function buildUnifiedEmbed({ member, profile }) {
 async function logWatchIncident(client, message, member, profile, final) {
   try {
     const logChannel = await getLogChannel(client);
-    if (!logChannel) return null;
+    if (!logChannel || !member) return null;
 
     const embed = new EmbedBuilder()
       .setColor(0xf0c419)
@@ -2676,7 +2701,7 @@ async function logWatchIncident(client, message, member, profile, final) {
       .addFields(
         {
           name: "Felhasználó",
-          value: `${member.user.tag} (${member.id})`,
+          value: `${member.user?.tag || member.user?.username || "Ismeretlen"} (${member.id})`,
           inline: false,
         },
         {
@@ -2696,35 +2721,62 @@ async function logWatchIncident(client, message, member, profile, final) {
         },
         {
           name: "Indok",
-          value: trimField(final.ruleBroken || final.reason || "Watch esemény"),
+          value: trimField(final.ruleBroken || final.reason || "Watch esemény", 1024),
           inline: false,
         },
         {
           name: "Üzenet",
-          value: trimField(message.content || "-"),
+          value: trimField(message?.content || "-", 1024),
           inline: false,
         },
         {
           name: "Csatorna",
-          value: message.channel ? `<#${message.channel.id}>` : "-",
+          value: message?.channel ? `<#${message.channel.id}>` : "-",
           inline: true,
         },
         {
           name: "Risk",
-          value: `${Math.round(Number(profile.behaviorScore || 0))}%`,
+          value: `${Math.round(Number(profile.behaviorScore || getRiskPercent(profile) || 0))}%`,
           inline: true,
         },
         {
           name: "Watch végéig",
-          value: profile.watchUntil > Date.now()
-            ? `<t:${Math.floor(profile.watchUntil / 1000)}:R>`
-            : "Nincs aktív watch",
+          value:
+            Number(profile.watchUntil || 0) > Date.now()
+              ? `<t:${Math.floor(profile.watchUntil / 1000)}:R>`
+              : "Nincs aktív watch",
           inline: true,
         }
       )
-      .setTimestamp();
+      .setTimestamp(new Date());
 
-    return await logChannel.send({ embeds: [embed] });
+    const oldWatchMessageId = store.watchMessages?.[member.id];
+    if (oldWatchMessageId) {
+      const oldMsg = await logChannel.messages.fetch(oldWatchMessageId).catch(() => null);
+      if (oldMsg) {
+        const edited = await oldMsg.edit({
+          embeds: [embed],
+        }).catch(() => null);
+
+        if (edited) {
+          store.watchMessages[member.id] = edited.id;
+          saveStore();
+          return edited;
+        }
+      }
+    }
+
+    const sent = await logChannel.send({
+      embeds: [embed],
+    }).catch(() => null);
+
+    if (sent) {
+      if (!store.watchMessages) store.watchMessages = {};
+      store.watchMessages[member.id] = sent.id;
+      saveStore();
+    }
+
+    return sent;
   } catch (error) {
     console.error("[AIMOD] watch log hiba:", error);
     return null;
@@ -2779,7 +2831,11 @@ function updateSingleButtonState(rows, targetCustomId, newLabel) {
 
 async function resendUnifiedCaseMessage(client, member, profile) {
   const logChannel = await getLogChannel(client);
-  if (!logChannel || !member) return null;
+  if (!logChannel || !member?.id) return null;
+
+  if (!store.caseMessages) {
+    store.caseMessages = {};
+  }
 
   const oldMessageId = store.caseMessages[member.id];
   if (oldMessageId) {
@@ -2787,17 +2843,16 @@ async function resendUnifiedCaseMessage(client, member, profile) {
     if (oldMsg) {
       await oldMsg.delete().catch(() => null);
     }
+    delete store.caseMessages[member.id];
   }
 
   const embed = buildUnifiedEmbed({ member, profile });
   const components = buildButtons(member.id, profile.activeCase?.lastActionRaw || "");
 
-  const msg = await logChannel
-    .send({
-      embeds: [embed],
-      components,
-    })
-    .catch(() => null);
+  const msg = await logChannel.send({
+    embeds: [embed],
+    components,
+  }).catch(() => null);
 
   if (msg) {
     store.caseMessages[member.id] = msg.id;
@@ -3638,7 +3693,6 @@ if (final.action === "watch") {
 
   await sendSingleUserNotice({ message, member, profile, final }).catch(() => null);
   await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
-  await logWatchIncident(client, message, member, profile, final).catch(() => null);
 
   return;
 }

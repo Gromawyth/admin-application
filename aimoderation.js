@@ -1111,7 +1111,22 @@ function capActionForSafeMode(action) {
 
   return current;
 }
+function getRecentIncidentCounts(profile) {
+  const nowTime = Date.now();
 
+  let last7d = 0;
+  let last30d = 0;
+
+  for (const inc of profile.incidents || []) {
+    const createdAt = inc.createdAt || nowTime;
+    const diff = nowTime - createdAt;
+
+    if (diff <= 7 * 24 * 60 * 60 * 1000) last7d++;
+    if (diff <= 30 * 24 * 60 * 60 * 1000) last30d++;
+  }
+
+  return { last7d, last30d };
+}
 function summarizeIncidents(profile) {
   const counts = getRecentIncidentCounts(profile);
   const totals = profile.totals || {};

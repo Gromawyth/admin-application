@@ -1764,101 +1764,76 @@ function parseIdeaModal(customId) {
 // REGISZTRÁLÁS
 // =========================
 function registerIdeaSystem(client) {
-  client.once("ready", async () => {
-    console.log("[IDEAS] Ötlet modul betöltve.");
-    restoreDeletionSchedules(client);
-  });
-
-  client.on("systempanel:ideasAiChanged", async () => {
-    try {
-      await rebuildAllIdeaSummaries(client);
-      console.log("[IDEAS] AI állapot változott, summary frissítve.");
-    } catch (error) {
-      console.error("[IDEAS] AI refresh hiba:", error);
-    }
-  });
-
-  client.on("threadCreate", async (thread) => {
-    if (!getState("ideas_enabled")) return;
-    try {
-      await processNewForumThread(client, thread);
-    } catch (error) {
-      console.error("[IDEAS] threadCreate hiba:", error);
-    }
-  });
-
-  client.on("messageCreate", async (message) => {
-    if (!getState("ideas_enabled")) return;
-    try {
-      await processForumReply(client, message);
-    } catch (error) {
-      console.error("[IDEAS] messageCreate hiba:", error);
-    }
-  });
-
   client.on("interactionCreate", async (interaction) => {
     if (!getState("ideas_enabled")) return;
 
     try {
-      if (interaction.isButton()) {
-        if (!interaction.customId.startsWith("idea:")) return;
-        if (interaction.isChatInputCommand() && interaction.commandName === "ideareset") {
-  const password = interaction.options.getString("jelszo");
+      // =========================
+      // ❌ IDEA RESET (SLASH)
+      // =========================
+      if (interaction.isChatInputCommand() && interaction.commandName === "ideareset") {
+        const password = interaction.options.getString("jelszo");
 
-  if (password !== "Gromawyth123") {
-    return interaction.reply({
-      content: "❌ Hibás jelszó.",
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-
-  if (!interaction.memberPermissions?.has("Administrator")) {
-    return interaction.reply({
-      content: "❌ Nincs jogosultságod.",
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  try {
-    const fresh = createDefaultData();
-    saveData(fresh);
-
-    const summaryChannel = await interaction.guild.channels
-      .fetch(CONFIG.IDEA_SUMMARY_CHANNEL_ID)
-      .catch(() => null);
-
-    if (summaryChannel?.isTextBased()) {
-      let lastId;
-
-      while (true) {
-        const messages = await summaryChannel.messages.fetch({
-          limit: 100,
-          ...(lastId ? { before: lastId } : {}),
-        });
-
-        if (!messages.size) break;
-
-        for (const msg of messages.values()) {
-          await msg.delete().catch(() => {});
+        if (String(password).trim() !== "Gromawyth123") {
+          return interaction.reply({
+            content: "❌ Hibás jelszó.",
+            flags: MessageFlags.Ephemeral,
+          });
         }
 
-        lastId = messages.last()?.id;
-        if (messages.size < 100) break;
-      }
-    }
+        if (!interaction.memberPermissions?.has("Administrator")) {
+          return interaction.reply({
+            content: "❌ Nincs jogosultságod.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
 
-    return interaction.editReply({
-      content: "🧹 Ötletek teljes adattörlés kész. Az összesítő csatorna is ki lett ürítve.",
-    });
-  } catch (error) {
-    console.error("[IDEAS] ideareset hiba:", error);
-    return interaction.editReply({
-      content: "❌ Hiba történt az ötlet reset közben.",
-    });
-  }
-}
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+          const fresh = createDefaultData();
+          saveData(fresh);
+
+          const summaryChannel = await interaction.guild.channels
+            .fetch(CONFIG.IDEA_SUMMARY_CHANNEL_ID)
+            .catch(() => null);
+
+          if (summaryChannel?.isTextBased()) {
+            let lastId;
+
+            while (true) {
+              const messages = await summaryChannel.messages.fetch({
+                limit: 100,
+                ...(lastId ? { before: lastId } : {}),
+              });
+
+              if (!messages.size) break;
+
+              for (const msg of messages.values()) {
+                await msg.delete().catch(() => {});
+              }
+
+              lastId = messages.last()?.id;
+              if (messages.size < 100) break;
+            }
+          }
+
+          return interaction.editReply({
+            content: "🧹 Ötletek teljes adattörlés kész. Az összesítő csatorna kiürítve.",
+          });
+        } catch (err) {
+          console.error("[IDEAS] ideareset hiba:", err);
+          return interaction.editReply({
+            content: "❌ Hiba történt az ötlet reset közben.",
+          });
+        }
+      }
+
+      // =========================
+      // 🔘 GOMBOK
+      // =========================
+      if (interaction.isButton()) {
+        if (!interaction.customId.startsWith("idea:")) return;
 
         const { action, ideaId } = parseIdeaInteraction(interaction.customId);
 
@@ -1884,62 +1859,38 @@ function registerIdeaSystem(client) {
         });
       }
 
+      // =========================
+      // 📝 MODALOK
+      // =========================
       if (interaction.isModalSubmit()) {
-        if (!interaction.customId.startsWith("ideamodal:")) return;
+        if (!interaction.customId.startsWith("idea_modal:")) return;
 
-        const { action, ideaId } = parseIdeaModal(interaction.customId);
+        const [, action, ideaId] = interaction.customId.split(":");
 
-        if (!ideaId) {
-          return interaction.reply({
-            content: "Hibás modal azonosító.",
-            flags: MessageFlags.Ephemeral,
-          });
-        }
+        const reason =
+          interaction.fields.getTextInputValue("reason")?.trim() || "";
 
-        const manualReason = compactText(
-          interaction.fields.getTextInputValue("reason") || ""
+        return await handleDecisionSubmit(
+          client,
+          interaction,
+          ideaId,
+          action,
+          reason
         );
-
-        if (action === "accepted") {
-          return await handleStatusChange(
-            client,
-            interaction,
-            ideaId,
-            "Elfogadva",
-            manualReason
-          );
-        }
-
-        if (action === "rejected") {
-          return await handleStatusChange(
-            client,
-            interaction,
-            ideaId,
-            "Elutasítva",
-            manualReason
-          );
-        }
-
-        return interaction.reply({
-          content: "Ismeretlen modal művelet.",
-          flags: MessageFlags.Ephemeral,
-        });
       }
     } catch (error) {
-      console.error("[IDEAS] interactionCreate hiba:", error);
+      console.error("[IDEAS] interaction hiba:", error);
 
-      try {
-        if (interaction.deferred || interaction.replied) {
-          await interaction.editReply({
-            content: "Hiba történt a művelet közben.",
-          });
-        } else if (interaction.isRepliable()) {
-          await interaction.reply({
-            content: "Hiba történt a művelet közben.",
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-      } catch {}
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({
+          content: "❌ Hiba történt az ötlet rendszerben.",
+        }).catch(() => {});
+      } else {
+        await interaction.reply({
+          content: "❌ Hiba történt az ötlet rendszerben.",
+          flags: MessageFlags.Ephemeral,
+        }).catch(() => {});
+      }
     }
   });
 }

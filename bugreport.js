@@ -1720,7 +1720,7 @@ function registerBugReport(client) {
         if (interaction.isChatInputCommand() && interaction.commandName === "bugreset") {
   const password = interaction.options.getString("jelszo");
 
-  if (password !== "Gromawyth123") {
+if (String(password).trim() !== "Gromawyth123") {
     return interaction.reply({
       content: "❌ Hibás jelszó.",
       flags: MessageFlags.Ephemeral,
@@ -1737,8 +1737,8 @@ function registerBugReport(client) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
-    const fresh = createDefaultData();
-    saveData(fresh);
+const newData = createDefaultData();
+saveData(newData);
 
     const summaryChannel = await interaction.guild.channels
       .fetch(CONFIG.BUG_SUMMARY_CHANNEL_ID)

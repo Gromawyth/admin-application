@@ -1802,6 +1802,63 @@ function registerIdeaSystem(client) {
     try {
       if (interaction.isButton()) {
         if (!interaction.customId.startsWith("idea:")) return;
+        if (interaction.isChatInputCommand() && interaction.commandName === "ideareset") {
+  const password = interaction.options.getString("jelszo");
+
+  if (password !== "Gromawyth123") {
+    return interaction.reply({
+      content: "❌ Hibás jelszó.",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  if (!interaction.memberPermissions?.has("Administrator")) {
+    return interaction.reply({
+      content: "❌ Nincs jogosultságod.",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  try {
+    const fresh = createDefaultData();
+    saveData(fresh);
+
+    const summaryChannel = await interaction.guild.channels
+      .fetch(CONFIG.IDEA_SUMMARY_CHANNEL_ID)
+      .catch(() => null);
+
+    if (summaryChannel?.isTextBased()) {
+      let lastId;
+
+      while (true) {
+        const messages = await summaryChannel.messages.fetch({
+          limit: 100,
+          ...(lastId ? { before: lastId } : {}),
+        });
+
+        if (!messages.size) break;
+
+        for (const msg of messages.values()) {
+          await msg.delete().catch(() => {});
+        }
+
+        lastId = messages.last()?.id;
+        if (messages.size < 100) break;
+      }
+    }
+
+    return interaction.editReply({
+      content: "🧹 Ötletek teljes adattörlés kész. Az összesítő csatorna is ki lett ürítve.",
+    });
+  } catch (error) {
+    console.error("[IDEAS] ideareset hiba:", error);
+    return interaction.editReply({
+      content: "❌ Hiba történt az ötlet reset közben.",
+    });
+  }
+}
 
         const { action, ideaId } = parseIdeaInteraction(interaction.customId);
 
@@ -1885,53 +1942,5 @@ function registerIdeaSystem(client) {
       } catch {}
     }
   });
-}
-// =========================
-// ❌ IDEAS FULL RESET
-// =========================
-if (interaction.isChatInputCommand() && interaction.commandName === "ideareset") {
-  const password = interaction.options.getString("jelszo");
-
-  if (password !== "Gromawyth123") {
-    return interaction.reply({
-      content: "❌ Hibás jelszó.",
-      flags: MessageFlags.Ephemeral
-    });
-  }
-
-  const member = interaction.member;
-
-  if (!member.permissions.has("Administrator")) {
-    return interaction.reply({
-      content: "❌ Nincs jogosultságod.",
-      flags: MessageFlags.Ephemeral
-    });
-  }
-
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  try {
-    // JSON RESET
-    const fresh = createDefaultData();
-    saveData(fresh);
-
-    // SUMMARY TÖRLÉS
-    const summaryChannel = await interaction.guild.channels
-      .fetch(CONFIG.IDEA_SUMMARY_CHANNEL_ID)
-      .catch(() => null);
-
-    if (summaryChannel && summaryChannel.isTextBased()) {
-      const messages = await summaryChannel.messages.fetch({ limit: 100 });
-
-      for (const msg of messages.values()) {
-        await msg.delete().catch(() => {});
-      }
-    }
-
-    return interaction.editReply("🧹 Ötletek teljesen nullázva.");
-  } catch (err) {
-    console.error("IDEA RESET ERROR:", err);
-    return interaction.editReply("❌ Hiba történt.");
-  }
 }
 module.exports = { registerIdeaSystem };

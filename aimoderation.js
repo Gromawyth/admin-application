@@ -2287,24 +2287,9 @@ function buildUnifiedEmbed({ member, profile }) {
         inline: true,
       },
       {
-        name: "🕵️ Suspicion",
-        value: `**${suspicion}%**`,
-        inline: true,
-      },
-      {
-        name: "📚 Előzmények (7 nap)",
-        value: summaries.seven,
-        inline: true,
-      },
-      {
         name: "📦 Előzmények (30 nap)",
         value: summaries.thirty,
         inline: true,
-      },
-      {
-        name: "📋 Összes intézkedés",
-        value: summaries.actions,
-        inline: false,
       },
       {
         name: "🧾 Korábbi problémás üzenetek",

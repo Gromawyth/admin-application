@@ -1,5 +1,4 @@
 require("dotenv").config();
-require("./embedstudio").registerEmbedStudio(client);
 const express = require("express");
 const cors = require("cors");
 const {
@@ -74,6 +73,8 @@ const ideaSystem = require("./otletek");
 const aiModeration = require("./aimoderation");
 const systemPanel = require("./systempanel");
 const { getState } = require("./systempanel");
+const embedStudio = require("./embedstudio");
+embedStudio.registerEmbedStudio(client);
 systemPanel.registerSystemPanel(client);
 bugReport.registerBugReport(client);
 ideaSystem.registerIdeaSystem(client);

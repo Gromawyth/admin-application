@@ -1623,7 +1623,22 @@ const INSULT_PATTERNS = [
   /\b(te\s+nyomor[eé]k|te\s+retkes|te\s+csicska|te\s+barom|te\s+boh[oó]c)\b/i,
   /\b(szarh[aá]zi|semmirekell[oő]|faszfej|faszkalap|gecifej|geciarc)\b/i,
 ];
+function containsMildProfanity(content = "") {
+  return (
+    containsFromWordList(content, MILD_PROFANITY_WORDS) ||
+    matchesAnyPattern(content, MILD_PROFANITY_PATTERNS)
+  );
+}
 
+function containsInsultWord(content = "") {
+  return (
+    containsFromWordList(content, INSULT_WORDS) ||
+    containsFromWordList(content, FAMILY_INSULT_WORDS) ||
+    containsFromWordList(content, STAFF_ABUSE_WORDS) ||
+    containsFromWordList(content, THREAT_WORDS) ||
+    matchesAnyPattern(content, INSULT_PATTERNS)
+  );
+}
 function containsTargetWord(content = "") {
   return containsCanonical(content, TARGET_WORDS);
 }

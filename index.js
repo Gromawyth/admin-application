@@ -957,23 +957,21 @@ async function handleSendTicketPanels(interaction) {
 
 async function handleTicketOpenButton(interaction) {
   try {
+    if (interaction.replied || interaction.deferred) return;
+
     if (!getState("tickets_enabled")) {
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: "❌ A ticket rendszer jelenleg ki van kapcsolva.",
-          ephemeral: true
-        }).catch(() => {});
-      }
+      await interaction.reply({
+        content: "❌ A ticket rendszer jelenleg ki van kapcsolva.",
+        ephemeral: true
+      }).catch(() => {});
       return;
     }
 
     if (!getState("tickets_allow_open")) {
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: "❌ Az új ticket nyitás jelenleg fel van függesztve.",
-          ephemeral: true
-        }).catch(() => {});
-      }
+      await interaction.reply({
+        content: "❌ Az új ticket nyitás jelenleg fel van függesztve.",
+        ephemeral: true
+      }).catch(() => {});
       return;
     }
 
@@ -981,35 +979,25 @@ async function handleTicketOpenButton(interaction) {
     const type = TICKET_TYPES[typeKey];
 
     if (!type) {
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: "❌ Ismeretlen ticket típus.",
-          ephemeral: true
-        }).catch(() => {});
-      }
+      await interaction.reply({
+        content: "❌ Ismeretlen ticket típus.",
+        ephemeral: true
+      }).catch(() => {});
       return;
     }
 
-    await interaction.showModal(buildTicketModal(typeKey)).catch(async (err) => {
-      console.error("❌ Ticket modal megnyitási hiba:", err);
-
-      if (err?.code === 10062) {
-        return;
-      }
-
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: "❌ A ticket ablak megnyitása nem sikerült. Kattints rá újra.",
-          ephemeral: true
-        }).catch(() => {});
-      }
-    });
+    await interaction.showModal(buildTicketModal(typeKey));
   } catch (error) {
-    console.error("❌ handleTicketOpenButton hiba:", error);
+    if (error?.code === 10062) {
+      console.warn("⚠️ Ticket interaction lejárt vagy már fel lett használva:", interaction.customId);
+      return;
+    }
+
+    console.error("❌ Ticket modal megnyitási hiba:", error);
 
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
-        content: "❌ Hiba történt a ticket megnyitása közben.",
+        content: "❌ A ticket ablak megnyitása nem sikerült. Próbáld újra.",
         ephemeral: true
       }).catch(() => {});
     }
@@ -1288,6 +1276,7 @@ if (
   )
 ) {
   return;
+  
 }
 
 if (
@@ -1363,6 +1352,10 @@ if (interaction.commandName === "adminrebuild") {
     }
 
     if (interaction.isButton()) {
+  if (interaction.customId.startsWith("ticket_open_")) {
+    await handleTicketOpenButton(interaction);
+    return;
+  }
       if (interaction.customId.startsWith("feedback_")) {
         await adminFeedback.handleButton(interaction);
         return;

@@ -1391,7 +1391,8 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
 });
 
-client.login(DISCORD_TOKEN);
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
-});
+console.log("TOKEN VAN?", !!DISCORD_TOKEN);
+
+client.login(DISCORD_TOKEN)
+  .then(() => console.log("🔐 Discord login sikeres"))
+  .catch(err => console.error("❌ Discord login hiba:", err));

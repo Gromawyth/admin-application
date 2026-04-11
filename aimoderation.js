@@ -4605,7 +4605,8 @@ async function handleMuteCommand(client, interaction) {
 
   profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
   profile.suspicion = Math.max(0, Number(profile.suspicion || 0)) + suspicionAdd;
-
+const newRisk = getRiskPercent(profile);
+profile.behaviorScore = newRisk;
   profile.activeCase = {
     ...(profile.activeCase || {}),
     lastAction: `Kézi mute (${minutes} perc)`,

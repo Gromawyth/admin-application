@@ -2284,12 +2284,12 @@ function buildUnifiedEmbed({ member, profile }) {
       {
         name: "📊 Kockázat",
         value: formatRiskBlock(profile),
-        inline: true,
+        inline: false,
       },
       {
         name: "📦 Előzmények (30 nap)",
         value: summaries.thirty,
-        inline: true,
+        inline: false,
       },
       {
         name: "🧾 Korábbi problémás üzenetek",

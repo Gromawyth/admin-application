@@ -73,8 +73,6 @@ const ideaSystem = require("./otletek");
 const aiModeration = require("./aimoderation");
 const systemPanel = require("./systempanel");
 const { getState } = require("./systempanel");
-const embedStudio = require("./embedstudio");
-embedStudio.registerEmbedStudio(client);
 systemPanel.registerSystemPanel(client);
 bugReport.registerBugReport(client);
 ideaSystem.registerIdeaSystem(client);
@@ -654,8 +652,11 @@ new SlashCommandBuilder()
 
       .setName("sendticketpanels")
       .setDescription("Kirakja a ticket paneleket ebbe a csatornába.")
-      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-  ].map(cmd => cmd.toJSON());
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+      embedStudio.getEmbedCommand()
+  
+    ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
 
@@ -1385,14 +1386,14 @@ if (interaction.commandName === "adminrebuild") {
   }
 });
 
+
 const PORT = Number(process.env.PORT) || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
 });
 
-console.log("TOKEN VAN?", !!DISCORD_TOKEN);
-
-client.login(DISCORD_TOKEN)
-  .then(() => console.log("🔐 Discord login sikeres"))
-  .catch(err => console.error("❌ Discord login hiba:", err));
+console.log("DISCORD_TOKEN megvan:", !!DISCORD_TOKEN);
+console.log("DISCORD_TOKEN hossza:", DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
+console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) : "nincs");
+client.login(DISCORD_TOKEN);

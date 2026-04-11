@@ -1072,15 +1072,29 @@ function getBehaviorSignals({ profile, message, ruleScan, bypass, replyTarget })
     labels.push("Staff felé irányuló válasz");
   }
 
-  if (recentCounts.serious7d >= 2) {
-    score += 10;
-    labels.push("Komoly előzmények 7 napon belül");
-  }
+if (recentCounts.last7d >= 1) {
+  score += 4;
+}
 
-  if (recentCounts.serious30d >= 4) {
-    score += 12;
-    labels.push("Komoly előzmények 30 napon belül");
-  }
+if (recentCounts.last7d >= 2) {
+  score += 6;
+}
+
+if (recentCounts.last7d >= 4) {
+  score += 8;
+}
+
+if (recentCounts.last30d >= 3) {
+  score += 6;
+}
+
+if (recentCounts.last30d >= 5) {
+  score += 8;
+}
+
+if (recentCounts.last30d >= 8) {
+  score += 10;
+}
 
   if ((profile.totals?.timeouts || 0) >= 2) {
     score += 8;
@@ -1288,9 +1302,7 @@ async function applyModerationDecision(client, message, profile, final) {
       if (CONFIG.ALLOW_TIMEOUT) {
         const ms = (final.timeoutMinutes || 10) * 60 * 1000;
 
-        await member.timeout(ms, final.reason || "AI Moderation")
-          .catch(() => null);
-
+        await member.timeout(ms, final.reason || "AI Moderation").catch(() => null);
         profile.totals.timeouts++;
       }
     }
@@ -1300,9 +1312,7 @@ async function applyModerationDecision(client, message, profile, final) {
     // =========================
     if (action === "kick") {
       if (CONFIG.ALLOW_KICK) {
-        await member.kick(final.reason || "AI Moderation")
-          .catch(() => null);
-
+        await member.kick(final.reason || "AI Moderation").catch(() => null);
         profile.totals.kicks++;
       }
     }
@@ -1325,13 +1335,11 @@ async function applyModerationDecision(client, message, profile, final) {
     // =========================
     if (action === "watch") {
       extendWatch(profile);
-
       profile.suspicion += final.suspicionGain || 5;
-      profile.totals.watches++;
     }
 
     // =========================
-    // INCIDENT LOG
+    // INCIDENT LOG STORE
     // =========================
     addIncident(member.id, {
       type: action,
@@ -1358,7 +1366,7 @@ async function applyModerationDecision(client, message, profile, final) {
       lastActionRaw: action,
       lastReason: final.reason || "",
       lastCategory: final.categoryHu || categoryToHu(final.category),
-      lastSeverity: final.severity,
+      lastSeverity: final.severity || "enyhe",
       lastAnalysis: final.analysis || "",
       lastPatternSummary: final.patternSummary || "",
       lastRuleBroken: final.ruleBroken || "",
@@ -1366,7 +1374,13 @@ async function applyModerationDecision(client, message, profile, final) {
       lastMessageId: message.id,
       lastChannelId: message.channelId,
       lastProjectedRisk: profile.behaviorScore,
+      lastEvidence: trimField(
+        `Üzenet: "${cleanText(message.content || "", 220)}"\nCsatorna: #${message.channel?.name || "ismeretlen"}\nFelhasználó: ${member.user?.tag || member.user?.username || "ismeretlen"}`,
+        1024
+      ),
+      lastModerationMode: getModerationMode(),
       lastUpdatedAt: Date.now(),
+      currentStatus: actionToLabel(action),
     };
 
     saveStore();
@@ -1380,6 +1394,15 @@ async function applyModerationDecision(client, message, profile, final) {
       profile,
       final,
     }).catch(() => null);
+
+    // =========================
+    // MOD-LOG / ÖSSZESÍTŐ FRISSÍTÉS
+    // =========================
+    try {
+      await resendUnifiedCaseMessage(client, member, profile);
+    } catch (error) {
+      console.error("[AIMOD] automata mod-log hiba:", error);
+    }
 
   } catch (err) {
     console.error("[AIMOD] applyModerationDecision hiba:", err);
@@ -2550,6 +2573,11 @@ function buildUnifiedEmbed({ member, profile }) {
         value: formatRiskBlock(profile),
         inline: false,
       },
+      {
+  name: "\u200B",
+  value: "\u200B",
+  inline: false,
+},
       {
         name: "📦 Előzmények (30 nap)",
         value: summaries.thirty,

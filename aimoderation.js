@@ -679,37 +679,35 @@ function applyDailyDecay(profile) {
 }
 
 function formatRiskBlock(profile) {
-  const risk = getRiskPercent(profile);
-  return `${getRiskBar(risk)}\n**${risk}%** (${getRiskBand(profile)})`;
-}
-function getRecentIncidentCounts(profile) {
-  const nowTime = Date.now();
+  const risk = Math.max(0, Math.min(100, Math.round(Number(profile?.behaviorScore || 0))));
+  const filled = Math.round(risk / 10);
 
-  let last7d = 0;
-  let last30d = 0;
+  let bar = "";
 
-  for (const inc of profile.incidents || []) {
-    const createdAt = inc.createdAt || nowTime;
-    const diff = nowTime - createdAt;
-
-    if (diff <= 7 * 24 * 60 * 60 * 1000) last7d++;
-    if (diff <= 30 * 24 * 60 * 60 * 1000) last30d++;
+  for (let i = 0; i < 10; i++) {
+    if (i >= filled) {
+      bar += "⬜";
+    } else if (i < 4) {
+      bar += "🟩";
+    } else if (i < 5) {
+      bar += "🟨";
+    } else if (i < 7) {
+      bar += "🟧";
+    } else {
+      bar += "🟥";
+    }
   }
 
-  return { last7d, last30d };
-}
+  let status = "Stabil";
+  if (risk >= 75) {
+    status = "Kritikus";
+  } else if (risk >= 50) {
+    status = "Kockázatos";
+  } else if (risk >= 25) {
+    status = "Figyelendő";
+  }
 
-function getModerationMode() {
-  return getState("aimod_safe_mode") ? "safe" : "balanced";
-}
-
-function getFeedbackDelta(userId) {
-  const ok = Number(store.feedback?.reviewOk?.[userId] || 0);
-  const mistakes = Number(store.feedback?.mistake?.[userId] || 0);
-  return Math.max(
-    -CONFIG.FEEDBACK_WEIGHT_LIMIT,
-    Math.min(CONFIG.FEEDBACK_WEIGHT_LIMIT, ok * 2 - mistakes * 4)
-  );
+  return `╭ Kockázat\n${bar} **${risk}%**\n╰ Állapot: **${status}**`;
 }
 
 function getSuspicionDecayWeight(ageMs) {

@@ -1895,3 +1895,11 @@ function registerIdeaSystem(client) {
   });
 }
 module.exports = { registerIdeaSystem };
+console.log("SUMMARY CHANNEL ID:", CONFIG.IDEA_SUMMARY_CHANNEL_ID);
+
+const summaryChannel = await client.channels.fetch(CONFIG.IDEA_SUMMARY_CHANNEL_ID).catch(err => {
+  console.log("SUMMARY FETCH ERROR:", err);
+  return null;
+});
+
+console.log("SUMMARY CHANNEL:", summaryChannel ? "OK" : "NULL");

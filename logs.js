@@ -1171,22 +1171,6 @@ if (ujTimeout > Date.now()) {
   const vege = Math.floor(ujTimeout / 1000);
   const durationMs = Math.max(0, ujTimeout - Date.now());
 
-  const refreshedMember =
-    uj.guild.members.cache.get(uj.id) ||
-    (await uj.guild.members.fetch(uj.id).catch(() => null));
-
-  if (refreshedMember) {
-    await aiModeration.applyManualModerationAndLog(client, refreshedMember, {
-      action: "timeout",
-      moderatorTag,
-      reason,
-      durationText: aiModeration.formatDuration(durationMs),
-      source: "Kézi timeout",
-    }).catch((error) => {
-      console.error("[LOGS] kézi timeout -> AI sync hiba:", error);
-    });
-  }
-
   const embed = internalEmbed("Tag timeoutot kapott", SZINEK.FIGYELMEZTETES, "🔇")
     .setDescription(`${uj.user} időkorlátozást kapott.`)
     .addFields(

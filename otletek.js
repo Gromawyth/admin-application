@@ -106,6 +106,10 @@ function ensureIdeaDefaults(idea) {
   if (typeof idea.handler !== "string" && idea.handler !== null) idea.handler = null;
   if (typeof idea.deleteAt !== "number" && idea.deleteAt !== null) idea.deleteAt = null;
   if (typeof idea.decidedAt !== "number" && idea.decidedAt !== null) idea.decidedAt = null;
+
+  if (!idea.commentReactions || typeof idea.commentReactions !== "object") {
+    idea.commentReactions = {};
+  }
 }
 
 function loadData() {
@@ -423,22 +427,32 @@ Csak maga a szöveg legyen a válasz.
 function buildIdeaEmbed(idea) {
   const style = getStatusStyle(idea.status);
 
-  const summaryText = getState("ideas_ai_summary")
-    ? cleanupShortText(
-        idea.aiSummary || idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
-        520
-      )
-    : cleanupShortText(
-        idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
-        520
-      );
+  const summaryBase = cleanupShortText(
+    idea.description || idea.canonicalTitle || idea.title || "Nincs összefoglaló.",
+    420
+  );
 
-  const aiShort = getState("ideas_ai_summary")
+  const aiExtra = getState("ideas_ai_summary")
     ? cleanupShortText(
-        idea.aiDecisionReason || idea.aiSummary || "Nincs összefoglaló.",
-        240
+        idea.aiSummary || idea.aiDecisionReason || "",
+        220
       )
-    : buildAiSummaryDisabledText();
+    : "";
+
+  let summaryText = summaryBase;
+
+  if (
+    aiExtra &&
+    aiExtra !== "-" &&
+    aiExtra !== "Nincs összefoglaló." &&
+    aiExtra !== summaryBase
+  ) {
+    const cleanBase = summaryBase.replace(/[.!?\s]+$/, "");
+    const cleanExtra = aiExtra.charAt(0).toLowerCase() + aiExtra.slice(1);
+    summaryText = `${cleanBase}, ${cleanExtra}`;
+  }
+
+  summaryText = limitText(summaryText, 4000);
 
   const manualComment = compactText(idea.lastManualReason || "");
 
@@ -454,7 +468,6 @@ function buildIdeaEmbed(idea) {
       ? `<t:${Math.floor(idea.deleteAt / 1000)}:R>`
       : "-";
 
-  const communityStatus = limitText(idea.communityStatus || "-", 160);
   const communityNotes = limitText(idea.communityNotes || "-", 1024);
   const lastCommentText = idea.lastMeaningfulCommentAt
     ? `<t:${Math.floor(idea.lastMeaningfulCommentAt / 1000)}:f>`
@@ -477,18 +490,8 @@ function buildIdeaEmbed(idea) {
       inline: true,
     },
     {
-      name: "🧠 AI rövid összegzés",
-      value: aiShort,
-      inline: false,
-    },
-    {
       name: "🤝 Közösségi reakció",
       value: getSupportText(idea),
-      inline: true,
-    },
-    {
-      name: "💬 Hangulat",
-      value: communityStatus,
       inline: true,
     },
   ];
@@ -536,7 +539,7 @@ function buildIdeaEmbed(idea) {
 
   return new EmbedBuilder()
     .setTitle(`${style.emoji} ÖTLET: ${limitText(idea.canonicalTitle || idea.title, 200)}`)
-    .setDescription(limitText(summaryText, 4000))
+    .setDescription(summaryText)
     .addFields(fields)
     .setColor(style.color)
     .setFooter({ text: `Ötlet ID: ${idea.id}` })
@@ -821,31 +824,189 @@ function heuristicAnalyzeComment(content = "") {
 }
 
 async function aiAnalyzeIdeaComment({ idea, content, authorTag }) {
-  const fallback = heuristicAnalyzeComment(content);
-  if (!openai) return fallback;
+  const fallbackText = compactText(content || "");
+
+  if (!fallbackText) {
+    return {
+      meaningful: false,
+      type: "smalltalk",
+      reaction: "neutral",
+      summary: "",
+    };
+  }
+
+  if (!openai) {
+    const short = normalizeText(fallbackText);
+
+    if (fallbackText.length < 12) {
+      return {
+        meaningful: false,
+        type: "smalltalk",
+        reaction: "neutral",
+        summary: "",
+      };
+    }
+
+    if (
+      short.includes("jo otlet") ||
+      short.includes("tetszik") ||
+      short.includes("tamogatom") ||
+      short.includes("adom") ||
+      short.includes("hasznos lenne")
+    ) {
+      return {
+        meaningful: true,
+        type: "supports",
+        reaction: "positive",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    if (
+      short.includes("nem jo") ||
+      short.includes("rossz otlet") ||
+      short.includes("nem kell") ||
+      short.includes("felesleges") ||
+      short.includes("nem tamogatom")
+    ) {
+      return {
+        meaningful: true,
+        type: "opposes",
+        reaction: "negative",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    if (
+      short.includes("inkabb") ||
+      short.includes("viszont") ||
+      short.includes("jobb lenne") ||
+      short.includes("at lehetne") ||
+      short.includes("modositanam")
+    ) {
+      return {
+        meaningful: true,
+        type: "suggests_change",
+        reaction: "neutral",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    if (fallbackText.length >= 18) {
+      return {
+        meaningful: true,
+        type: "other_meaningful",
+        reaction: "neutral",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    return {
+      meaningful: false,
+      type: "smalltalk",
+      reaction: "neutral",
+      summary: "",
+    };
+  }
 
   if (
     CONFIG.USE_AI_FOR_LONG_COMMENTS_ONLY &&
     compactText(content).length < CONFIG.MIN_COMMENT_LENGTH_FOR_AI
   ) {
-    return fallback;
+    const short = normalizeText(fallbackText);
+
+    if (fallbackText.length < 12) {
+      return {
+        meaningful: false,
+        type: "smalltalk",
+        reaction: "neutral",
+        summary: "",
+      };
+    }
+
+    if (
+      short.includes("jo otlet") ||
+      short.includes("tetszik") ||
+      short.includes("tamogatom") ||
+      short.includes("adom") ||
+      short.includes("hasznos lenne")
+    ) {
+      return {
+        meaningful: true,
+        type: "supports",
+        reaction: "positive",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    if (
+      short.includes("nem jo") ||
+      short.includes("rossz otlet") ||
+      short.includes("nem kell") ||
+      short.includes("felesleges") ||
+      short.includes("nem tamogatom")
+    ) {
+      return {
+        meaningful: true,
+        type: "opposes",
+        reaction: "negative",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    if (
+      short.includes("inkabb") ||
+      short.includes("viszont") ||
+      short.includes("jobb lenne") ||
+      short.includes("at lehetne") ||
+      short.includes("modositanam")
+    ) {
+      return {
+        meaningful: true,
+        type: "suggests_change",
+        reaction: "neutral",
+        summary: cleanupShortText(fallbackText, 180),
+      };
+    }
+
+    return {
+      meaningful: fallbackText.length >= 18,
+      type: fallbackText.length >= 18 ? "other_meaningful" : "smalltalk",
+      reaction: "neutral",
+      summary: fallbackText.length >= 18 ? cleanupShortText(fallbackText, 180) : "",
+    };
   }
 
   const prompt = `
 Te egy Discord ötletkezelő rendszer kommentelemzője vagy.
 
 Feladat:
-- döntsd el, hogy ez a hozzászólás érdemi-e az ötlet szempontjából
-- ha igen, osztályozd és foglald össze röviden
-- ne írj túl technikusan
+- döntsd el, hogy az új komment érdemi hozzászólás-e az ötlet szempontjából
+- ha nem érdemi, akkor meaningful = false
+- ha érdemi, akkor add meg a type mezőt is
+- ezen felül döntsd el a hozzászólás irányát a reaction mezőben
 
-Lehetséges type értékek:
-- supports
-- opposes
-- extra_info
-- suggests_change
-- other_meaningful
-- smalltalk
+A reaction jelentése:
+- "positive" → a hozzászólás inkább támogatja, erősíti vagy előremozdítja az ötletet
+- "negative" → a hozzászólás inkább ellenzi, lehúzza vagy elutasító az ötlettel kapcsolatban
+- "neutral" → információt ad, módosítást javasol, pontosít, kérdez, vagy nem egyértelműen pozitív/negatív
+
+A type lehetséges értékei:
+- "supports"
+- "opposes"
+- "extra_info"
+- "suggests_change"
+- "other_meaningful"
+- "smalltalk"
+
+Fontos:
+- ne csak szavakat figyelj, hanem a teljes komment értelmét
+- a "positive / negative / neutral" az ötlethez való viszony alapján legyen
+- ha valaki támogatja vagy megerősíti, hogy jó irány, az positive
+- ha valaki ellenzi vagy feleslegesnek tartja, az negative
+- ha valaki inkább módosítást javasol, pontosít vagy kérdez, az neutral
+- a summary legyen rövid, emberi magyar összefoglaló
+- csak JSON-t adj vissza
 
 Ötlet címe:
 ${idea.canonicalTitle || idea.title || "Ismeretlen ötlet"}
@@ -860,12 +1021,13 @@ Komment szerzője:
 ${authorTag || "Ismeretlen"}
 
 Új komment:
-${compactText(content)}
+${fallbackText}
 
 Csak JSON:
 {
   "meaningful": true vagy false,
   "type": "supports",
+  "reaction": "positive",
   "summary": "rövid összefoglaló"
 }
 `;
@@ -881,10 +1043,11 @@ Csak JSON:
     const firstBrace = text.indexOf("{");
     const lastBrace = text.lastIndexOf("}");
     if (firstBrace === -1 || lastBrace === -1) {
-      return fallback;
+      throw new Error("Nem jött vissza értelmezhető JSON.");
     }
 
     const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
+
     const allowedTypes = new Set([
       "supports",
       "opposes",
@@ -894,20 +1057,28 @@ Csak JSON:
       "smalltalk",
     ]);
 
+    const allowedReactions = new Set(["positive", "negative", "neutral"]);
+
     const meaningful = Boolean(parsed.meaningful);
     const type = allowedTypes.has(parsed.type) ? parsed.type : "other_meaningful";
-    const summary = meaningful
-      ? cleanupShortText(parsed.summary || compactText(content), 180)
-      : "";
+    const reaction = allowedReactions.has(parsed.reaction) ? parsed.reaction : "neutral";
+    const summary = meaningful ? cleanupShortText(parsed.summary || fallbackText, 180) : "";
 
     return {
       meaningful,
       type: meaningful ? type : "smalltalk",
+      reaction,
       summary,
     };
   } catch (error) {
     console.error("[IDEAS] aiAnalyzeIdeaComment hiba:", error?.message || error);
-    return fallback;
+
+    return {
+      meaningful: fallbackText.length >= 18,
+      type: fallbackText.length >= 18 ? "other_meaningful" : "smalltalk",
+      reaction: "neutral",
+      summary: fallbackText.length >= 18 ? cleanupShortText(fallbackText, 180) : "",
+    };
   }
 }
 
@@ -1229,10 +1400,26 @@ function findIdeaByThreadId(data, threadId) {
   return null;
 }
 
-function incrementReactionCounters(idea, type) {
-  if (type === "supports") idea.supportCount += 1;
-  else if (type === "opposes") idea.opposeCount += 1;
-  else idea.neutralCount += 1;
+function applyReactionChange(idea, oldReaction, newReaction) {
+  if (oldReaction && oldReaction !== newReaction) {
+    if (oldReaction === "positive") {
+      idea.supportCount = Math.max(0, (idea.supportCount || 0) - 1);
+    } else if (oldReaction === "negative") {
+      idea.opposeCount = Math.max(0, (idea.opposeCount || 0) - 1);
+    } else if (oldReaction === "neutral") {
+      idea.neutralCount = Math.max(0, (idea.neutralCount || 0) - 1);
+    }
+  }
+
+  if (!oldReaction || oldReaction !== newReaction) {
+    if (newReaction === "positive") {
+      idea.supportCount = (idea.supportCount || 0) + 1;
+    } else if (newReaction === "negative") {
+      idea.opposeCount = (idea.opposeCount || 0) + 1;
+    } else {
+      idea.neutralCount = (idea.neutralCount || 0) + 1;
+    }
+  }
 }
 
 async function processForumReply(client, message) {
@@ -1264,17 +1451,34 @@ async function processForumReply(client, message) {
     });
   } catch (error) {
     console.error("[IDEAS] processForumReply -> aiAnalyzeIdeaComment hiba:", error);
-    analysis = heuristicAnalyzeComment(content);
+    analysis = {
+      meaningful: content.length >= 18,
+      type: content.length >= 18 ? "other_meaningful" : "smalltalk",
+      reaction: "neutral",
+      summary: content.length >= 18 ? cleanupShortText(content, 180) : "",
+    };
   }
 
   if (!analysis?.meaningful) return;
 
+  const userId = message.author.id;
+  const newReaction = analysis.reaction || "neutral";
+  const oldReaction = idea.commentReactions?.[userId] || null;
+
+  if (!idea.commentReactions || typeof idea.commentReactions !== "object") {
+    idea.commentReactions = {};
+  }
+
+  applyReactionChange(idea, oldReaction, newReaction);
+  idea.commentReactions[userId] = newReaction;
+
   idea.commentInsights.push({
-    authorId: message.author.id,
+    authorId: userId,
     authorTag: message.author.tag || message.author.username || "Ismeretlen",
     messageId: message.id,
     threadId: thread.id,
     type: analysis.type || "other_meaningful",
+    reaction: newReaction,
     summary: cleanupShortText(analysis.summary || content, 180),
     createdAt: Date.now(),
   });
@@ -1283,13 +1487,14 @@ async function processForumReply(client, message) {
   idea.lastMeaningfulCommentAt = Date.now();
   idea.updatedAt = Date.now();
 
-  incrementReactionCounters(idea, analysis.type);
   idea.communityStatus = deriveCommunityStatus(idea);
   rebuildCommunityNotes(idea);
 
   try {
     if (getState("ideas_ai_summary")) {
       idea.aiSummary = await aiRefreshIdeaSummaryFromComments(idea);
+    } else {
+      idea.aiSummary = buildFallbackIdeaSummaryText(idea);
     }
 
     const msg = await updateSummaryMessage(client, idea);
@@ -1550,36 +1755,37 @@ async function processNewForumThread(client, thread) {
   const ideaId = makeIdeaId();
   const initialSummary = cleanupShortText(result.summary || description, 520);
 
-  const idea = {
-    id: ideaId,
-    title,
-    canonicalTitle: result.canonicalTitle || title,
-    description,
-    aiSummary: initialSummary,
-    aiDecisionReason: cleanupShortText(
-      result.decisionReason || "Új ötletként lett felvéve.",
-      150
-    ),
-    threads: [thread.id],
-    status: "Nyitott",
-    handler: null,
-    messageId: null,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    decidedAt: null,
-    deleteAt: null,
-    lastForumFeedbackAt: null,
-    lastForumFeedbackType: null,
-    lastManualReason: "",
-    threadFeedbackMessages: {},
-    commentInsights: [],
-    lastMeaningfulCommentAt: null,
-    communityStatus: "nincs",
-    communityNotes: "-",
-    supportCount: 0,
-    opposeCount: 0,
-    neutralCount: 0,
-  };
+const idea = {
+  id: ideaId,
+  title,
+  canonicalTitle: result.canonicalTitle || title,
+  description,
+  aiSummary: initialSummary,
+  aiDecisionReason: cleanupShortText(
+    result.decisionReason || "Új ötletként lett felvéve.",
+    150
+  ),
+  threads: [thread.id],
+  status: "Nyitott",
+  handler: null,
+  messageId: null,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  decidedAt: null,
+  deleteAt: null,
+  lastForumFeedbackAt: null,
+  lastForumFeedbackType: null,
+  lastManualReason: "",
+  threadFeedbackMessages: {},
+  commentInsights: [],
+  commentReactions: {},
+  lastMeaningfulCommentAt: null,
+  communityStatus: "nincs",
+  communityNotes: "-",
+  supportCount: 0,
+  opposeCount: 0,
+  neutralCount: 0,
+};
 
   if (getState("ideas_ai_summary")) {
     try {

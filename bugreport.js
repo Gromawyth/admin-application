@@ -75,7 +75,6 @@ function ensureDataFile() {
     fs.writeFileSync(DATA_FILE, JSON.stringify(createDefaultData(), null, 2));
   }
 }
-
 function ensureBugDefaults(bug) {
   if (!Array.isArray(bug.threads)) bug.threads = [];
   if (!bug.status) bug.status = "Nyitott";
@@ -93,6 +92,14 @@ function ensureBugDefaults(bug) {
   if (!bug.lastMeaningfulCommentAt) bug.lastMeaningfulCommentAt = null;
   if (typeof bug.communityStatus !== "string") bug.communityStatus = "nincs";
   if (typeof bug.communityNotes !== "string") bug.communityNotes = "-";
+
+  if (typeof bug.supportCount !== "number") bug.supportCount = 0;
+  if (typeof bug.opposeCount !== "number") bug.opposeCount = 0;
+  if (typeof bug.neutralCount !== "number") bug.neutralCount = 0;
+
+  if (!bug.commentReactions || typeof bug.commentReactions !== "object") {
+    bug.commentReactions = {};
+  }
 }
 
 function loadData() {
@@ -343,7 +350,12 @@ function deriveCommunityStatus(bug) {
   if (counts.asks_help > 0) return "további pontosítás merült fel";
   return "érdemi fórumos visszajelzés érkezett";
 }
-
+function getSupportTextBug(bug) {
+  const support = bug.supportCount || 0;
+  const oppose = bug.opposeCount || 0;
+  const neutral = bug.neutralCount || 0;
+  return `👍 ${support} • 👎 ${oppose} • 💬 ${neutral}`;
+}
 function buildBugEmbed(bug) {
   const style = getStatusStyle(bug.status);
 
@@ -369,7 +381,6 @@ function buildBugEmbed(bug) {
       ? `<t:${Math.floor(bug.deleteAt / 1000)}:R>`
       : "-";
 
-  const communityStatus = limitText(bug.communityStatus || "-", 160);
   const communityNotes = limitText(bug.communityNotes || "-", 1024);
   const lastCommentText = bug.lastMeaningfulCommentAt
     ? `<t:${Math.floor(bug.lastMeaningfulCommentAt / 1000)}:f>`
@@ -394,14 +405,14 @@ function buildBugEmbed(bug) {
         value: bug.handler || "-",
         inline: true,
       },
-{
-  name: getState("bugreport_ai_summary") ? "🧠 AI rövid leírás" : "🧠 Rövid leírás",
-  value: aiShort,
-  inline: false,
-},
       {
-        name: "💬 Fórum visszajelzés",
-        value: communityStatus,
+        name: getState("bugreport_ai_summary") ? "🧠 AI rövid leírás" : "🧠 Rövid leírás",
+        value: aiShort,
+        inline: false,
+      },
+      {
+        name: "🤝 Közösségi reakció",
+        value: getSupportTextBug(bug),
         inline: true,
       },
       {
@@ -682,6 +693,7 @@ async function aiAnalyzeForumComment({ bug, content, authorTag }) {
     return {
       meaningful: false,
       type: "smalltalk",
+      reaction: "neutral",
       summary: "",
     };
   }
@@ -693,6 +705,7 @@ async function aiAnalyzeForumComment({ bug, content, authorTag }) {
       return {
         meaningful: false,
         type: "smalltalk",
+        reaction: "neutral",
         summary: "",
       };
     }
@@ -706,6 +719,7 @@ async function aiAnalyzeForumComment({ bug, content, authorTag }) {
       return {
         meaningful: true,
         type: "solved_by_reporter",
+        reaction: "positive",
         summary: cleanupShortText(fallbackText, 180),
       };
     }
@@ -719,6 +733,7 @@ async function aiAnalyzeForumComment({ bug, content, authorTag }) {
       return {
         meaningful: true,
         type: "ignore",
+        reaction: "neutral",
         summary: cleanupShortText(fallbackText, 180),
       };
     }
@@ -727,6 +742,7 @@ async function aiAnalyzeForumComment({ bug, content, authorTag }) {
       return {
         meaningful: true,
         type: "other_meaningful",
+        reaction: "neutral",
         summary: cleanupShortText(fallbackText, 180),
       };
     }
@@ -734,6 +750,7 @@ async function aiAnalyzeForumComment({ bug, content, authorTag }) {
     return {
       meaningful: false,
       type: "smalltalk",
+      reaction: "neutral",
       summary: "",
     };
   }
@@ -742,37 +759,38 @@ async function aiAnalyzeForumComment({ bug, content, authorTag }) {
 Te egy Discord bugrendszer kommentelemzője vagy.
 
 Feladat:
-- döntsd el, hogy ez a fórumos hozzászólás érdemi-e a bug szempontjából
-- ha érdemi, röviden foglald össze
-- ha nem érdemi, akkor meaningful legyen false
-- ne kulcsszavak alapján dönts, hanem a teljes komment értelme alapján
-- a komment lehet:
-  - megoldódást jelző
-  - figyelmen kívül hagyható / semmis
-  - extra információ
-  - a hibát megerősítő visszajelzés
-  - pontosítást vagy segítséget kérő hozzászólás
-  - vagy egyéb érdemi komment
+- döntsd el, hogy az új komment érdemi hozzászólás-e
+- ha nem érdemi, akkor meaningful = false
+- ha érdemi, akkor add meg a type mezőt is
+- ezen felül döntsd el a hozzászólás hangvételét / irányát is a reaction mezőben
 
-Lehetséges type értékek:
-- solved_by_reporter
-- ignore
-- extra_info
-- confirms_issue
-- asks_help
-- other_meaningful
-- smalltalk
+A reaction jelentése:
+- "positive" → a hozzászólás inkább megerősíti, támogatja vagy előremozdítja a hibajelentést
+- "negative" → a hozzászólás inkább vitatja, ellenzi, lehúzza vagy elutasító jellegű a hibajelentéssel kapcsolatban
+- "neutral" → információt ad, kérdez, pontosít, vagy nem egyértelműen pozitív/negatív
 
-Szabályok:
+A type lehetséges értékei:
+- "solved_by_reporter"
+- "ignore"
+- "extra_info"
+- "confirms_issue"
+- "asks_help"
+- "other_meaningful"
+- "smalltalk"
+
+Fontos:
+- ne csak szavakat figyelj, hanem a komment értelmét
+- a "positive / negative / neutral" ne érzelmi alapon legyen, hanem a bughoz való viszony alapján
+- ha valaki megerősíti, hogy nála is előjön a hiba, az inkább positive
+- ha valaki azt írja, hogy ez nem valódi hiba / nem kell vele foglalkozni / felesleges, az inkább negative
+- ha valaki csak plusz infót ad vagy kérdez, az neutral
+- a summary legyen rövid, emberi magyar összefoglaló
 - csak JSON-t adj vissza
-- summary legyen rövid, természetes magyar mondat vagy mondattöredék
-- ne legyen túl technikai
-- ha a komment nem lényeges, summary legyen üres string
 
 Bug címe:
 ${bug.canonicalTitle || bug.title || "Ismeretlen bug"}
 
-Bug leírás:
+Bug leírása:
 ${bug.description || "Nincs leírás."}
 
 Korábbi érdemi kommentek:
@@ -788,6 +806,7 @@ Csak JSON:
 {
   "meaningful": true vagy false,
   "type": "solved_by_reporter",
+  "reaction": "positive",
   "summary": "rövid összefoglaló"
 }
 `;
@@ -807,6 +826,7 @@ Csak JSON:
     }
 
     const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
+
     const allowedTypes = new Set([
       "solved_by_reporter",
       "ignore",
@@ -817,13 +837,17 @@ Csak JSON:
       "smalltalk",
     ]);
 
+    const allowedReactions = new Set(["positive", "negative", "neutral"]);
+
     const meaningful = Boolean(parsed.meaningful);
     const type = allowedTypes.has(parsed.type) ? parsed.type : "other_meaningful";
+    const reaction = allowedReactions.has(parsed.reaction) ? parsed.reaction : "neutral";
     const summary = meaningful ? cleanupShortText(parsed.summary || fallbackText, 180) : "";
 
     return {
       meaningful,
       type: meaningful ? type : "smalltalk",
+      reaction,
       summary,
     };
   } catch (error) {
@@ -832,6 +856,7 @@ Csak JSON:
     return {
       meaningful: fallbackText.length >= 18,
       type: fallbackText.length >= 18 ? "other_meaningful" : "smalltalk",
+      reaction: "neutral",
       summary: fallbackText.length >= 18 ? cleanupShortText(fallbackText, 180) : "",
     };
   }
@@ -1266,18 +1291,50 @@ async function processForumReply(client, message) {
     analysis = {
       meaningful: content.length >= 18,
       type: content.length >= 18 ? "other_meaningful" : "smalltalk",
+      reaction: "neutral",
       summary: content.length >= 18 ? cleanupShortText(content, 180) : "",
     };
   }
 
   if (!analysis?.meaningful) return;
 
+  const userId = message.author.id;
+  const newReaction = analysis.reaction || "neutral";
+  const oldReaction = bug.commentReactions?.[userId] || null;
+
+  if (!bug.commentReactions || typeof bug.commentReactions !== "object") {
+    bug.commentReactions = {};
+  }
+
+  if (oldReaction && oldReaction !== newReaction) {
+    if (oldReaction === "positive") {
+      bug.supportCount = Math.max(0, (bug.supportCount || 0) - 1);
+    } else if (oldReaction === "negative") {
+      bug.opposeCount = Math.max(0, (bug.opposeCount || 0) - 1);
+    } else if (oldReaction === "neutral") {
+      bug.neutralCount = Math.max(0, (bug.neutralCount || 0) - 1);
+    }
+  }
+
+  if (!oldReaction || oldReaction !== newReaction) {
+    if (newReaction === "positive") {
+      bug.supportCount = (bug.supportCount || 0) + 1;
+    } else if (newReaction === "negative") {
+      bug.opposeCount = (bug.opposeCount || 0) + 1;
+    } else {
+      bug.neutralCount = (bug.neutralCount || 0) + 1;
+    }
+
+    bug.commentReactions[userId] = newReaction;
+  }
+
   bug.commentInsights.push({
-    authorId: message.author.id,
+    authorId: userId,
     authorTag: message.author.tag || message.author.username || "Ismeretlen",
     messageId: message.id,
     threadId: thread.id,
     type: analysis.type || "other_meaningful",
+    reaction: newReaction,
     summary: cleanupShortText(analysis.summary || content, 180),
     createdAt: Date.now(),
   });

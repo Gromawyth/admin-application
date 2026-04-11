@@ -1391,3 +1391,7 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
 });
 
+client.login(DISCORD_TOKEN);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
+});

@@ -494,15 +494,15 @@ function buildCommand() {
       sub
         .setName("preview")
         .setDescription("Előnézet gombos kiküldéssel")
-        .addChannelOption((o) =>
-          o.setName("csatorna").setDescription("Hova menjen majd").setRequired(false)
-        )
         .addStringOption((o) =>
           o
             .setName("stilus")
             .setDescription("Embed stílus")
             .setRequired(true)
             .addChoices(...presetChoices)
+        )
+        .addChannelOption((o) =>
+          o.setName("csatorna").setDescription("Hova menjen majd").setRequired(false)
         )
         .addStringOption((o) =>
           o.setName("cim").setDescription("Cím").setRequired(false).setMaxLength(256)
@@ -713,9 +713,6 @@ function buildCommand() {
       sub
         .setName("edit")
         .setDescription("Bot üzenet szerkesztése")
-        .addChannelOption((o) =>
-          o.setName("csatorna").setDescription("Az üzenet csatornája").setRequired(false)
-        )
         .addStringOption((o) =>
           o.setName("uzenet_id").setDescription("Üzenet ID").setRequired(true)
         )
@@ -725,6 +722,9 @@ function buildCommand() {
             .setDescription("Új stílus")
             .setRequired(true)
             .addChoices(...presetChoices)
+        )
+        .addChannelOption((o) =>
+          o.setName("csatorna").setDescription("Az üzenet csatornája").setRequired(false)
         )
         .addStringOption((o) =>
           o.setName("cim").setDescription("Új cím").setRequired(false).setMaxLength(256)
@@ -774,14 +774,14 @@ function buildCommand() {
       sub
         .setName("clone")
         .setDescription("Meglévő bot embed lemásolása másik csatornába")
-        .addChannelOption((o) =>
-          o.setName("forras_csatorna").setDescription("Forrás csatorna").setRequired(false)
-        )
         .addStringOption((o) =>
           o.setName("uzenet_id").setDescription("Forrás üzenet ID").setRequired(true)
         )
         .addChannelOption((o) =>
           o.setName("cel_csatorna").setDescription("Célcsatorna").setRequired(true)
+        )
+        .addChannelOption((o) =>
+          o.setName("forras_csatorna").setDescription("Forrás csatorna").setRequired(false)
         )
     )
 
@@ -789,11 +789,11 @@ function buildCommand() {
       sub
         .setName("delete")
         .setDescription("Bot embed törlése")
-        .addChannelOption((o) =>
-          o.setName("csatorna").setDescription("Csatorna").setRequired(false)
-        )
         .addStringOption((o) =>
           o.setName("uzenet_id").setDescription("Üzenet ID").setRequired(true)
+        )
+        .addChannelOption((o) =>
+          o.setName("csatorna").setDescription("Csatorna").setRequired(false)
         )
     )
 

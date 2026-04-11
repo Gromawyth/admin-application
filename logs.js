@@ -1155,12 +1155,21 @@ client.on("guildMemberUpdate", async (regi, uj) => {
   const ujTimeout = uj.communicationDisabledUntilTimestamp || 0;
 
   if (regiTimeout !== ujTimeout) {
-    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
-    const moderatorTag = entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen";
+    const entry = await auditKeresesKesleltetve(
+      uj.guild,
+      AuditLogEvent.MemberUpdate,
+      uj.id
+    );
+
+    const moderatorTag = entry?.executor
+      ? felhasznaloSzoveg(entry.executor)
+      : "Ismeretlen";
+
     const reason = entry?.reason || "Nincs megadva";
 
     if (ujTimeout > Date.now()) {
       const vege = Math.floor(ujTimeout / 1000);
+      const durationMs = Math.max(0, ujTimeout - Date.now());
 
       const refreshedMember =
         uj.guild.members.cache.get(uj.id) ||
@@ -1171,9 +1180,11 @@ client.on("guildMemberUpdate", async (regi, uj) => {
           action: "timeout",
           moderatorTag,
           reason,
-          durationText: `<t:${vege}:R>`,
+          durationText: aiModeration.formatDuration(durationMs),
           source: "Kézi timeout",
-        }).catch(() => null);
+        }).catch((error) => {
+          console.error("[LOGS] kézi timeout -> AI sync hiba:", error);
+        });
       }
 
       const embed = internalEmbed("Tag timeoutot kapott", SZINEK.FIGYELMEZTETES, "🔇")
@@ -1206,7 +1217,11 @@ client.on("guildMemberUpdate", async (regi, uj) => {
   const { hozzaadva, elveve } = rangValtozasok(regi, uj);
 
   if (hozzaadva.length || elveve.length) {
-    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberRoleUpdate, uj.id);
+    const entry = await auditKeresesKesleltetve(
+      uj.guild,
+      AuditLogEvent.MemberRoleUpdate,
+      uj.id
+    );
 
     const sorok = [];
     const hozza = hozzaadvaSor("Rangok", hozzaadva.map((r) => `${r}`));
@@ -1226,7 +1241,11 @@ client.on("guildMemberUpdate", async (regi, uj) => {
   }
 
   if (regi.nickname !== uj.nickname) {
-    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
+    const entry = await auditKeresesKesleltetve(
+      uj.guild,
+      AuditLogEvent.MemberUpdate,
+      uj.id
+    );
 
     const embed = internalEmbed("Nick módosítás", SZINEK.MODOSITAS, "🧑‍💻")
       .setDescription(diffSor("Becenév", regi.nickname || "Nincs", uj.nickname || "Nincs"))

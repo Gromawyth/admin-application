@@ -1390,7 +1390,3 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 HTTP szerver fut a ${PORT} porton`);
 });
 
-console.log("DISCORD_TOKEN megvan:", !!DISCORD_TOKEN);
-console.log("DISCORD_TOKEN hossza:", DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
-console.log("DISCORD_TOKEN eleje:", DISCORD_TOKEN ? DISCORD_TOKEN.slice(0, 10) : "nincs");
-client.login(DISCORD_TOKEN);

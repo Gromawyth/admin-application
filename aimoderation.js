@@ -200,7 +200,31 @@ function trimField(text, max = 1024) {
 function safeMentionUser(userId) {
   return userId ? `<@${userId}>` : "Ismeretlen";
 }
+function formatDuration(ms) {
+  const value = Number(ms || 0);
 
+  if (!Number.isFinite(value) || value <= 0) {
+    return "Ismeretlen";
+  }
+
+  const totalSeconds = Math.floor(value / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const parts = [];
+
+  if (days > 0) parts.push(`${days} nap`);
+  if (hours > 0) parts.push(`${hours} óra`);
+  if (minutes > 0) parts.push(`${minutes} perc`);
+
+  if (!parts.length && seconds > 0) {
+    parts.push(`${seconds} másodperc`);
+  }
+
+  return parts.join(" ");
+}
 async function getLogChannel(client) {
   if (
     !CONFIG.MOD_LOG_CHANNEL_ID ||
@@ -4403,4 +4427,5 @@ module.exports = {
   registerAiModeration,
   handleSlashCommand,
   applyManualModerationAndLog,
+  formatDuration,
 };

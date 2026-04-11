@@ -2345,7 +2345,164 @@ async function resendUnifiedCaseMessage(client, member, profile) {
 
   return msg;
 }
+function getManualModerationPreset(action) {
+  switch (action) {
+    case "timeout":
+      return {
+        points: 12,
+        suspicion: 8,
+        severity: "közepes",
+        category: "Manuális moderáció",
+        actionLabel: "Timeout / mute",
+      };
+    case "kick":
+      return {
+        points: 22,
+        suspicion: 14,
+        severity: "magas",
+        category: "Manuális moderáció",
+        actionLabel: "Kick",
+      };
+    case "ban":
+      return {
+        points: 35,
+        suspicion: 20,
+        severity: "kritikus",
+        category: "Manuális moderáció",
+        actionLabel: "Ban",
+      };
+    case "unban":
+      return {
+        points: -20,
+        suspicion: -10,
+        severity: "enyhe",
+        category: "Manuális moderáció",
+        actionLabel: "Feloldás / unban",
+      };
+    default:
+      return {
+        points: 0,
+        suspicion: 0,
+        severity: "enyhe",
+        category: "Manuális moderáció",
+        actionLabel: "Ismeretlen művelet",
+      };
+  }
+}
 
+async function applyManualModerationAndLog(client, member, options = {}) {
+  if (!member?.id) return null;
+
+  const {
+    action = "timeout",
+    moderatorTag = "Ismeretlen",
+    reason = "",
+    durationText = "",
+    source = "Kézi moderáció",
+  } = options;
+
+  const preset = getManualModerationPreset(action);
+  const profile = getUserProfile(member.id);
+
+  const oldRisk = getRiskPercent(profile);
+
+  if (action === "unban") {
+    profile.suspicion = Math.max(0, Number(profile.suspicion || 0) + preset.suspicion);
+    profile.behaviorScore = getRiskPercent(profile);
+    profile.totals.unbans = (profile.totals.unbans || 0) + 1;
+
+    profile.activeCase = {
+      ...(profile.activeCase || {}),
+      lastAction: preset.actionLabel,
+      lastActionRaw: "unban",
+      lastReason: reason || "Kézi unban",
+      lastCategory: preset.category,
+      lastSeverity: preset.severity,
+      lastAnalysis: `${source}: ${moderatorTag} feloldotta a felhasználó szankcióját.`,
+      lastPatternSummary: "Kézi moderációs feloldás történt.",
+      lastRuleBroken: "Manuális staff döntés",
+      lastMessageContent: "",
+      lastMessageId: null,
+      lastChannelId: null,
+      lastProjectedRisk: getRiskPercent(profile),
+      lastEvidence: `Moderátor: ${moderatorTag}${reason ? `\nIndok: ${reason}` : ""}`,
+      lastModerationMode: "manual",
+      lastUpdatedAt: Date.now(),
+      currentStatus: "Feloldva",
+    };
+
+    saveStore();
+    await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+
+    return {
+      profile,
+      oldRisk,
+      newRisk: getRiskPercent(profile),
+      addedPoints: preset.points,
+    };
+  }
+
+  addIncident(member.id, {
+    createdAt: Date.now(),
+    points: preset.points,
+    suspicion: preset.suspicion,
+    action,
+    severity: preset.severity,
+    category: preset.category,
+    content: `${source}: ${preset.actionLabel}`,
+    reason: reason || "",
+    moderatorTag,
+    source,
+  });
+
+  if (action === "timeout") {
+    profile.totals.timeouts = (profile.totals.timeouts || 0) + 1;
+  } else if (action === "kick") {
+    profile.totals.kicks = (profile.totals.kicks || 0) + 1;
+  } else if (action === "ban") {
+    profile.totals.bans = (profile.totals.bans || 0) + 1;
+  }
+
+  const newRisk = getRiskPercent(profile);
+  profile.behaviorScore = newRisk;
+  profile.suspicion = Math.max(0, Number(profile.suspicion || 0));
+
+  profile.activeCase = {
+    ...(profile.activeCase || {}),
+    lastAction: preset.actionLabel,
+    lastActionRaw: action,
+    lastReason: reason || "Kézi staff döntés",
+    lastCategory: preset.category,
+    lastSeverity: preset.severity,
+    lastAnalysis:
+      `${source}: ${moderatorTag} ${preset.actionLabel.toLowerCase()} intézkedést adott.` +
+      `${durationText ? ` Időtartam: ${durationText}.` : ""}` +
+      ` A rendszer ${preset.points} pontot adott hozzá a kockázathoz.`,
+    lastPatternSummary: "Kézi moderációs intézkedés történt.",
+    lastRuleBroken: "Manuális staff döntés",
+    lastMessageContent: "",
+    lastMessageId: null,
+    lastChannelId: null,
+    lastProjectedRisk: newRisk,
+    lastEvidence:
+      `Moderátor: ${moderatorTag}` +
+      `${durationText ? `\nIdőtartam: ${durationText}` : ""}` +
+      `${reason ? `\nIndok: ${reason}` : ""}`,
+    lastModerationMode: "manual",
+    lastUpdatedAt: Date.now(),
+    currentStatus: actionToLabel(action),
+  };
+
+  saveStore();
+  await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+
+  return {
+    profile,
+    oldRisk,
+    newRisk,
+    addedPoints: preset.points,
+  };
+}
 async function safeDeleteMessage(message) {
   try {
     if (!CONFIG.ALLOW_DELETE) return false;
@@ -3991,7 +4148,14 @@ const dmSent = await sendManualMuteDM(member.user, {
   member,
 }).catch(() => false);
 
-  await resendUnifiedCaseMessage(client, member, profile).catch(() => null);
+let caseLogSent = false;
+
+try {
+  const sentMsg = await resendUnifiedCaseMessage(client, member, profile);
+  caseLogSent = Boolean(sentMsg);
+} catch (error) {
+  console.error("[AIMOD] mute összesítő log hiba:", error);
+}
 
   await interaction.editReply({
     content:
@@ -4000,7 +4164,9 @@ const dmSent = await sendManualMuteDM(member.user, {
       `🤖 AI indok: ${aiReason}\n` +
       `📈 Hozzáadott pont: **${manualPoints}**\n` +
       `📊 Új risk:\n${formatRiskBlock(profile)}\n` +
+      `📝 Mod log összesítő: ${caseLogSent ? "✅ elküldve" : "❌ nem sikerült elküldeni"}\n` +
       `✉️ DM állapot: ${dmSent ? "✅ elküldve" : "⚠️ nem sikerült elküldeni"}`,
+      
   });
 }
 async function handleInteraction(client, interaction) { // idáig!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -4213,5 +4379,5 @@ function registerAiModeration(client) {
 module.exports = {
   registerAiModeration,
   handleSlashCommand,
-  handleInteraction,
+  applyManualModerationAndLog,
 };

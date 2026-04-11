@@ -6,6 +6,7 @@ const {
   MessageFlags
 } = require("discord.js");
 const { getState } = require("./systempanel");
+const aiModeration = require("./aimoderation");
 /**
  * =========================
  *        BEÁLLÍTÁSOK
@@ -579,38 +580,123 @@ module.exports = function registerLogs(client) {
   /**
    * MODERÁCIÓ
    */
-  client.on("guildBanAdd", async (ban) => {
-    const stat = guildStat(ban.guild.id);
-    stat.ban++;
+client.on("guildBanAdd", async (ban) => {
+  const stat = guildStat(ban.guild.id);
+  stat.ban++;
 
-    const entry = await auditKeresesKesleltetve(ban.guild, AuditLogEvent.MemberBanAdd, ban.user.id);
+  const entry = await auditKeresesKesleltetve(
+    ban.guild,
+    AuditLogEvent.MemberBanAdd,
+    ban.user.id
+  );
 
-    const embed = internalEmbed("Ban végrehajtva", SZINEK.HIBA, "🔨")
-      .setDescription(`${ban.user} bannt kapott.`)
-      .addFields(
-        { name: "👤 Felhasználó", value: felhasznaloSzoveg(ban.user), inline: false },
-        { name: "🛠️ Végrehajtotta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false },
-        { name: "📄 Indok", value: entry?.reason || "Nincs megadva", inline: false }
-      );
+  const moderatorTag = entry?.executor
+    ? felhasznaloSzoveg(entry.executor)
+    : "Ismeretlen";
 
-    await kuldEmbed(client, "mod", embed);
+  const reason = entry?.reason || "Nincs megadva";
+
+  const memberLike = {
+    id: ban.user.id,
+    user: ban.user,
+    guild: ban.guild,
+  };
+
+  await aiModeration.applyManualModerationAndLog(client, memberLike, {
+    action: "ban",
+    moderatorTag,
+    reason,
+    source: "Kézi ban",
+  }).catch((error) => {
+    console.error("[LOGS] guildBanAdd -> AI sync hiba:", error);
   });
 
-  client.on("guildBanRemove", async (ban) => {
-    const stat = guildStat(ban.guild.id);
-    stat.unban++;
+  const embed = internalEmbed("Ban végrehajtva", SZINEK.HIBA, "🔨")
+    .setDescription(`${ban.user} bannt kapott.`)
+    .addFields(
+      {
+        name: "👤 Felhasználó",
+        value: felhasznaloSzoveg(ban.user),
+        inline: false
+      },
+      {
+        name: "🛠️ Végrehajtotta",
+        value: moderatorTag,
+        inline: false
+      },
+      {
+        name: "📄 Indok",
+        value: reason,
+        inline: false
+      },
+      {
+        name: "📈 AI kockázat sync",
+        value: "✅ Profil frissítve és összesítő embed újraküldve.",
+        inline: false
+      }
+    );
 
-    const entry = await auditKeresesKesleltetve(ban.guild, AuditLogEvent.MemberBanRemove, ban.user.id);
+  await kuldEmbed(client, "mod", embed);
+});
 
-    const embed = internalEmbed("Unban végrehajtva", SZINEK.SIKER, "🔓")
-      .setDescription(`${ban.user} unbant kapott.`)
-      .addFields(
-        { name: "👤 Felhasználó", value: felhasznaloSzoveg(ban.user), inline: false },
-        { name: "🛠️ Végrehajtotta", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
-      );
+client.on("guildBanRemove", async (ban) => {
+  const stat = guildStat(ban.guild.id);
+  stat.unban++;
 
-    await kuldEmbed(client, "mod", embed);
+  const entry = await auditKeresesKesleltetve(
+    ban.guild,
+    AuditLogEvent.MemberBanRemove,
+    ban.user.id
+  );
+
+  const moderatorTag = entry?.executor
+    ? felhasznaloSzoveg(entry.executor)
+    : "Ismeretlen";
+
+  const reason = entry?.reason || "Nincs megadva";
+
+  const memberLike = {
+    id: ban.user.id,
+    user: ban.user,
+    guild: ban.guild,
+  };
+
+  await aiModeration.applyManualModerationAndLog(client, memberLike, {
+    action: "unban",
+    moderatorTag,
+    reason,
+    source: "Kézi unban",
+  }).catch((error) => {
+    console.error("[LOGS] guildBanRemove -> AI sync hiba:", error);
   });
+
+  const embed = internalEmbed("Unban végrehajtva", SZINEK.SIKER, "🔓")
+    .setDescription(`${ban.user} unbant kapott.`)
+    .addFields(
+      {
+        name: "👤 Felhasználó",
+        value: felhasznaloSzoveg(ban.user),
+        inline: false
+      },
+      {
+        name: "🛠️ Végrehajtotta",
+        value: moderatorTag,
+        inline: false
+      },
+      {
+        name: "📄 Indok",
+        value: reason,
+        inline: false
+      },
+      {
+        name: "📈 AI kockázat sync",
+        value: "✅ Profil frissítve és összesítő embed újraküldve.",
+        inline: false
+      }
+    );
+
+  await kuldEmbed(client, "mod", embed);
+});
 
   /**
    * ÜZENETEK
@@ -1064,42 +1150,94 @@ module.exports = function registerLogs(client) {
   /**
    * TAG MÓDOSÍTÁSOK
    */
-  client.on("guildMemberUpdate", async (regi, uj) => {
-    const { hozzaadva, elveve } = rangValtozasok(regi, uj);
+client.on("guildMemberUpdate", async (regi, uj) => {
+  const regiTimeout = regi.communicationDisabledUntilTimestamp || 0;
+  const ujTimeout = uj.communicationDisabledUntilTimestamp || 0;
 
-    if (hozzaadva.length || elveve.length) {
-      const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberRoleUpdate, uj.id);
+  if (regiTimeout !== ujTimeout) {
+    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
+    const moderatorTag = entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen";
+    const reason = entry?.reason || "Nincs megadva";
 
-      const sorok = [];
-      const hozza = hozzaadvaSor("Rangok", hozzaadva.map((r) => `${r}`));
-      const elv = elveveSor("Rangok", elveve.map((r) => `${r}`));
+    if (ujTimeout > Date.now()) {
+      const vege = Math.floor(ujTimeout / 1000);
 
-      if (hozza) sorok.push(hozza);
-      if (elv) sorok.push(elv);
+      const refreshedMember =
+        uj.guild.members.cache.get(uj.id) ||
+        (await uj.guild.members.fetch(uj.id).catch(() => null));
 
-      const embed = internalEmbed("Tag rangjai módosultak", SZINEK.MODOSITAS, "👤")
-        .setDescription(sorok.join("\n\n"))
-        .addFields(
-          { name: "👤 Érintett tag", value: `${uj.user.tag} (${uj.id})`, inline: false },
-          { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
-        );
+      if (refreshedMember) {
+        await aiModeration.applyManualModerationAndLog(client, refreshedMember, {
+          action: "timeout",
+          moderatorTag,
+          reason,
+          durationText: `<t:${vege}:R>`,
+          source: "Kézi timeout",
+        }).catch(() => null);
+      }
 
-      await kuldEmbed(client, "rang", embed);
-    }
-
-    if (regi.nickname !== uj.nickname) {
-      const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
-
-      const embed = internalEmbed("Nick módosítás", SZINEK.MODOSITAS, "🧑‍💻")
-        .setDescription(diffSor("Becenév", regi.nickname || "Nincs", uj.nickname || "Nincs"))
+      const embed = internalEmbed("Tag timeoutot kapott", SZINEK.FIGYELMEZTETES, "🔇")
+        .setDescription(`${uj.user} időkorlátozást kapott.`)
         .addFields(
           { name: "👤 Felhasználó", value: `${uj.user.tag} (${uj.id})`, inline: false },
-          { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
+          { name: "🛠️ Végrehajtotta", value: moderatorTag, inline: false },
+          { name: "⏱️ Lejárat", value: `<t:${vege}:f>\n<t:${vege}:R>`, inline: false },
+          { name: "📄 Indok", value: reason, inline: false }
         );
 
-      await kuldEmbed(client, "tag", embed);
+      await kuldEmbed(client, "mod", embed);
+      return;
     }
-  });
+
+    if (regiTimeout > 0 && ujTimeout === 0) {
+      const embed = internalEmbed("Timeout feloldva", SZINEK.SIKER, "🔊")
+        .setDescription(`${uj.user} időkorlátozása megszűnt.`)
+        .addFields(
+          { name: "👤 Felhasználó", value: `${uj.user.tag} (${uj.id})`, inline: false },
+          { name: "🛠️ Feloldotta", value: moderatorTag, inline: false },
+          { name: "📄 Indok", value: reason, inline: false }
+        );
+
+      await kuldEmbed(client, "mod", embed);
+      return;
+    }
+  }
+
+  const { hozzaadva, elveve } = rangValtozasok(regi, uj);
+
+  if (hozzaadva.length || elveve.length) {
+    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberRoleUpdate, uj.id);
+
+    const sorok = [];
+    const hozza = hozzaadvaSor("Rangok", hozzaadva.map((r) => `${r}`));
+    const elv = elveveSor("Rangok", elveve.map((r) => `${r}`));
+
+    if (hozza) sorok.push(hozza);
+    if (elv) sorok.push(elv);
+
+    const embed = internalEmbed("Tag rangjai módosultak", SZINEK.MODOSITAS, "👤")
+      .setDescription(sorok.join("\n\n"))
+      .addFields(
+        { name: "👤 Érintett tag", value: `${uj.user.tag} (${uj.id})`, inline: false },
+        { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
+      );
+
+    await kuldEmbed(client, "rang", embed);
+  }
+
+  if (regi.nickname !== uj.nickname) {
+    const entry = await auditKeresesKesleltetve(uj.guild, AuditLogEvent.MemberUpdate, uj.id);
+
+    const embed = internalEmbed("Nick módosítás", SZINEK.MODOSITAS, "🧑‍💻")
+      .setDescription(diffSor("Becenév", regi.nickname || "Nincs", uj.nickname || "Nincs"))
+      .addFields(
+        { name: "👤 Felhasználó", value: `${uj.user.tag} (${uj.id})`, inline: false },
+        { name: "🛠️ Módosította", value: entry?.executor ? felhasznaloSzoveg(entry.executor) : "Ismeretlen", inline: false }
+      );
+
+    await kuldEmbed(client, "tag", embed);
+  }
+});
 
   /**
    * EMOJI

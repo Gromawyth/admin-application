@@ -1299,10 +1299,13 @@ if (
         return;
       }
 
-      if (interaction.commandName === "delaiwarn") {
-        await aiModeration.handleSlashCommand(client, interaction);
-        return;
-      }
+if (
+  interaction.commandName === "delaiwarn" ||
+  interaction.commandName === "mute"
+) {
+  await aiModeration.handleSlashCommand(client, interaction);
+  return;
+}
       
       if (interaction.commandName === "adminreset") {
         await adminFeedback.resetData(interaction);

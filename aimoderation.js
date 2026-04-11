@@ -839,7 +839,117 @@ function extendWatch(profile, ms = CONFIG.WATCH_WINDOW_MS) {
   profile.watchUntil = Math.max(Number(profile.watchUntil || 0), now()) + ms;
   profile.totals.watches = (profile.totals.watches || 0) + 1;
 }
+function buildImmediateRuleDecision(message, profile) {
+  const content = String(message?.content || "").trim();
+  const lower = content.toLowerCase();
 
+  if (!content) return null;
+
+  const targetedDegrading = isTargetedDegradingMessage(content);
+  const directHarassment =
+    containsInsultWord(lower) &&
+    /\b(te|ti|neked|nektek|ő|ők|vagytok|vagy|takarodj|kuss|dögölj meg|dogolj meg|rohadj meg)\b/i.test(lower);
+
+  const rawStaffAbuse =
+    REGEX.staffAbuse.test(content) ||
+    /\b(szar szerver|fos szerver|szar admin|fos admin|retkes admin|bohóc admin|szutyok szerver|szenny szerver)\b/i.test(lower);
+
+  const notBelongingBehavior =
+    /\b(kussoljon mindenki|kuss legyen|mindenki fogja be|szétspamellek|tele fogom floodolni|szét fogom baszni a chatet)\b/i.test(lower);
+
+  if (targetedDegrading || rawStaffAbuse) {
+    const repeatCount = countRecentTargetedInsults(profile, content);
+
+    let action = "delete";
+    let severity = "közepes";
+    let points = 52;
+    let suspicionGain = 14;
+
+    if (repeatCount >= 2) {
+      action = "timeout";
+      severity = "közepes";
+      points = 68;
+      suspicionGain = 20;
+    }
+
+    if (repeatCount >= 4) {
+      action = "kick";
+      severity = "magas";
+      points = 84;
+      suspicionGain = 28;
+    }
+
+    if (repeatCount >= 6) {
+      action = "ban";
+      severity = "kritikus";
+      points = 96;
+      suspicionGain = 34;
+    }
+
+    return {
+      action,
+      category: "staff_abuse",
+      categoryHu: "Szerver / staff szidalmazása",
+      severity,
+      confidence: 96,
+      points,
+      suspicionGain,
+      ruleBroken: "Célzott szerver / staff / közösség szidalmazása.",
+      reason: "A rendszer célzott, nem odatartozó és degradáló minősítést talált.",
+      analysis:
+        repeatCount >= 1
+          ? "A felhasználó célzott, sértő minősítést használt, ráadásul ez nem első eset."
+          : "A felhasználó célzott, sértő minősítést használt a szerverre, staffra vagy közösségre.",
+      patternSummary:
+        repeatCount >= 1
+          ? `Azonnali törlendő célzott minősítés, ismétléssel (${repeatCount + 1}).`
+          : "Azonnali törlendő célzott minősítés.",
+      timeoutMinutes: 0,
+      shouldNotifyStaff: true,
+      forceWatch: true,
+    };
+  }
+
+  if (directHarassment) {
+    return {
+      action: "delete",
+      category: "harassment",
+      categoryHu: "Célzott sértegetés",
+      severity: "közepes",
+      confidence: 92,
+      points: 48,
+      suspicionGain: 12,
+      ruleBroken: "Célzott sértegetés / szidalmazás.",
+      reason: "A rendszer közvetlen sértő megszólítást talált.",
+      analysis: "A felhasználó más személy felé irányuló sértő hangnemet használt.",
+      patternSummary: "Azonnali törlendő célzott sértés.",
+      timeoutMinutes: 0,
+      shouldNotifyStaff: true,
+      forceWatch: true,
+    };
+  }
+
+  if (notBelongingBehavior) {
+    return {
+      action: "watch",
+      category: "other",
+      categoryHu: "Nem odatartozó viselkedés",
+      severity: "enyhe",
+      confidence: 82,
+      points: 26,
+      suspicionGain: 8,
+      ruleBroken: "Nem odatartozó, zavaró viselkedés.",
+      reason: "A rendszer olyan mintát talált, ami könnyen átmehet rendbontásba.",
+      analysis: "Az üzenet zavaró vagy provokatív jellegű, ezért a rendszer megfigyelési állapotot ad.",
+      patternSummary: "Watch szintű zavaró viselkedés.",
+      timeoutMinutes: 0,
+      shouldNotifyStaff: true,
+      forceWatch: true,
+    };
+  }
+
+  return null;
+}
 function normalizeBypassText(content = "") {
   return String(content || "")
     .toLowerCase()
@@ -1368,14 +1478,36 @@ function isContextualProfanity(content = "") {
 }
 
 function isTargetedDegradingMessage(content = "") {
-  const lower = String(content || "").toLowerCase().trim();
+  const lower = String(content || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 
-  if (!containsInsultWord(lower) && !containsMildProfanity(lower)) return false;
-  if (!containsTargetWord(lower)) return false;
+  if (!lower) return false;
+
+  const strongTargetPatterns = [
+    /\b(szerver|server|internalgaming)\b.{0,20}\b(szar|fos|hullad[eé]k|szutyok|szenny|boh[oó]c|retkes|nyomor[eé]k|vicc)\b/i,
+    /\b(szar|fos|hullad[eé]k|szutyok|szenny|boh[oó]c|retkes|nyomor[eé]k|vicc)\b.{0,20}\b(szerver|server|internalgaming)\b/i,
+
+    /\b(admin|adminok|adminisztr[aá]tor|moder[aá]tor|moderator|staff|vezet[oő]s[eé]g|fejleszt[oő])\b.{0,20}\b(szar|fos|hullad[eé]k|boh[oó]c|retkes|nyomor[eé]k|csicska|szutyok|szenny)\b/i,
+    /\b(szar|fos|hullad[eé]k|boh[oó]c|retkes|nyomor[eé]k|csicska|szutyok|szenny)\b.{0,20}\b(admin|adminok|adminisztr[aá]tor|moder[aá]tor|moderator|staff|vezet[oő]s[eé]g|fejleszt[oő])\b/i,
+
+    /\b(ez a|ilyen|ez)\s+(szerver|server)\s+(egy\s+)?(szar|fos|vicc|hullad[eé]k)\b/i,
+    /\b(szerver|server)\s+(egy\s+)?(szar|fos|vicc|hullad[eé]k)\b/i,
+    /\binternalgaming\s+(egy\s+)?(szar|fos|vicc|hullad[eé]k)\b/i,
+  ];
+
+  if (strongTargetPatterns.some((rx) => rx.test(lower))) {
+    return true;
+  }
+
+  const hasInsult = containsInsultWord(lower) || containsMildProfanity(lower);
+  const hasTarget = containsTargetWord(lower);
+
+  if (!hasInsult || !hasTarget) return false;
 
   if (
-    /\b(szerver|server|internalgaming|admin|adminok|moderátor|moderator|staff|vezetőség|vezetoseg|fejlesztő|fejleszto|közösség|kozosseg|játékos|jatekos)\b.{0,24}\b(szar|fos|retkes|bohóc|bohoc|szutyok|szenny|hulladék|hulladek|nyomorék|nyomorek|idióta|idiota|semmirekellő|semmirekello|geci|fasz)\b/i.test(lower) ||
-    /\b(szar|fos|retkes|bohóc|bohoc|szutyok|szenny|hulladék|hulladek|nyomorék|nyomorek|idióta|idiota|semmirekellő|semmirekello|geci|fasz)\b.{0,24}\b(szerver|server|internalgaming|admin|adminok|moderátor|moderator|staff|vezetőség|vezetoseg|fejlesztő|fejleszto|közösség|kozosseg|játékos|jatekos)\b/i.test(lower)
+    /\b(te|ti|neked|nektek|vagytok|olyan vagy|egy rakás|egy nagy)\b/i.test(lower)
   ) {
     return true;
   }
@@ -2300,7 +2432,71 @@ function buildUnifiedEmbed({ member, profile }) {
     .setFooter({ text: `AI Moderation • ${CONFIG.SERVER_NAME}` })
     .setTimestamp(new Date(active.lastUpdatedAt || Date.now()));
 }
+async function logWatchIncident(client, message, member, profile, final) {
+  try {
+    const logChannel = await getLogChannel(client);
+    if (!logChannel) return null;
 
+    const embed = new EmbedBuilder()
+      .setColor(0xf0c419)
+      .setTitle("👁️ Watch / megfigyelés log")
+      .addFields(
+        {
+          name: "Felhasználó",
+          value: `${member.user.tag} (${member.id})`,
+          inline: false,
+        },
+        {
+          name: "Művelet",
+          value: actionToLabel(final.action),
+          inline: true,
+        },
+        {
+          name: "Kategória",
+          value: final.categoryHu || categoryToHu(final.category),
+          inline: true,
+        },
+        {
+          name: "Súlyosság",
+          value: final.severity || "enyhe",
+          inline: true,
+        },
+        {
+          name: "Indok",
+          value: trimField(final.ruleBroken || final.reason || "Watch esemény"),
+          inline: false,
+        },
+        {
+          name: "Üzenet",
+          value: trimField(message.content || "-"),
+          inline: false,
+        },
+        {
+          name: "Csatorna",
+          value: message.channel ? `<#${message.channel.id}>` : "-",
+          inline: true,
+        },
+        {
+          name: "Risk",
+          value: `${Math.round(Number(profile.behaviorScore || 0))}%`,
+          inline: true,
+        },
+        {
+          name: "Watch végéig",
+          value: profile.watchUntil > Date.now()
+            ? `<t:${Math.floor(profile.watchUntil / 1000)}:R>`
+            : "Nincs aktív watch",
+          inline: true,
+        }
+      )
+      .setTimestamp();
+
+    return await logChannel.send({ embeds: [embed] });
+  } catch (error) {
+    console.error("[AIMOD] watch log hiba:", error);
+    return null;
+  }
+}
 function shouldShowButtons(action) {
   return ["watch", "timeout", "kick", "ban", "unban", "delete"].includes(action);
 }
@@ -3154,6 +3350,56 @@ if (final.action === "delete") {
   return performed;
 }
 
+if (final.action === "watch") {
+  extendWatch(profile);
+
+  profile.suspicion = Math.max(
+    0,
+    Number(profile.suspicion || 0) + Number(final.suspicionGain || CONFIG.WATCH_BASE_POINTS)
+  );
+
+  profile.behaviorScore = getRiskPercent(profile);
+
+  addIncident(member.id, {
+    type: "watch",
+    category: final.category || "other",
+    severity: final.severity || "enyhe",
+    points: Number(final.points || CONFIG.WATCH_BASE_POINTS),
+    suspicion: Number(final.suspicionGain || 6),
+    reason: final.reason || "Watch esemény",
+    ruleBroken: final.ruleBroken || "Watch esemény",
+    content: cleanText(message.content || "", 400),
+    messageId: message.id,
+    channelId: message.channelId,
+    createdAt: Date.now(),
+  });
+
+  profile.activeCase = {
+    ...(profile.activeCase || {}),
+    lastAction: actionToLabel(final.action),
+    lastActionRaw: "watch",
+    lastReason: final.reason || "",
+    lastCategory: final.categoryHu || categoryToHu(final.category),
+    lastSeverity: final.severity || "enyhe",
+    lastAnalysis: final.analysis || "",
+    lastPatternSummary: final.patternSummary || "",
+    lastRuleBroken: final.ruleBroken || "",
+    lastMessageContent: cleanText(message.content || "", 500),
+    lastMessageId: message.id,
+    lastChannelId: message.channelId,
+    lastProjectedRisk: getRiskPercent(profile),
+    lastUpdatedAt: Date.now(),
+    currentStatus: "Megfigyelés / watch",
+  };
+
+  saveStore();
+
+  await sendSingleUserNotice({ message, member, profile, final }).catch(() => null);
+  await logWatchIncident(client, message, member, profile, final).catch(() => null);
+
+  return;
+}
+
 if (final.action === "timeout") {
   if (message?.deletable) {
     await safeDeleteMessage(message).catch(() => null);
@@ -3389,7 +3635,49 @@ async function processMessage(client, message) {
 
     const currentRisk = getRiskPercent(profile);
     const currentSuspicion = getSuspicionValue(profile);
+const immediateDecision = buildImmediateRuleDecision(message, profile);
 
+if (immediateDecision) {
+  let forcedAction = immediateDecision.action;
+
+  if (getState("aimod_safe_mode")) {
+    forcedAction = capActionForSafeMode(forcedAction);
+  }
+
+  const final = {
+    action: normalizeExclusiveAction(forcedAction),
+    category: immediateDecision.category,
+    categoryHu: immediateDecision.categoryHu,
+    severity: immediateDecision.severity,
+    confidence: immediateDecision.confidence,
+    points: immediateDecision.points,
+    projectedRisk: Math.min(100, currentRisk + immediateDecision.points),
+    suspicionGain: immediateDecision.suspicionGain,
+    ruleBroken: immediateDecision.ruleBroken,
+    reason: immediateDecision.reason,
+    analysis: immediateDecision.analysis,
+    patternSummary: immediateDecision.patternSummary,
+    timeoutMinutes:
+      forcedAction === "timeout"
+        ? getDynamicTimeoutMinutes({
+            severity: immediateDecision.severity,
+            points: immediateDecision.points,
+            projectedRisk: Math.min(100, currentRisk + immediateDecision.points),
+            suspicion: currentSuspicion + immediateDecision.suspicionGain,
+            profile,
+            safeMode: getState("aimod_safe_mode"),
+          })
+        : 0,
+    shouldNotifyStaff: true,
+  };
+
+  if (immediateDecision.forceWatch) {
+    extendWatch(profile);
+  }
+
+  await applyModerationDecision(client, message, profile, final);
+  return;
+}
     // =========================
     // KÜLÖN ÁG: CÉLZOTT OBSZCÉN MINŐSÍTÉS
     // =========================
@@ -3399,45 +3687,38 @@ async function processMessage(client, message) {
         message.content || ""
       );
 
-      let forcedAction = "delete";
-      let severity = "enyhe";
-      let points = 42;
-      let suspicionGain = 8;
+let forcedAction = "delete";
+let severity = "közepes";
+let points = 52;
+let suspicionGain = 14;
 
-      if (repeatCount >= 1) {
-        forcedAction = "delete";
-        severity = "közepes";
-        points = 50;
-        suspicionGain = 12;
-      }
+if (repeatCount >= 1) {
+  forcedAction = "delete";
+  severity = "közepes";
+  points = 58;
+  suspicionGain = 16;
+}
 
-      if (repeatCount >= 2) {
-        forcedAction = "delete";
-        severity = "közepes";
-        points = 58;
-        suspicionGain = 16;
-      }
+if (repeatCount >= 2) {
+  forcedAction = "timeout";
+  severity = "közepes";
+  points = 68;
+  suspicionGain = 20;
+}
 
-      if (repeatCount >= 3) {
-        forcedAction = "timeout";
-        severity = "közepes";
-        points = 68;
-        suspicionGain = 20;
-      }
+if (repeatCount >= 4) {
+  forcedAction = "kick";
+  severity = "magas";
+  points = 84;
+  suspicionGain = 26;
+}
 
-      if (repeatCount >= 5) {
-        forcedAction = "kick";
-        severity = "magas";
-        points = 82;
-        suspicionGain = 26;
-      }
-
-      if (repeatCount >= 7) {
-        forcedAction = "ban";
-        severity = "kritikus";
-        points = 96;
-        suspicionGain = 32;
-      }
+if (repeatCount >= 6) {
+  forcedAction = "ban";
+  severity = "kritikus";
+  points = 96;
+  suspicionGain = 32;
+}
 
       if (getState("aimod_safe_mode")) {
         if (forcedAction === "ban") forcedAction = "kick";

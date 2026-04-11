@@ -683,28 +683,20 @@ function formatRiskBlock(profile) {
   return `${getRiskBar(risk)}\n**${risk}%** (${getRiskBand(profile)})`;
 }
 function getRecentIncidentCounts(profile) {
-  const current = now();
+  const nowTime = Date.now();
+
   let last7d = 0;
   let last30d = 0;
-  let serious7d = 0;
-  let serious30d = 0;
 
   for (const inc of profile.incidents || []) {
-    const age = current - (inc.createdAt || current);
-    const severe = ["közepes", "magas", "kritikus"].includes(inc.severity);
+    const createdAt = inc.createdAt || nowTime;
+    const diff = nowTime - createdAt;
 
-    if (age <= 7 * 24 * 60 * 60 * 1000) {
-      last7d++;
-      if (severe) serious7d++;
-    }
-
-    if (age <= 30 * 24 * 60 * 60 * 1000) {
-      last30d++;
-      if (severe) serious30d++;
-    }
+    if (diff <= 7 * 24 * 60 * 60 * 1000) last7d++;
+    if (diff <= 30 * 24 * 60 * 60 * 1000) last30d++;
   }
 
-  return { last7d, last30d, serious7d, serious30d };
+  return { last7d, last30d };
 }
 
 function getModerationMode() {
@@ -1125,10 +1117,18 @@ function capActionForSafeMode(action) {
 function summarizeIncidents(profile) {
   const counts = getRecentIncidentCounts(profile);
   const totals = profile.totals || {};
+
   return {
-    seven: `Összes incidens: ${counts.last7d}\nKomoly incidens: ${counts.serious7d}`,
-    thirty: `Összes incidens: ${counts.last30d}\nKomoly incidens: ${counts.serious30d}`,
-    actions: `Warn: ${totals.warnings || 0}\nDelete: ${totals.deletions || 0}\nTimeout: ${totals.timeouts || 0}\nKick: ${totals.kicks || 0}\nBan: ${totals.bans || 0}\nUnban: ${totals.unbans || 0}`,
+    seven: `Összes incidens: ${counts.last7d}`,
+    thirty: `Összes incidens: ${counts.last30d}`,
+
+    actions:
+      `Warn: ${totals.warnings || 0}\n` +
+      `Delete: ${totals.deletions || 0}\n` +
+      `Timeout: ${totals.timeouts || 0}\n` +
+      `Kick: ${totals.kicks || 0}\n` +
+      `Ban: ${totals.bans || 0}\n` +
+      `Unban: ${totals.unbans || 0}`,
   };
 }
 
@@ -2193,17 +2193,12 @@ function getExpectedSanction(profile) {
 }
 
 function buildUnifiedEmbed({ member, profile }) {
-  const currentRisk = getRiskPercent(profile);
   const suspicion = getSuspicionValue(profile);
   const summaries = summarizeIncidents(profile);
   const previousMessages = getPreviousProblemMessages(
     profile,
     profile.activeCase?.lastMessageId || null
   );
-  const repeated =
-    (profile.totals?.timeouts || 0) > 0 ||
-    (profile.totals?.kicks || 0) > 0 ||
-    (profile.incidents?.length || 0) >= 3;
 
   const active = profile.activeCase || {};
 
@@ -2217,13 +2212,13 @@ function buildUnifiedEmbed({ member, profile }) {
         `**Aktuális állapot:** **${trimField(active.currentStatus || "Megfigyelés", 128)}**`,
         `**Utolsó művelet:** **${trimField(active.lastAction || "Nincs", 128)}**`,
         `**Súlyosság:** **${trimField(active.lastSeverity || "enyhe", 64)}**`,
-        `**Kategória:** **${trimField(active.lastCategory || "Egyéb szabálysértés", 128)}**`,
+        `**Kategória:** **${trimField(active.lastCategory || "Egyéb", 128)}**`,
       ].join("\n")
     )
     .addFields(
       {
         name: "🧠 AI elemzés",
-        value: trimField(active.lastAnalysis || "Még nincs részletes elemzés.", 1024),
+        value: trimField(active.lastAnalysis || "Nincs elemzés.", 1024),
         inline: false,
       },
       {
@@ -2236,7 +2231,7 @@ function buildUnifiedEmbed({ member, profile }) {
       {
         name: "📎 Bizonyíték",
         value:
-          `Utolsó üzenet: ${trimField(active.lastMessageContent || "-", 256)}\n` +
+          `Üzenet: ${trimField(active.lastMessageContent || "-", 256)}\n` +
           `Csatorna: ${active.lastChannelId ? `<#${active.lastChannelId}>` : "-"}\n` +
           `Részletek: ${trimField(active.lastEvidence || "-", 256)}`,
         inline: false,
@@ -2252,35 +2247,23 @@ function buildUnifiedEmbed({ member, profile }) {
         inline: true,
       },
       {
-        name: "⏭️ Várható következő lépés",
-        value: trimField(getExpectedSanction(profile), 1024),
+        name: "📚 Előzmények (7 nap)",
+        value: summaries.seven,
+        inline: true,
+      },
+      {
+        name: "📦 Előzmények (30 nap)",
+        value: summaries.thirty,
+        inline: true,
+      },
+      {
+        name: "📋 Összes intézkedés",
+        value: summaries.actions,
         inline: false,
-      },
-      {
-        name: "📚 Előzmények (7 / 30 nap)",
-        value: `${summaries.seven}\n\n${summaries.thirty}`,
-        inline: true,
-      },
-      {
-        name: "📦 Összes intézkedés",
-        value: trimField(summaries.actions, 1024),
-        inline: true,
       },
       {
         name: "🧾 Korábbi problémás üzenetek",
         value: trimField(previousMessages, 1024),
-        inline: false,
-      },
-      {
-  name: "🟢 Rehab állapot",
-  value: trimField(getRehabDisplay(profile), 1024),
-  inline: true,
-},
-      {
-        name: "♻️ Visszaesés",
-        value: repeated
-          ? "Igen, a felhasználónál ismétlődő vagy fokozódó szabálysértési minta látszik."
-          : "Jelenleg nem látható erős visszaeső minta.",
         inline: false,
       }
     )

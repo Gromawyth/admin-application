@@ -1895,11 +1895,72 @@ function registerIdeaSystem(client) {
   });
 }
 module.exports = { registerIdeaSystem };
-console.log("SUMMARY CHANNEL ID:", CONFIG.IDEA_SUMMARY_CHANNEL_ID);
+// =========================
+// GLOBAL DEBUG LOGGER
+// =========================
 
-const summaryChannel = await client.channels.fetch(CONFIG.IDEA_SUMMARY_CHANNEL_ID).catch(err => {
-  console.log("SUMMARY FETCH ERROR:", err);
-  return null;
+const IDEAS_DEBUG = true;
+
+function dlog(...args) {
+  if (IDEAS_DEBUG) console.log("🟢 [IDEAS]", ...args);
+}
+
+function derror(...args) {
+  console.error("🔴 [IDEAS ERROR]", ...args);
+}
+
+// =========================
+// ERROR CAPTURE
+// =========================
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("💥 [IDEAS] UNHANDLED REJECTION:", reason);
 });
 
-console.log("SUMMARY CHANNEL:", summaryChannel ? "OK" : "NULL");
+process.on("uncaughtException", (err) => {
+  console.error("💥 [IDEAS] UNCAUGHT EXCEPTION:", err);
+});
+
+// =========================
+// EXPORT WRAP DEBUG
+// =========================
+
+const originalRegister = module.exports.registerIdeaSystem;
+
+module.exports.registerIdeaSystem = function (client) {
+  dlog("🚀 Idea rendszer inicializálva");
+
+  if (!originalRegister) {
+    derror("❌ registerIdeaSystem nincs exportálva!");
+    return;
+  }
+
+  originalRegister(client);
+
+  // DEBUG: event figyelés
+  client.on("threadCreate", (thread) => {
+    dlog("🧵 Thread létrejött:", thread?.id, thread?.name);
+  });
+
+  client.on("messageCreate", (msg) => {
+    if (!msg.guild || msg.author?.bot) return;
+
+    dlog("💬 Üzenet:", {
+      channel: msg.channel?.id,
+      thread: msg.channel?.isThread?.(),
+      content: msg.content?.slice(0, 80),
+    });
+  });
+
+  client.on("interactionCreate", (interaction) => {
+    if (interaction.isButton()) {
+      dlog("🔘 Button:", interaction.customId);
+    }
+
+    if (interaction.isModalSubmit()) {
+      dlog("📝 Modal submit:", interaction.customId);
+    }
+  });
+
+  dlog("✅ Idea system DEBUG aktív");
+};

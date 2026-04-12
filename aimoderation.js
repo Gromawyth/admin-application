@@ -863,6 +863,26 @@ function buildImmediateRuleDecision(message, profile) {
 
   if (!content) return null;
 
+  // 1) RP / múlt idejű esemény sose legyen threat
+  if (isRpSafeViolenceContext(content)) {
+    return {
+      action: "ignore",
+      category: "clean",
+      categoryHu: "RP / eseményleírás",
+      severity: "enyhe",
+      confidence: 96,
+      points: 0,
+      suspicionGain: 0,
+      ruleBroken: "Nincs közvetlen szabálysértés.",
+      reason: "A rendszer RP vagy múlt idejű eseményleírást talált, nem aktív fenyegetést.",
+      analysis: "Az üzenet helyzetjelentésnek vagy szerepjátékbeli eseményleírásnak tűnik, ezért automata büntetés nem indokolt.",
+      patternSummary: "RP / eseményleírás védve.",
+      timeoutMinutes: 0,
+      shouldNotifyStaff: false,
+      forceWatch: false,
+    };
+  }
+
   const repeatCount = countRecentTargetedInsults(profile, content);
   const watchActive = isWatchActive(profile);
   const currentRisk = getRiskPercent(profile);
@@ -871,6 +891,106 @@ function buildImmediateRuleDecision(message, profile) {
     .filter((m) => isContextualProfanity(m.content || ""))
     .length;
 
+  // 2) Aktív fenyegetés külön kezelése
+  if (isActiveThreat(content)) {
+    let action = "delete";
+    let severity = "közepes";
+    let points = 56;
+    let suspicionGain = 16;
+
+    if (watchActive || currentRisk >= 45 || repeatCount >= 1) {
+      action = "timeout";
+      points = 70;
+      suspicionGain = 22;
+    }
+
+    if (currentRisk >= 72 || repeatCount >= 3) {
+      action = "kick";
+      severity = "magas";
+      points = 86;
+      suspicionGain = 28;
+    }
+
+    if (currentRisk >= 90 || repeatCount >= 5) {
+      action = "ban";
+      severity = "kritikus";
+      points = 98;
+      suspicionGain = 36;
+    }
+
+    return {
+      action,
+      category: "threat",
+      categoryHu: "Aktív fenyegetés",
+      severity,
+      confidence: 97,
+      points,
+      suspicionGain,
+      ruleBroken: "Közvetlen, aktív fenyegetés.",
+      reason: "A rendszer egyértelmű aktív fenyegetést talált.",
+      analysis: "Az üzenet nem múlt idejű RP leírás, hanem jövőre vagy közvetlen cselekvésre utaló fenyegetés.",
+      patternSummary: "Aktív fenyegetés detektálva.",
+      timeoutMinutes: severity === "közepes" ? 60 : severity === "magas" ? 360 : 1440,
+      shouldNotifyStaff: true,
+      forceWatch: true,
+    };
+  }
+
+  // 3) Rasszista célzott beszólás külön kezelése
+  if (isRacistAbuse(content)) {
+    const repeated = watchActive || currentRisk >= 45 || repeatCount >= 1;
+
+    return {
+      action: repeated ? "timeout" : "delete",
+      category: "harassment",
+      categoryHu: "Rasszista / etnikai alapú sértés",
+      severity: repeated ? "magas" : "közepes",
+      confidence: 97,
+      points: repeated ? 72 : 58,
+      suspicionGain: repeated ? 24 : 16,
+      ruleBroken: "Célzott rasszista vagy etnikai alapú sértés.",
+      reason: "A rendszer célzott, lealacsonyító etnikai sértést talált.",
+      analysis: repeated
+        ? "A felhasználó visszaeső vagy emelt kockázatú állapotban célzott rasszista sértést használt."
+        : "Az üzenet célzott, sértő etnikai minősítést tartalmaz.",
+      patternSummary: repeated
+        ? "Ismétlődő rasszista sértés."
+        : "Azonnali törlendő rasszista sértés.",
+      timeoutMinutes: repeated ? 180 : 0,
+      shouldNotifyStaff: true,
+      forceWatch: true,
+    };
+  }
+
+  // 4) Enyhébb rasszista súrolás -> watch / delete
+  if (isSoftRacistFriction(content)) {
+    const escalate = watchActive || currentRisk >= 45 || repeatCount >= 1;
+
+    return {
+      action: escalate ? "delete" : "watch",
+      category: "other",
+      categoryHu: "Figyelendő etnikai utalás",
+      severity: escalate ? "közepes" : "enyhe",
+      confidence: escalate ? 88 : 80,
+      points: escalate ? 28 : 14,
+      suspicionGain: escalate ? 10 : 5,
+      ruleBroken: "Provokatív, etnikai alapú feszültségkeltés.",
+      reason: escalate
+        ? "A rendszer szerint ez már nem első problémás etnikai utalás."
+        : "A rendszer etnikai alapú, provokatív utalást talált.",
+      analysis: escalate
+        ? "A felhasználó ismételten vagy emelt risk mellett használ etnikai alapon feszültséget keltő megfogalmazást."
+        : "Az üzenet még nem a legerősebb sértési szint, de erősen figyelendő.",
+      patternSummary: escalate
+        ? "Visszatérő etnikai alapú provokáció."
+        : "Watch szintű etnikai provokáció.",
+      timeoutMinutes: 0,
+      shouldNotifyStaff: true,
+      forceWatch: true,
+    };
+  }
+
+  // 5) enyhe trágárság finomítva
   if (isContextualProfanity(content)) {
     let action = "watch";
     let severity = "enyhe";
@@ -878,7 +998,7 @@ function buildImmediateRuleDecision(message, profile) {
     let suspicionGain = 1;
     let confidence = 82;
 
-    if (recentProfanityCount >= 1 || watchActive || currentRisk >= 35) {
+    if (recentProfanityCount >= 2 || (watchActive && currentRisk >= 45) || currentRisk >= 50) {
       action = "warn";
       severity = "enyhe";
       points = 6;
@@ -886,7 +1006,7 @@ function buildImmediateRuleDecision(message, profile) {
       confidence = 86;
     }
 
-    if (recentProfanityCount >= 3 || currentRisk >= 55) {
+    if (recentProfanityCount >= 4 || currentRisk >= 65) {
       action = "delete";
       severity = "közepes";
       points = 10;
@@ -926,6 +1046,7 @@ function buildImmediateRuleDecision(message, profile) {
       forceWatch: true,
     };
   }
+
   const targetedDegrading = isTargetedDegradingMessage(content);
 
   const familyInsultDetected = containsCanonical(content, FAMILY_INSULT_WORDS);
@@ -1116,6 +1237,28 @@ function falsePositiveShield(message, ruleScan, contextMessages = [], replyTarge
     ruleScan.score < 24
   ) {
     return { block: true, reason: "Valószínűleg békítő / konfliktuszáró üzenet." };
+  }
+
+  // RP / eseményjelentés védelem
+  if (isRpSafeViolenceContext(content)) {
+    return { block: true, reason: "RP vagy múlt idejű eseményleírás, nem aktív fenyegetés." };
+  }
+
+  if (
+    hasRpContext(content) &&
+    /\b(lelőttek|lelőttek|meglőttek|megöltek|meghaltam|meghalt|kiraboltak|elraboltak|megvertek|leszúrtak|bevittek)\b/i.test(content) &&
+    !isActiveThreat(content)
+  ) {
+    return { block: true, reason: "RP kontextusú helyzetjelentés / eseményleírás." };
+  }
+
+  // semleges etnikai említés ne büntessen
+  if (
+    /\b(cigány|roma|cigányok|romák)\b/i.test(content) &&
+    !isRacistAbuse(content) &&
+    !containsInsultWord(content)
+  ) {
+    return { block: true, reason: "Semleges etnikai említés, nem automata büntetési eset." };
   }
 
   return { block: false, reason: "" };
@@ -1775,255 +1918,273 @@ const REGEX = {
 };
 
 const TARGET_WORDS = [
-  "te", "ti", "neked", "nektek", "rólad", "rolad", "róluk", "roluk",
-  "vagy", "vagytok", "ő", "o", "ők", "ok",
-  "admin", "adminok", "staff", "moderator", "moderátor", "fejleszto", "fejlesztő",
-  "vezetoseg", "vezetőség", "tulaj", "owner",
-  "szerver", "server", "rendszer", "kozosseg", "közösség", "internalgaming", "veled", "veletek", "ellened", "ellenetek",
-"rád", "rátok", "hozzád", "hozzátok",
-"nekik", "őt", "őket",
-"te", "ti", "neked", "nektek",
-"rólad", "róluk",
-"vagy", "vagytok",
-"admin", "adminok", "adminék",
-"adminisztrátor", "adminisztrátorok",
-"adminsegéd", "adminsegédek",
-"manager", "managerek",
-"tulaj", "tulajdonos", "tulajdonosok",
-"vezetőség", "vezetők",
-"fejlesztők", "csapat",
-"szerver", "szerveretek",
-"rendszer", "közösség",
-"moderátor", "moderátorok",
-"admin csapat", "vezetőség tagjai",
-"admin emberek", "admin banda",
-"vezető csapat", "staff helyett admin",
-"admin crew", "admin brigád",
-"vezető brigád", "tulaj csapat",
-"manager csapat", "admin team"
+  "te", "ti", "neked", "nektek", "veled", "veletek",
+  "ellened", "ellenetek", "rád", "rátok", "hozzád", "hozzátok",
+  "rólad", "rolad", "róluk", "roluk",
+  "nekik", "őt", "őket", "o", "ok", "ő", "ők",
+  "vagy", "vagytok",
+
+  "admin", "adminok", "adminék",
+  "adminisztrátor", "adminisztrátorok",
+  "adminsegéd", "adminsegédek",
+  "moderator", "moderátor", "moderátorok",
+  "staff",
+  "manager", "managerek",
+  "tulaj", "tulajdonos", "tulajdonosok",
+  "vezetoseg", "vezetőség", "vezetők",
+  "fejleszto", "fejlesztő", "fejlesztők",
+  "csapat",
+  "kozosseg", "közösség",
+  "szerver", "server", "szerveretek",
+  "rendszer",
+  "internalgaming",
+
+  "admin csapat", "vezetőség tagjai",
+  "admin emberek", "admin banda",
+  "vezető csapat", "admin crew",
+  "admin brigád", "vezető brigád",
+  "tulaj csapat", "manager csapat",
+  "admin team"
 ];
 
 const MILD_PROFANITY_WORDS = [
   "basszus", "bassza", "basszameg", "bassza meg", "baszki", "baszd", "baszd meg",
   "baszmeg", "bazdmeg", "bazmeg", "bmeg", "bakker", "franc", "francba",
   "a francba", "az istenit", "a mindenit",
+
   "kurva", "kurvara", "kurvára", "kurvaelet", "kurva elet", "kurvaélet",
-  "geci", "gecire", "gecibe", "fasz", "faszba", "faszom", "faszomat", "picsa",
-  "szar", "szarba", "fos", "szopas", "szopás", "baszas", "baszás", "faszom kivan", "fasz kivan", "faszom", "faszom már", "faszom ebbe", "faszom ebbe az egészbe",
-"faszom kivan", "faszom kivan ezzel", "faszom kivan veletek",
-"tele van a faszom", "tele van a faszom ezzel",
-"tele van a faszom a szerverrel", "tele van a faszom az adminokkal",
-"kurva élet", "kurva életbe", "kurva életbe már",
-"kurvára idegesítő", "kurvára felbasz",
-"kurva gáz", "kurva nagy gáz", "kurva szar",
-"kurva idegesítő", "kurva tré",
-"geci idegesítő", "geci szar", "geci gáz",
-"gecire idegesítő", "gecire szar",
-"baszki ez mi", "baszki ez komoly",
-"baszd meg ez mi", "baszd meg ezt",
-"bazdmeg ez komoly", "bazmeg ez mi",
-"bmeg ez mi", "bmeg ez komoly",
-"szar ez", "szar az egész", "szar ez az egész",
-"szar szerver", "szar rendszer",
-"fos ez", "fos az egész", "fos szerver",
-"szopás ez", "szopás az egész",
-"szétbasz az ideg", "felbasz az ideg",
-"felbasz ez", "felbaszott ez az egész",
-"idegbeteg leszek", "agyrém ez",
-"ez egy agyrém", "ez egy katasztrófa",
-"ez botrány", "ez már botrány",
-"ez egy vicc", "ez egy rohadt vicc",
-"ez egy kalap szar", "ez egy rakás szar",
-"ez egy nagy fos", "ez egy nagy szar",
-"röhej az egész", "nevetséges az egész",
-"ez egy szánalom", "ez egy szégyen",
-"ez nagyon tré", "nagyon tré",
-"szétidegel", "szétbasz",
-"kurva ideg", "kurva ideges vagyok",
-"geci ideg", "geci ideges vagyok",
-"baszki már megint", "bazdmeg már megint",
-"szar az admin", "fos az admin",
-"szar az adminisztrátor", "fos az adminisztrátor",
-"szar a manager", "fos a manager",
-"szar a tulaj", "fos a tulaj",
-"szar a vezetőség", "fos a vezetőség",
-"szar az adminsegéd", "fos az adminsegéd"
+  "kurva élet", "kurva életbe", "kurva életbe már",
+  "kurvára idegesítő", "kurvára felbasz",
+  "kurva gáz", "kurva nagy gáz", "kurva szar",
+  "kurva idegesítő", "kurva tré",
+  "kurva ideg", "kurva ideges vagyok",
+
+  "geci", "gecire", "gecibe",
+  "geci idegesítő", "geci szar", "geci gáz",
+  "gecire idegesítő", "gecire szar",
+  "geci ideg", "geci ideges vagyok",
+  "geci ez",
+
+  "fasz", "faszba", "faszom", "faszomat",
+  "fasz kivan", "fasz ki van", "faszkivan",
+  "faszom már", "faszom ebbe", "faszom ebbe az egészbe",
+  "faszom kivan", "faszom kivan ezzel", "faszom kivan veletek",
+  "tele van a faszom", "tele van a faszom ezzel",
+  "tele van a faszom a szerverrel", "tele van a faszom az adminokkal",
+  "faszság",
+
+  "szar", "szarba", "szar ez", "szar az egész", "szar ez az egész",
+  "szar szerver", "szar rendszer",
+  "szar az admin", "szar az adminisztrátor", "szar a manager",
+  "szar a tulaj", "szar a vezetőség", "szar az adminsegéd",
+
+  "fos", "fos ez", "fos az egész", "fos szerver",
+  "fos az admin", "fos az adminisztrátor", "fos a manager",
+  "fos a tulaj", "fos a vezetőség", "fos az adminsegéd",
+
+  "szopas", "szopás", "szopjatok",
+  "baszas", "baszás",
+  "szopás ez", "szopás az egész",
+
+  "szétbasz", "szétbasz az ideg", "felbasz az ideg",
+  "felbasz ez", "felbaszott ez az egész",
+  "szétidegel",
+
+  "ez egy katasztrófa", "ez botrány", "ez már botrány",
+  "ez egy vicc", "ez egy rohadt vicc",
+  "ez egy kalap szar", "ez egy rakás szar",
+  "ez egy nagy fos", "ez egy nagy szar",
+  "röhej az egész", "nevetséges az egész",
+  "ez egy szánalom", "ez egy szégyen",
+  "ez nagyon tré", "nagyon tré",
+
+  "baszki ez mi", "baszki ez komoly",
+  "baszd meg ez mi", "baszd meg ezt",
+  "bazdmeg ez komoly", "bazmeg ez mi",
+  "bmeg ez mi", "bmeg ez komoly",
+  "baszki már megint", "bazdmeg már megint",
+
+  "anyám", "istenit", "rohadt élet", "kibaszott", "rohadtul",
+  "lófasz", "lofasz",
+
+  "cigányozás", "romázás",
+  "nácizás", "hitlerezés"
 ];
 
 const INSULT_WORDS = [
   "anyad", "anyadat", "anyatok", "kurvaanyad", "kurva anyad",
-  "nyomorek", "retkes", "patkany", "patkány", "semmirekello", "semmirekellő",
-  "szarhazi", "szarházi", "csicska", "idiota", "idióta", "hulye", "hülye",
-  "balfasz", "faszfej", "faszkalap", "gecifej", "geciarc",
-  "szarfej", "szararc", "fosfej", "fosarc", "bohoc", "bohóc", "majom",
-  "majomfej", "majomarc", "kutyafeju", "kutyafejű", "allat", "állat",
-  "vadbarom", "barom", "diszno", "disznó", "korcs", "fattyu", "fattyú",
+  "nyomorek", "nyomorék", "retkes",
+  "patkany", "patkány",
+  "semmirekello", "semmirekellő",
+  "szarhazi", "szarházi",
+  "csicska",
+  "idiota", "idióta",
+  "hulye", "hülye",
+  "balfasz", "faszfej", "faszkalap",
+  "gecifej", "geciarc",
+  "szarfej", "szararc",
+  "fosfej", "fosarc",
+  "bohoc", "bohóc",
+  "majom", "majomfej", "majomarc",
+  "kutyafeju", "kutyafejű",
+  "allat", "állat",
+  "vadbarom", "barom",
+  "diszno", "disznó",
+  "korcs", "fattyu", "fattyú",
   "ribanc", "lotyo", "lotyó", "ringyo", "ringyó", "cafka",
-  "pszichopata", "elmebeteg", "orult", "őrült", "zakkant", "bolond",
-  "undorito", "undorító", "gusztustalan", "hanyadek", "hányadék",
-  "okadek", "okádék", "szutyok", "szenny", "mocsok",
-  "dogoljmeg", "dögöljmeg", "rohadjmeg", "pusztuljel", "pusztulj", "nyomi", "nyominger", "balek", "szerencsétlen",
-"csöves", "csóró", "szánalmas", "nevetséges",
-"gyökér", "agyhalott", "agytalan",
-"retardált", "fogyatékos", "idióta",
-"hülyegyerek", "barom", "állat",
-"primitív", "suttyó", "paraszt",
-"bunkó", "szar alak", "szar ember",
-"bohóc", "vicc ember", "egy nulla",
-"semmirekellő", "haszontalan",
-"undorító", "gusztustalan", "hányadék",
-"szenny", "szutyok", "mocsok",
-"rohadék", "tetves", "tetves szar",
-"féreg", "patkány", "korcs",
-"csicska", "szarházi", "nyomorék",
-"szánalmas féreg", "nyomorék féreg",
-"gerinctelen", "büdös paraszt",
-"mocskos állat", "rohadt gyökér",
-"szarfej", "fosfej", "gecifej",
-"szararc", "fosarc", "geciarc",
-"bohócfej", "majomfej",
-"kutyafejű", "disznó", "vadbarom",
-"pszichopata", "elmebeteg", "őrült",
-"zakkant", "bolond", "agybajos",
-"szellemi fogyatékos", "agyhalott idióta",
-"egy bohóc vagy", "egy szar vagy",
-"egy fos vagy", "egy senki vagy",
-"egy nulla vagy", "egy idióta vagy",
-"egy hülye vagy", "egy barom vagy",
-"egy gyökér vagy", "egy csicska vagy",
-"egy nyomorék vagy", "egy patkány vagy",
-"egy féreg vagy", "egy szarházi vagy",
-"egy undorító alak vagy", "egy gusztustalan ember vagy",
-"egy szánalmas féreg vagy", "egy rohadt gyökér vagy",
-"admin bohóc", "admin idióta", "admin hülye",
-"admin nyomorék", "admin csicska",
-"adminisztrátor bohóc", "adminisztrátor hülye",
-"adminsegéd bohóc", "adminsegéd gyökér",
-"manager bohóc", "manager hülye",
-"tulaj bohóc", "tulaj idióta",
-"vezetőség bohóc", "vezetőség szar",
-"vezetőség nyomorék"
+  "pszichopata", "elmebeteg",
+  "orult", "őrült", "zakkant", "bolond", "agybajos",
+  "undorito", "undorító",
+  "gusztustalan",
+  "hanyadek", "hányadék",
+  "okadek", "okádék",
+  "szutyok", "szenny", "mocsok",
+  "dogoljmeg", "dögöljmeg", "rohadjmeg",
+  "pusztuljel", "pusztulj",
+  "nyomi", "nyominger", "balek", "szerencsétlen",
+  "csöves", "csóró", "szánalmas", "nevetséges",
+  "gyökér", "agyhalott", "agytalan",
+  "retardált", "fogyatékos",
+  "hülyegyerek",
+  "primitív", "suttyó", "paraszt",
+  "bunkó",
+  "szar alak", "szar ember",
+  "vicc ember", "egy nulla",
+  "haszontalan",
+  "rohadék", "tetves", "tetves szar",
+  "féreg", "gerinctelen", "büdös paraszt",
+  "mocskos állat", "rohadt gyökér",
+  "bohócfej",
+  "szellemi fogyatékos", "agyhalott idióta",
+
+  "egy bohóc vagy", "egy szar vagy", "egy fos vagy",
+  "egy senki vagy", "egy nulla vagy",
+  "egy idióta vagy", "egy hülye vagy",
+  "egy barom vagy", "egy gyökér vagy",
+  "egy csicska vagy", "egy nyomorék vagy",
+  "egy patkány vagy", "egy féreg vagy",
+  "egy szarházi vagy",
+  "egy undorító alak vagy",
+  "egy gusztustalan ember vagy",
+  "egy szánalmas féreg vagy",
+  "egy rohadt gyökér vagy",
+
+  "admin bohóc", "admin idióta", "admin hülye", "admin nyomorék", "admin csicska",
+  "adminisztrátor bohóc", "adminisztrátor hülye",
+  "adminsegéd bohóc", "adminsegéd gyökér",
+  "manager bohóc", "manager hülye",
+  "tulaj bohóc", "tulaj idióta",
+  "vezetőség bohóc", "vezetőség szar", "vezetőség nyomorék"
+];
+
+const HATE_SLUR_WORDS = [
+  // roma / cigány
+  "cigany", "cigány", "ciganyok", "cigányok",
+  "roman", "roma", "romak", "romák",
+  "büdös cigány", "retkes cigány", "mocskos cigány", "rohadt cigány",
+
+  // fekete / afro / rasszista angol szleng
+  "nigger", "nigga", "niga", "niggerek", "niggerek",
+  "dirty nigger", "black monkey", "cotton picker",
+
+  // zsidóellenes
+  "zsido", "zsidó", "zsidok", "zsidók",
+  "büdös zsidó", "mocskos zsidó", "rohadt zsidó",
+  "jewboy", "dirty jew", "kike",
+
+  // arab / muszlim / bevándorló
+  "terrorista arab", "büdös arab", "mocskos arab",
+  "mocskos muszlim", "rohadt muszlim",
+  "büdös migráns", "mocskos migráns",
+
+  // ázsiai
+  "kinai kutya", "kínai kutya", "csingcsong", "ching chong",
+  "gook", "chink",
+
+  // meleg / lmbtq gyűlölet
+  "buzi", "buzik", "buzerans", "buzeráns",
+  "köcsög buzi", "mocskos buzi",
+  "faggot", "dyke", "tranny",
+
+  // náci / szélsőséges
+  "náci", "naci", "náci", "hitlerista",
+  "heil hitler", "sieg heil", "white power",
+  "kkk", "ku klux klan", "skinhead patkány"
 ];
 
 const FAMILY_INSULT_WORDS = [
   "anyad", "anyadat", "anyatok", "kurvaanyad", "a kurva anyad", "te anyad",
-
-  // alap variációk
   "anyád", "anyádat", "anyátok",
   "anyadé", "anyádé",
   "anyádé a kurva", "anyád a kurva",
   "anyád kurva", "anyad kurva",
   "anyád egy kurva", "anyad egy kurva",
-
-  // egybeírt / rövidített
   "kurvaanyád", "kurvaanyad", "kanyad",
   "k anyad", "k anyád", "k.anyad",
-  "kanyád", "k anyád",
-  "k*rva anyád", "k*rva anyad",
+  "kanyád", "k*rva anyád", "k*rva anyad",
   "k.rvanyad", "k.rvanyád",
-
-  // obfuszkált
   "any4d", "4nyad", "4ny4d",
-  "any@d", "@nyad", "any@d",
-  "any*d", "any*d",
-  "any#d", "any$d",
+  "any@d", "@nyad",
+  "any*d", "any#d", "any$d",
   "anyád*", "*anyád",
-
-  // hosszabb formák
   "anyád picsája", "anyad picsaja",
   "anyád picsájába", "anyad picsajaba",
   "anyádba", "anyadba",
   "anyádba bele", "anyadba bele",
   "anyádba menj", "anyadba menj",
   "menj anyádba", "menj anyadba",
-
-  // bővített sértések
   "anyád egy szar", "anyad egy szar",
   "anyád egy fos", "anyad egy fos",
   "anyád egy hulladék", "anyad egy hulladek",
   "anyád egy szutyok", "anyad egy szutyok",
   "anyád egy szenny", "anyad egy szenny",
-
-  // kombinációk
   "kurva anyád picsája", "kurva anyad picsaja",
   "a kurva anyád picsájába", "a kurva anyad picsajaba",
   "a kurva anyádba", "a kurva anyadba",
   "te kurva anyád", "te kurva anyad",
-  "te egy kurva anyád", "te egy kurva anyad",
-
-  // erősített verziók
   "anyád te kurva", "anyad te kurva",
   "anyád egy kurva ribanc", "anyad egy kurva ribanc",
   "anyád egy ribanc", "anyad egy ribanc",
   "anyád egy lotyó", "anyad egy lotyo",
   "anyád egy ringyó", "anyad egy ringyo",
-
-  // többes szám
   "anyátok kurva", "anyatok kurva",
   "anyátok egy szar", "anyatok egy szar",
   "anyátok egy fos", "anyatok egy fos",
   "anyátok picsája", "anyatok picsaja",
-
-  // variációk
   "anyád szar", "anyad szar",
   "anyád fos", "anyad fos",
   "anyád hulladék", "anyad hulladek",
   "anyád szutyok", "anyad szutyok",
-
-  // "anyázás" variációk
-  "anyázlak", "anyazlak",
-  "anyázom", "anyazom",
-  "anyázd", "anyazd",
-  "anyázz", "anyazz",
-  "ne anyázz", "ne anyazz",
-
-  // "anyád" + igék
   "anyádra mondom", "anyadra mondom",
   "anyádra esküszöm", "anyadra eskuszom",
   "anyádra eskü", "anyadra esku",
-
-  // bővített agresszív
   "anyádba verem", "anyadba verem",
   "anyádba baszok", "anyadba baszok",
   "anyádba rakom", "anyadba rakom",
   "anyádba tolom", "anyadba tolom",
-
-  // random torzítások
   "anyd", "anyád?", "anyad?",
   "anyád!!!", "anyad!!!",
   "anyád??", "anyad??",
   "anyád...", "anyad...",
-
-  // extra obfuszkáció
-  "4ny@d", "@ny4d", "4ny@d",
+  "4ny@d", "@ny4d",
   "a ny a d", "a.ny.ad",
   "any-ad", "any.ad",
-  "any ad", "any ad",
-
-  // mix
+  "any ad",
   "kurva anyád szar", "kurva anyad szar",
   "kurva anyád fos", "kurva anyad fos",
   "kurva anyád hulladék", "kurva anyad hulladek",
-
-  // brutál formák
   "anyádba dögölj", "anyadba dogolj",
   "anyádba rohadj", "anyadba rohadj",
   "anyádba pusztulj", "anyadba pusztulj",
-
-  // "anyád" + személy
   "anyád te idióta", "anyad te idiota",
   "anyád te hülye", "anyad te hulye",
   "anyád te nyomorék", "anyad te nyomorek",
-
-  // "anyád" + admin
   "anyád admin", "anyad admin",
   "anyád adminok", "anyad adminok",
   "anyád adminisztrátor", "anyad adminisztrator",
   "anyád manager", "anyad manager",
   "anyád tulaj", "anyad tulaj",
   "anyád tulajdonos", "anyad tulajdonos",
-
-  // extra
   "anyád picsa", "anyad picsa",
   "anyád gecis", "anyad gecis",
   "anyád szarházi", "anyad szarhazi"
@@ -2034,73 +2195,162 @@ const STAFF_ABUSE_WORDS = [
   "szaradmin", "fosadmin", "bohocadmin", "retkesadmin", "szutyokadmin",
   "szarstaff", "fosstaff", "bohocstaff", "retkesstaff",
   "szarrendszer", "fosrendszer", "hulladekrendszer", "szennyrendszer",
-  "viccszerver", "viccstaff", "viccadmin", "szar admin", "fos admin", "bohóc admin",
-"retkes admin", "szutyok admin",
-"szar adminok", "fos adminok",
-"bohóc adminok", "retkes adminok",
-"szutyok adminok", "hulladék adminok",
-"szar adminisztrátor", "fos adminisztrátor",
-"bohóc adminisztrátor", "retkes adminisztrátor",
-"szar adminsegéd", "fos adminsegéd",
-"bohóc adminsegéd", "retkes adminsegéd",
-"szar manager", "fos manager",
-"bohóc manager", "retkes manager",
-"szar tulaj", "fos tulaj",
-"bohóc tulaj", "retkes tulaj",
-"szar tulajdonos", "fos tulajdonos",
-"bohóc tulajdonos", "retkes tulajdonos",
-"szar vezetőség", "fos vezetőség",
-"bohóc vezetőség", "retkes vezetőség",
-"szar admin csapat", "fos admin csapat",
-"bohóc admin csapat", "retkes admin csapat",
-"szar admin brigád", "fos admin brigád",
-"szar manager csapat", "fos manager csapat",
-"szar tulaj csapat", "fos tulaj csapat",
-"szar vezető csapat", "fos vezető csapat",
-"ez egy szar admin csapat",
-"ez egy fos admin csapat",
-"ez egy bohóc admin csapat",
-"ez egy hulladék admin csapat",
-"adminok egy vicc", "adminok egy szar",
-"adminok egy fos", "adminok egy bohóc banda",
-"adminisztrátorok egy vicc",
-"adminsegédek egy vicc",
-"managerek egy vicc",
-"tulajdonosok egy vicc",
-"vezetőség egy vicc",
-"admin rendszer szar",
-"admin rendszer fos",
-"admin rendszer hulladék",
-"admin rendszer vicc",
-"admin rendszer szutyok"
+  "viccszerver", "viccstaff", "viccadmin",
+
+  "szar admin", "fos admin", "bohóc admin", "retkes admin", "szutyok admin",
+  "szar adminok", "fos adminok", "bohóc adminok", "retkes adminok",
+  "szutyok adminok", "hulladék adminok",
+
+  "szar adminisztrátor", "fos adminisztrátor", "bohóc adminisztrátor", "retkes adminisztrátor",
+  "szar adminsegéd", "fos adminsegéd", "bohóc adminsegéd", "retkes adminsegéd",
+  "szar manager", "fos manager", "bohóc manager", "retkes manager",
+  "szar tulaj", "fos tulaj", "bohóc tulaj", "retkes tulaj",
+  "szar tulajdonos", "fos tulajdonos", "bohóc tulajdonos", "retkes tulajdonos",
+  "szar vezetőség", "fos vezetőség", "bohóc vezetőség", "retkes vezetőség",
+
+  "szar admin csapat", "fos admin csapat", "bohóc admin csapat", "retkes admin csapat",
+  "szar admin brigád", "fos admin brigád",
+  "szar manager csapat", "fos manager csapat",
+  "szar tulaj csapat", "fos tulaj csapat",
+  "szar vezető csapat", "fos vezető csapat",
+
+  "ez egy szar admin csapat",
+  "ez egy fos admin csapat",
+  "ez egy bohóc admin csapat",
+  "ez egy hulladék admin csapat",
+
+  "adminok egy vicc", "adminok egy szar", "adminok egy fos", "adminok egy bohóc banda",
+  "adminisztrátorok egy vicc",
+  "adminsegédek egy vicc",
+  "managerek egy vicc",
+  "tulajdonosok egy vicc",
+  "vezetőség egy vicc",
+
+  "admin rendszer szar",
+  "admin rendszer fos",
+  "admin rendszer hulladék",
+  "admin rendszer vicc",
+  "admin rendszer szutyok"
 ];
 
 const THREAT_WORDS = [
-  "megollek", "megöllek", "megverlek", "szetszedlek", "szétszedlek",
-  "kinyirlak", "kinyírlak", "elkaplak", "megtalallak", "megtalállak",
-  "megkereslek", "kicsinallak", "kicsinállak", "megöllek", "megollek", "megverlek", "szétszedlek",
-"szetszedlek", "kinyírlak", "kinyirlak",
-"elkaplak", "megtalállak", "megtalallak",
-"megkereslek", "kicsinállak", "kicsinallak",
-"szétverlek", "agyonverlek",
-"pofán váglak", "megütlek",
-"szétbaszlak", "szétcsaplak",
-"megbaszlak", "kicsinállak most",
-"véged lesz", "nem úszod meg",
-"elkaplak még", "utolérlek",
-"nem menekülsz", "elkaplak kint",
-"meglátlak kint", "megkereslek kint",
-"megvárlak", "megverlek majd",
-"megöllek majd", "szétcsaplak majd",
-"szétbaszlak majd", "elintézlek",
-"elintézlek kint", "véged lesz hamarosan",
-"nem fogod megúszni", "nem fogod megúszni ezt",
-"meg foglak találni", "meg foglak verni",
-"szét foglak verni", "agyon foglak verni",
-"nem lesz jó vége", "rossz vége lesz",
-"elkaplak egyszer", "utolérlek egyszer"
+  "megollek", "megöllek",
+  "megverlek",
+  "szetszedlek", "szétszedlek",
+  "kinyirlak", "kinyírlak",
+  "elkaplak",
+  "megtalallak", "megtalállak",
+  "kicsinallak", "kicsinállak",
+  "szétverlek", "agyonverlek",
+  "pofán váglak", "megütlek",
+  "szétbaszlak", "szétcsaplak",
+  "megbaszlak",
+  "kicsinállak most",
+  "véged lesz", "nem úszod meg",
+  "elkaplak kint", "meglátlak kint", "megkereslek kint",
+  "megverlek majd", "megöllek majd", "szétbaszlak majd",
+  "meg foglak találni", "meg foglak verni",
+  "szét foglak verni", "agyon foglak verni",
+  "nem lesz jó vége", "rossz vége lesz",
+  "meg fogsz dögleni", "megdöglesz",
+ "kivégezlek",
+  "kicsinállak este",
+  "elkaplak este",
+  "nem éled túl",
+  "szét lesz verve a fejed",
+  "agyon leszel verve"
 ];
 
+const RP_CONTEXT_WORDS = [
+  "rp", "szitu", "szituba", "szituban", "jelenet", "jelenetben",
+  "helyszín", "helyszínre",
+  "városháza", "városházánál",
+  "korház", "kórház",
+  "mentő", "mentők", "orvos",
+  "rendőr", "rendőrök", "sheriff", "bcso", "ems",
+  "lelőttek", "meglőttek", "megöltek", "meghaltam", "meghalt",
+  "kidőltem", "elvéreztem",
+  "elraboltak", "kiraboltak", "elütöttek",
+  "leszúrtak", "megvertek", "összevertek",
+  "elkapott", "lefogtak",
+  "baleset", "karambol", "üldözés", "lövöldözés", "túsz", "rablás", "intézkedés"
+];
+
+const ACTIVE_THREAT_PATTERNS = [
+  /\b(megöllek|meg foglak ölni|megverlek|agyonverlek|szétverlek|szétbaszlak|kicsinállak|elintézlek)\b/i,
+  /\b(meg fogsz halni|megdöglesz|véged lesz|nem úszod meg|nem fogod megúszni)\b/i,
+  /\b(megtalállak|megkereslek|elkaplak|utolérlek|megvárlak)\b.{0,20}\b(kint|majd|este|holnap|egyszer)\b/i,
+  /\b(szét foglak verni|agyon foglak verni|meg foglak találni|meg foglak verni)\b/i,
+];
+
+const PASSIVE_RP_EVENT_PATTERNS = [
+  /\b(megöltek|lelőttek|meglőttek|megvertek|összevertek|leszúrtak|elraboltak|kiraboltak)\b/i,
+  /\b(meghaltam|meghalt|kidőltem|elvéreztem|elpakoltak|elintéztek)\b/i,
+  /\b(kaptam egy fejlövést|kilőttek|kiszedtek|lefogtak|bevittek)\b/i,
+];
+
+const RACIST_CONTEXT_PATTERNS = [
+  /\b(te|ti|ezek|azok|mocskos|rohadt|retkes|büdös)\b.{0,12}\b(cigány|roma)\b/i,
+  /\b(cigány|roma)\b.{0,12}\b(féreg|kutya|patkány|szar|szutyok|retkes|büdös|mocskos)\b/i,
+  /\b(cigányok|romák)\b.{0,16}\b(takarodjatok|dögöljetek|rohadtak|férgek|szemetek)\b/i,
+  /\b(büdös cigány|retkes cigány|mocskos cigány|rohadt cigány)\b/i
+];
+
+const RACIST_SOFT_CONTEXT_PATTERNS = [
+  /\b(cigányozás|romázás)\b/i,
+  /\b(cigány|roma)\b.{0,12}\b(megint|tipikus|persze|nyilván)\b/i
+];
+function isHateSlur(content = "") {
+  const raw = String(content || "").toLowerCase();
+  return HATE_SLUR_WORDS.some((word) => raw.includes(word.toLowerCase()));
+}
+
+function isRacistAbuse(content = "") {
+  const raw = String(content || "");
+  return (
+    RACIST_CONTEXT_PATTERNS.some((p) => p.test(raw)) ||
+    isHateSlur(raw)
+  );
+}
+function hasRpContext(content = "") {
+  const text = normalizeModerationText(content);
+  return containsCanonical(text, RP_CONTEXT_WORDS);
+}
+
+function isPassiveRpEvent(content = "") {
+  const raw = String(content || "");
+  return PASSIVE_RP_EVENT_PATTERNS.some((p) => p.test(raw));
+}
+
+function isActiveThreat(content = "") {
+  const raw = String(content || "");
+  return ACTIVE_THREAT_PATTERNS.some((p) => p.test(raw));
+}
+
+function isRpSafeViolenceContext(content = "") {
+  const raw = String(content || "");
+  const rpContext = hasRpContext(raw);
+  const passiveEvent = isPassiveRpEvent(raw);
+  const activeThreat = isActiveThreat(raw);
+
+  if (activeThreat) return false;
+  if (passiveEvent) return true;
+  if (rpContext && /\b(megöltek|lelőttek|lelőttek|meglőttek|meghaltam|meghalt|megvertek|kiraboltak|elraboltak|leszúrtak)\b/i.test(raw)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isRacistAbuse(content = "") {
+  const raw = String(content || "");
+  return RACIST_CONTEXT_PATTERNS.some((p) => p.test(raw));
+}
+
+function isSoftRacistFriction(content = "") {
+  const raw = String(content || "");
+  return RACIST_SOFT_CONTEXT_PATTERNS.some((p) => p.test(raw));
+}
 function canonicalCharMap(text = "") {
   return String(text || "")
     .toLowerCase()
@@ -2216,7 +2466,23 @@ function containsTargetWord(content = "") {
 }
 
 function isContextualProfanity(content = "") {
-  const normalized = normalizeModerationText(content);
+  const raw = String(content || "");
+  const normalized = normalizeModerationText(raw);
+
+  // RP / eseményjelentés sose legyen "mild profanity"
+  if (isRpSafeViolenceContext(raw)) {
+    return false;
+  }
+
+  // aktív fenyegetés nem mild kategória
+  if (isActiveThreat(raw)) {
+    return false;
+  }
+
+  // rasszista célzott beszólás nem mild kategória
+  if (isRacistAbuse(raw)) {
+    return false;
+  }
 
   if (!containsMildProfanity(normalized) && !containsInsultWord(normalized)) {
     return false;
@@ -2227,7 +2493,16 @@ function isContextualProfanity(content = "") {
   }
 
   if (
-    /\b(te|ti|neked|nektek|o|ok|ez a|olyan vagy|vagytok)\b/i.test(normalized)
+    /\b(te|ti|neked|nektek|o|ok|ez a|olyan vagy|vagytok|takarodj|kuss)\b/i.test(normalized)
+  ) {
+    return false;
+  }
+
+  // etnikai szó önmagában ne menjen trágárnak
+  if (
+    /\b(cigány|roma|cigányok|romák)\b/i.test(normalized) &&
+    !isSoftRacistFriction(normalized) &&
+    !isRacistAbuse(normalized)
   ) {
     return false;
   }

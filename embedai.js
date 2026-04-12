@@ -12,17 +12,17 @@ const {
 const EMBED_AI_CHANNEL_ID = "1492932668495499304";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5";
 const DEFAULT_COLOR = 0x2ecc71;
-const PREVIEW_FOOTER = "Embed AI v2 • élő előnézet";
-const MAX_HISTORY = 30;
+const PREVIEW_FOOTER = "Embed AI v3 • élő előnézet";
+const MAX_HISTORY = 40;
 const MAX_REPLY_CHARS = 1800;
 
 /*
-  Ha üres, bárki használhatja a builder csatornában.
+  Ha üres, bárki használhatja.
 */
 const ALLOWED_ROLE_IDS = [];
 
 /*
-  Ha üres, bármelyik szöveges csatornába publish-olhat.
+  Ha üres, bármelyik szöveges csatornába mehet publish.
 */
 const ALLOWED_TARGET_CHANNEL_IDS = [];
 
@@ -34,7 +34,7 @@ const sessions = new Map();
 let listenersRegistered = false;
 
 /* =========================================================
-   SEGÉDEK
+   ALAP SEGÉDEK
 ========================================================= */
 
 function nowIso() {
@@ -43,6 +43,10 @@ function nowIso() {
 
 function clean(text) {
   return String(text ?? "").trim();
+}
+
+function safeLower(text) {
+  return clean(text).toLowerCase();
 }
 
 function truncate(text, max) {
@@ -61,10 +65,6 @@ function hasAccess(member) {
   return ALLOWED_ROLE_IDS.some((id) => member.roles?.cache?.has(id));
 }
 
-function safeLower(text) {
-  return clean(text).toLowerCase();
-}
-
 function extractFirstUrl(text) {
   const m = String(text || "").match(/https?:\/\/\S+/i);
   return m ? m[0] : null;
@@ -75,8 +75,14 @@ function extractAllUrls(text) {
 }
 
 function extractChannelIdFromText(text) {
-  const m = String(text || "").match(/<#(\d+)>/);
-  return m ? m[1] : null;
+  const mention = String(text || "").match(/<#(\d+)>/);
+  if (mention) return mention[1];
+  return null;
+}
+
+function extractAfterColon(text) {
+  const m = String(text || "").match(/:\s*([\s\S]+)$/);
+  return m?.[1]?.trim() || "";
 }
 
 function pickAttachmentUrls(message) {
@@ -136,11 +142,33 @@ function normalizeColor(input) {
   return null;
 }
 
-function boolFromText(input) {
-  const t = safeLower(input);
-  if (!t) return null;
-  if (/(igen|be|kapcsold be|legyen|true|on)/i.test(t)) return true;
-  if (/(nem|ki|kapcsold ki|ne legyen|false|off)/i.test(t)) return false;
+function extractColorFromNaturalText(text) {
+  const directHex = String(text || "").match(/#([0-9a-fA-F]{6})/);
+  if (directHex) return `#${directHex[1]}`;
+
+  const words = [
+    "piros", "vörös", "voros",
+    "zöld", "zold",
+    "kék", "kek",
+    "lila",
+    "sárga", "sarga",
+    "narancs",
+    "fekete",
+    "fehér", "feher",
+    "szürke", "szurke",
+    "türkiz", "turkiz",
+    "rózsaszín", "rozsaszin",
+    "bordó", "bordo",
+    "sötétzöld", "sotetzold",
+    "sötétkék", "sotetkek",
+    "sötétszürke", "sotetszurke"
+  ];
+
+  const lower = safeLower(text);
+  for (const w of words) {
+    if (lower.includes(w)) return w;
+  }
+
   return null;
 }
 
@@ -196,7 +224,7 @@ function snapshotSession(session) {
 
 function pushHistory(session) {
   session.history.push(snapshotSession(session));
-  if (session.history.length > 25) session.history.shift();
+  if (session.history.length > 30) session.history.shift();
 }
 
 function restoreLast(session) {
@@ -212,16 +240,16 @@ function addConversationTurn(session, role, text) {
     text: truncate(clean(text), 1200),
     at: nowIso(),
   });
+
   if (session.conversation.length > MAX_HISTORY) {
     session.conversation.shift();
   }
 }
 
-function resetSession(session) {
-  const fresh = createDefaultSession(session.channelId);
-  fresh.previewMessageId = session.previewMessageId;
-  sessions.set(session.channelId, fresh);
-  return fresh;
+function unlockAll(session) {
+  for (const key of Object.keys(session.locked)) {
+    session.locked[key] = false;
+  }
 }
 
 function canEdit(session, part) {
@@ -231,12 +259,6 @@ function canEdit(session, part) {
 function setLock(session, part, value) {
   if (Object.prototype.hasOwnProperty.call(session.locked, part)) {
     session.locked[part] = !!value;
-  }
-}
-
-function unlockAll(session) {
-  for (const key of Object.keys(session.locked)) {
-    session.locked[key] = false;
   }
 }
 
@@ -321,23 +343,26 @@ function summarizeDraft(session) {
 }
 
 function humanDraftSummary(session) {
-  const s = summarizeDraft(session);
-  const lines = [];
+  const d = session.draft;
+  const colorHex = `#${(d.color || DEFAULT_COLOR).toString(16).padStart(6, "0")}`;
+  const locked = Object.entries(session.locked)
+    .filter(([, v]) => v)
+    .map(([k]) => k);
 
-  lines.push(`Cím: ${s.title || "nincs"}`);
-  lines.push(`Leírás: ${s.description ? "van" : "nincs"}`);
-  lines.push(`Szín: ${s.color ? `#${s.color.toString(16).padStart(6, "0")}` : "nincs"}`);
-  lines.push(`Footer: ${s.footer || "nincs"}`);
-  lines.push(`Author: ${s.author || "nincs"}`);
-  lines.push(`Thumbnail: ${s.thumbnailURL ? "van" : "nincs"}`);
-  lines.push(`Fő kép: ${s.imageURL ? "van" : "nincs"}`);
-  lines.push(`Timestamp: ${s.timestamp ? "be" : "ki"}`);
-  lines.push(`Embeden kívüli szöveg: ${s.content ? "van" : "nincs"}`);
-  lines.push(`Külső képek: ${s.attachmentCount}`);
-  lines.push(`Videók: ${s.videoCount}`);
-  lines.push(`Zárolt részek: ${s.locked.length ? s.locked.join(", ") : "nincs"}`);
-
-  return lines.join("\n");
+  return [
+    `Cím: ${d.title || "nincs"}`,
+    `Leírás: ${d.description ? "van" : "nincs"}`,
+    `Szín: ${colorHex}`,
+    `Footer: ${d.footer || "nincs"}`,
+    `Author: ${d.author || "nincs"}`,
+    `Thumbnail: ${d.thumbnailURL ? "van" : "nincs"}`,
+    `Fő kép: ${d.imageURL ? "van" : "nincs"}`,
+    `Timestamp: ${d.timestamp ? "bekapcsolva" : "kikapcsolva"}`,
+    `Embeden kívüli szöveg: ${d.content ? "van" : "nincs"}`,
+    `Külső képek: ${d.attachmentUrls.length}`,
+    `Videók: ${d.videoUrls.length}`,
+    `Zárolt részek: ${locked.length ? locked.join(", ") : "nincs"}`
+  ].join("\n");
 }
 
 function buildMainEmbed(session) {
@@ -373,31 +398,31 @@ function buildControlEmbed(session) {
 
   return new EmbedBuilder()
     .setColor(0x2f3136)
-    .setTitle("⚙️ Embed AI v2")
+    .setTitle("⚙️ Embed AI v3")
     .setDescription(
       [
         `**Cím:** ${d.title ? "van" : "nincs"}`,
         `**Leírás:** ${d.description ? "van" : "nincs"}`,
+        `**Oldalsó szín:** #${(d.color || DEFAULT_COLOR).toString(16).padStart(6, "0")}`,
         `**Embeden kívüli szöveg:** ${d.content ? "van" : "nincs"}`,
         `**Külső képek:** ${d.attachmentUrls.length}`,
         `**Videók:** ${d.videoUrls.length}`,
         `**Utolsó intent:** ${session.lastIntent || "nincs"}`,
-        `**Zárolt részek:** ${locked.length ? locked.join(", ") : "nincs"}`,
+        `**Zárolt részek:** ${locked.length ? locked.join(", ") : "nincs"}`
       ].join("\n")
     )
     .addFields({
       name: "Példák",
       value: truncate(
         [
-          "`a cím legyen: Karbantartás`",
-          "`a leírást írd át rövidebbre`",
-          "`a címhez ne nyúlj`",
-          "`csak a színt módosítsd kékre`",
-          "`a képet hagyd, csak a footer változzon`",
+          "`szia`",
+          "`az oldalsó csík legyen #3498db`",
+          "`a cím maradjon, csak a leírást írd át`",
+          "`a képet hagyd, csak a színt változtasd`",
           "`mi van most az embedben?`",
           "`ezt a videót rakd az embed alá`",
           "`küldd be ebbe a csatornába #hirdetesek`",
-          "`vond vissza`",
+          "`vond vissza`"
         ].join("\n"),
         1024
       ),
@@ -463,8 +488,23 @@ async function refreshPreview(channel, session) {
 }
 
 /* =========================================================
-   FALLBACK LOGIKA
+   TERMÉSZETES SZÖVEG FELISMERÉS
 ========================================================= */
+
+function isGreeting(text) {
+  const t = safeLower(text);
+  return /^(szia+|sziasztok|hello|helló|helo|hali|haliho|jóreggelt|jo reggelt|jó estét|jo estet|jónapot|szevasz|csá|csa|yo|hey)\s*!*$/i.test(t);
+}
+
+function isThanks(text) {
+  const t = safeLower(text);
+  return /^(köszi|koszi|köszönöm|koszonom|thx|thanks|király|jo lett|jó lett)\s*!*$/i.test(t);
+}
+
+function isBye(text) {
+  const t = safeLower(text);
+  return /^(bye|viszlát|viszlat|csá|csa|szia|oké csá|na csá)\s*!*$/i.test(t);
+}
 
 function looksLikeQuestion(text) {
   const t = safeLower(text);
@@ -481,26 +521,56 @@ function looksLikeQuestion(text) {
     "melyik",
     "mennyi",
     "mutasd",
-    "meg tudod mondani",
+    "meg tudod",
+    "el tudod",
     "tudod",
     "lehet",
     "most mi",
     "mi van",
-    "jól van-e",
     "jó így",
+    "jo igy",
   ];
 
   return starters.some((s) => t.startsWith(s));
 }
 
+function detectTargetFromNaturalText(text) {
+  const t = safeLower(text);
+
+  if (/(cím|title)/i.test(t)) return "title";
+  if (/(leírás|description)/i.test(t)) return "description";
+  if (/(szín|szin|oldalsó csík|oldalso csik|oldalsó szín|oldalso szin|csík|csik|color)/i.test(t)) return "color";
+  if (/(footer)/i.test(t)) return "footer";
+  if (/(author)/i.test(t)) return "author";
+  if (/(thumbnail)/i.test(t)) return "thumbnail";
+  if (/(fő kép|fo kep|borítókép|boritokep|embed kép|image)/i.test(t)) return "image";
+  if (/(embeden kívül|embeden kivul|külön szöveg|kulon szoveg|content)/i.test(t)) return "content";
+  if (/(videó|video|csatolmány|csatolmany|külső kép|kulso kep)/i.test(t)) return "attachments";
+
+  return null;
+}
+
+function getFriendlyReplyForGreeting() {
+  const replies = [
+    "Szia, mondd nyugodtan mit szeretnél módosítani az embeden.",
+    "Szia. Írd le természetesen, mit csináljak az embeddel.",
+    "Szia, jöhet amit szeretnél: cím, leírás, szín, kép, bármi."
+  ];
+  return replies[Math.floor(Math.random() * replies.length)];
+}
+
+/* =========================================================
+   FALLBACK ÉRTELMEZÉS
+========================================================= */
+
 function fallbackInterpret(messageText, session, attachments) {
   const text = clean(messageText);
   const lower = safeLower(text);
-  const ops = [];
 
   if (!text && attachments.length) {
     const firstImage = attachments.find((a) => a.isImage);
     const videos = attachments.filter((a) => a.isVideo);
+    const ops = [];
 
     if (firstImage && canEdit(session, "image")) {
       ops.push({ type: "set_image", value: firstImage.url });
@@ -517,7 +587,47 @@ function fallbackInterpret(messageText, session, attachments) {
     };
   }
 
-  if (/^(mi van most az embedben|mutasd az állapotot|allapot|állapot|mi a jelenlegi állapot)/i.test(lower)) {
+  if (isGreeting(text)) {
+    return {
+      intent: "chat",
+      reply: getFriendlyReplyForGreeting(),
+      ops: [],
+    };
+  }
+
+  if (isThanks(text)) {
+    return {
+      intent: "chat",
+      reply: "Szívesen.",
+      ops: [],
+    };
+  }
+
+  if (isBye(text)) {
+    return {
+      intent: "chat",
+      reply: "Rendben.",
+      ops: [],
+    };
+  }
+
+  if (/^(help|segítség|segitseg|mit tudsz|parancsok|példák|peldak)$/i.test(lower)) {
+    return {
+      intent: "help",
+      reply: [
+        "Írhatsz sima mondatokat is.",
+        "Példák:",
+        "- az oldalsó csík legyen kék",
+        "- a cím maradjon, csak a leírást írd át",
+        "- tegyél be egy képet embedbe",
+        "- ezt a videót rakd az embed alá",
+        "- mi van most az embedben?"
+      ].join("\n"),
+      ops: [],
+    };
+  }
+
+  if (/^(mi van most az embedben|mutasd az állapotot|állapot|allapot|mi a jelenlegi állapot)/i.test(lower)) {
     return {
       intent: "state_question",
       reply: humanDraftSummary(session),
@@ -526,10 +636,20 @@ function fallbackInterpret(messageText, session, attachments) {
   }
 
   if (looksLikeQuestion(text)) {
+    const target = detectTargetFromNaturalText(text);
+
+    if (target === "color") {
+      const current = `#${(session.draft.color || DEFAULT_COLOR).toString(16).padStart(6, "0")}`;
+      return {
+        intent: "question",
+        reply: `Az oldalsó szín most ${current}.`,
+        ops: [],
+      };
+    }
+
     return {
       intent: "question",
-      reply:
-        "Értem. Ha módosítást kérsz, írd le természetesen, például: `a cím maradjon, csak a leírást írd át rövidebbre` vagy `a képet hagyd, a színt változtasd kékre`.",
+      reply: "Értem a kérdést. Ha módosítást kérsz, írd le természetesen, például: `a cím maradjon, csak a színt állítsd kékre`.",
       ops: [],
     };
   }
@@ -542,15 +662,15 @@ function fallbackInterpret(messageText, session, attachments) {
     };
   }
 
-  if (/(új embed|uj embed|reset|nullázd|torold ki mindent|töröld ki mindent|kezdjük újra)/i.test(lower)) {
+  if (/(új embed|uj embed|reset|nullázd|nullazd|töröld ki mindent|torold ki mindent|kezdjük újra)/i.test(lower)) {
     return {
       intent: "reset",
-      reply: "Lenulláztam az egészet.",
+      reply: "Lenulláztam az egész embedet.",
       ops: [{ type: "clear", part: "all" }],
     };
   }
 
-  if (/(oldj fel mindent|unlock all|mindent újra lehessen módosítani)/i.test(lower)) {
+  if (/(oldj fel mindent|unlock all|mindent újra lehessen módosítani|mindent oldj fel)/i.test(lower)) {
     return {
       intent: "unlock_all",
       reply: "Feloldottam az összes zárolást.",
@@ -570,7 +690,7 @@ function fallbackInterpret(messageText, session, attachments) {
   const lockPatterns = [
     { regex: /(címhez ne nyúlj|a cím maradjon|title maradjon)/i, part: "title", reply: "Rögzítettem a címet." },
     { regex: /(leíráshoz ne nyúlj|a leírás maradjon|description maradjon)/i, part: "description", reply: "Rögzítettem a leírást." },
-    { regex: /(színhez ne nyúlj|color maradjon|a szín maradjon)/i, part: "color", reply: "Rögzítettem a színt." },
+    { regex: /(színhez ne nyúlj|a szín maradjon|color maradjon)/i, part: "color", reply: "Rögzítettem a színt." },
     { regex: /(footerhez ne nyúlj|a footer maradjon)/i, part: "footer", reply: "Rögzítettem a footert." },
     { regex: /(authorhoz ne nyúlj|az author maradjon)/i, part: "author", reply: "Rögzítettem az authort." },
     { regex: /(thumbnailhez ne nyúlj|a thumbnail maradjon)/i, part: "thumbnail", reply: "Rögzítettem a thumbnailt." },
@@ -663,16 +783,8 @@ function fallbackInterpret(messageText, session, attachments) {
   if (descMatch) {
     return {
       intent: "edit",
-      reply: "Beállítottam a leírást.",
+      reply: "Frissítettem a leírást.",
       ops: [{ type: "set_description", value: descMatch[1].trim() }],
-    };
-  }
-
-  if (/(leírást írd át|fogalmazd át a leírást|rövidítsd a leírást)/i.test(lower)) {
-    return {
-      intent: "question",
-      reply: "Írd be a kívánt új leírást, vagy írd azt, hogy: `a leírás legyen: ...`",
-      ops: [],
     };
   }
 
@@ -700,28 +812,6 @@ function fallbackInterpret(messageText, session, attachments) {
     };
   }
 
-  const colorMatch =
-    text.match(/(?:szín|szin|color)\s+(?:legyen|:)?\s*(#[0-9a-fA-F]{6}|[A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű-]+)$/i);
-
-  if (colorMatch) {
-    return {
-      intent: "edit",
-      reply: "Átállítottam a színt.",
-      ops: [{ type: "set_color", value: colorMatch[1].trim() }],
-    };
-  }
-
-  if (/(timestamp|időbélyeg|idobelyeg|időpont)/i.test(lower)) {
-    const value = boolFromText(text);
-    if (value !== null) {
-      return {
-        intent: "edit",
-        reply: value ? "Bekapcsoltam a timestampet." : "Kikapcsoltam a timestampet.",
-        ops: [{ type: "set_timestamp", value }],
-      };
-    }
-  }
-
   const contentMatch =
     text.match(/(?:embeden kívül(?:i)? szöveg|embeden kivuli szoveg|content|külön szöveg|kulon szoveg)\s*(?:legyen|:)\s*([\s\S]+)$/i);
 
@@ -731,6 +821,56 @@ function fallbackInterpret(messageText, session, attachments) {
       reply: "Beállítottam az embeden kívüli szöveget.",
       ops: [{ type: "set_content", value: contentMatch[1].trim() }],
     };
+  }
+
+  if (/(timestamp|időbélyeg|idobelyeg|időpont)/i.test(lower)) {
+    if (/(be|kapcsold be|legyen|igen|on|true)/i.test(lower)) {
+      return {
+        intent: "edit",
+        reply: "Bekapcsoltam a timestampet.",
+        ops: [{ type: "set_timestamp", value: true }],
+      };
+    }
+
+    if (/(ki|kapcsold ki|ne legyen|nem|off|false)/i.test(lower)) {
+      return {
+        intent: "edit",
+        reply: "Kikapcsoltam a timestampet.",
+        ops: [{ type: "set_timestamp", value: false }],
+      };
+    }
+  }
+
+  if (/(töröld a címet|title törlés|title törles)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem a címet.", ops: [{ type: "clear", part: "title" }] };
+  }
+
+  if (/(töröld a leírást|description törlés|description torles)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem a leírást.", ops: [{ type: "clear", part: "description" }] };
+  }
+
+  if (/(töröld a képet|image törlés|image torles|fő képet töröld|fo kepet torold)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem a fő képet.", ops: [{ type: "clear", part: "image" }] };
+  }
+
+  if (/(töröld a thumbnailt|thumbnail törlés|thumbnail torles)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem a thumbnailt.", ops: [{ type: "clear", part: "thumbnail" }] };
+  }
+
+  if (/(töröld a footert|footer törlés|footer torles)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem a footert.", ops: [{ type: "clear", part: "footer" }] };
+  }
+
+  if (/(töröld az authort|author törlés|author torles)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem az authort.", ops: [{ type: "clear", part: "author" }] };
+  }
+
+  if (/(töröld az embeden kívüli szöveget|content törlés|content torles)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem az embeden kívüli szöveget.", ops: [{ type: "clear", part: "content" }] };
+  }
+
+  if (/(töröld a csatolmányokat|töröld a videókat|attachments törlés|attachments torles)/i.test(lower)) {
+    return { intent: "edit", reply: "Töröltem a külső csatolmányokat.", ops: [{ type: "clear", part: "attachments" }] };
   }
 
   if (/(tegyél be egy thumbnailt|thumbnail legyen|thumbnailt rakj be)/i.test(lower)) {
@@ -755,7 +895,7 @@ function fallbackInterpret(messageText, session, attachments) {
     }
   }
 
-  if (/(embeden kívülre rakd a képet|kép legyen külön|képet kívülre rakd|kép embeden kívül)/i.test(lower)) {
+  if (/(embeden kívülre rakd a képet|képet kívülre rakd|kép legyen külön|kép embeden kívül)/i.test(lower)) {
     const image = extractFirstUrl(text) || attachments.find((a) => a.isImage)?.url;
     if (image) {
       return {
@@ -802,17 +942,174 @@ function fallbackInterpret(messageText, session, attachments) {
     }
   }
 
-  if (text.length > 5) {
+  const detectedTarget = detectTargetFromNaturalText(text);
+
+  if (detectedTarget === "color") {
+    const foundColor = extractColorFromNaturalText(text);
+    if (foundColor) {
+      return {
+        intent: "edit",
+        reply: "Átállítottam az embed oldalsó színét.",
+        ops: [{ type: "set_color", value: foundColor }],
+      };
+    }
+
     return {
-      intent: "edit",
-      reply: "Frissítettem a leírást.",
-      ops: [{ type: "set_description", value: text }],
+      intent: "clarify",
+      reply: "Milyen színre állítsam? Írhatsz hexet is, például: `#2ecc71`.",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "title") {
+    const value = extractAfterColon(text);
+    if (value) {
+      return {
+        intent: "edit",
+        reply: "Beállítottam a címet.",
+        ops: [{ type: "set_title", value }],
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Mi legyen pontosan a cím?",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "description") {
+    const value =
+      text.match(/(?:legyen|írd át|ird at|cseréld|csereled|írjad|irjad|:)\s*([\s\S]+)$/i)?.[1]?.trim() || "";
+
+    if (value) {
+      return {
+        intent: "edit",
+        reply: "Frissítettem a leírást.",
+        ops: [{ type: "set_description", value }],
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Mit írjak pontosan a leírásba?",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "footer") {
+    const value = extractAfterColon(text);
+    if (value) {
+      return {
+        intent: "edit",
+        reply: "Beállítottam a footert.",
+        ops: [{ type: "set_footer", value }],
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Mi legyen pontosan a footer szövege?",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "author") {
+    const value = extractAfterColon(text);
+    if (value) {
+      return {
+        intent: "edit",
+        reply: "Beállítottam az authort.",
+        ops: [{ type: "set_author", value }],
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Mi legyen pontosan az author neve?",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "image") {
+    const url = extractFirstUrl(text) || attachments.find((a) => a.isImage)?.url;
+    if (url) {
+      return {
+        intent: "edit",
+        reply: "Beállítottam a fő képet.",
+        ops: [{ type: "set_image", value: url }],
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Küldj egy képet vagy linket a fő képhez.",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "thumbnail") {
+    const url = extractFirstUrl(text) || attachments.find((a) => a.isImage)?.url;
+    if (url) {
+      return {
+        intent: "edit",
+        reply: "Beállítottam a thumbnailt.",
+        ops: [{ type: "set_thumbnail", value: url }],
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Küldj egy képet vagy linket a thumbnailhez.",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "content") {
+    const value =
+      text.match(/(?:legyen|:)\s*([\s\S]+)$/i)?.[1]?.trim() || "";
+
+    if (value) {
+      return {
+        intent: "edit",
+        reply: "Beállítottam az embeden kívüli szöveget.",
+        ops: [{ type: "set_content", value }],
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Mit írjak az embed mellé, embeden kívülre?",
+      ops: [],
+    };
+  }
+
+  if (detectedTarget === "attachments") {
+    const image = extractFirstUrl(text) || attachments.find((a) => a.isImage)?.url;
+    const video = attachments.find((a) => a.isVideo)?.url;
+    const ops = [];
+
+    if (image) ops.push({ type: "add_attachment_image", value: image });
+    if (video) ops.push({ type: "add_video", value: video });
+
+    if (ops.length) {
+      return {
+        intent: "edit",
+        reply: "Hozzáadtam a külső csatolmányokat.",
+        ops,
+      };
+    }
+
+    return {
+      intent: "clarify",
+      reply: "Küldj képet vagy videót, és hozzáadom embeden kívülre.",
+      ops: [],
     };
   }
 
   return {
-    intent: "question",
-    reply: "Írd le természetesen, mit szeretnél módosítani az embeden.",
+    intent: "clarify",
+    reply: "Értem, de ezt most még nem tudtam biztosan mire érted. Írd le úgy, hogy például: `a szín legyen kék` vagy `a cím legyen: Fontos`.",
     ops: [],
   };
 }
@@ -821,30 +1118,34 @@ function fallbackInterpret(messageText, session, attachments) {
    OPENAI ÉRTELMEZÉS
 ========================================================= */
 
-/*
-  A Responses API a hivatalos válaszgeneráló végpont, és támogat strukturált
-  JSON kimenetet is, ezért erre épül ez az intent-felismerés. :contentReference[oaicite:1]{index=1}
-*/
 async function interpretWithOpenAI(messageText, session, attachments) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
   const system = `
-Te egy next level Discord embed builder AI vagy.
+Te egy nagyon okos Discord embed builder AI vagy.
 
 Feladatod:
-- értsd a felhasználó MONDATAIT természetesen
-- különbséget tegyél kérdés, kérés, utasítás, tiltás, állapotlekérés, pontosítás között
-- NE találj ki adatot
-- rövid, normális magyar válaszokat adj
-- ha kérdésről van szó, általában ne módosíts
-- ha utasításról van szó, add vissza a szükséges műveleteket
+- természetes magyar beszélgetést érts
+- különbséget tegyél:
+  - sima beszélgetés
+  - kérdés
+  - módosítási kérés
+  - tiltás / ne nyúlj hozzá
+  - csak ezt módosítsd típusú kérés
+  - állapotlekérés
+  - publish
+  - undo
+- semmit ne vegyél automatikusan leírásnak, ha a user inkább más mezőre utal
+- ha a user azt írja, hogy "szia", normálisan válaszolj, és ne módosíts semmit
+- ha színről / oldalsó csíkról beszél, akkor a color mezőre gondol
+- ha valami kétértelmű, inkább röviden kérdezz vissza
 
-Kizárólag JSON-t adj vissza, semmi mást.
+Kizárólag JSON-t adj vissza.
 
 Formátum:
 {
-  "intent": "question | edit | lock | unlock | state_question | publish | undo | reset | clarify",
+  "intent": "chat|question|edit|lock|unlock|state_question|publish|undo|reset|clarify|help",
   "reply": "rövid magyar válasz",
   "ops": [
     { "type": "set_title", "value": "..." },
@@ -867,20 +1168,22 @@ Formátum:
   ]
 }
 
-Nagyon fontos:
+Fontos szabályok:
+- "szia" => chat, nincs módosítás
+- "köszi" => chat, nincs módosítás
+- "mi van most az embedben?" => state_question, nincs módosítás
+- "az oldalsó csík legyen #3498db" => set_color
 - "ehhez ne nyúlj" => lock
-- "csak ezt módosítsd" => a többit lockold, ezt hagyd szerkeszthetőn
-- "mi van most az embedben?" => state_question, op ne legyen
-- ha valami kétértelmű, inkább kérdezz vissza röviden
-- ne írj hosszú regényt
-- nincs poll, nincs gomb, nincs giveaway
-- ha a user természetes nyelven utasít, azt is pontosan próbáld értelmezni
+- "csak ezt módosítsd" => a többit lockold
+- ne találj ki URL-t, ID-t, szöveget
+- rövid, emberi választ adj
+- nincs gomb, nincs poll, nincs giveaway
 `;
 
   const payload = {
     user_message: messageText,
     draft_state: summarizeDraft(session),
-    recent_conversation: session.conversation.slice(-10),
+    recent_conversation: session.conversation.slice(-12),
     incoming_attachments: attachments,
   };
 
@@ -905,7 +1208,7 @@ Nagyon fontos:
       text: {
         format: {
           type: "json_schema",
-          name: "embed_ai_v2_intent",
+          name: "embed_ai_v3_intent",
           schema: {
             type: "object",
             additionalProperties: false,
@@ -1119,7 +1422,7 @@ async function publishToChannel(client, session, targetChannelId) {
 ========================================================= */
 
 function shouldRefreshPreview(parsed, attachments) {
-  if (attachments?.length) return true;
+  if (attachments?.length && (!parsed?.intent || parsed.intent !== "chat")) return true;
   return Array.isArray(parsed?.ops) && parsed.ops.length > 0;
 }
 
@@ -1159,16 +1462,24 @@ async function handleUserMessage(client, message) {
 
     session.lastIntent = parsed.intent || null;
 
-    if (parsed.intent === "state_question" && !parsed.reply) {
-      parsed.reply = humanDraftSummary(session);
-    }
-
-    if (parsed.intent !== "question" && parsed.intent !== "clarify" && Array.isArray(parsed.ops) && parsed.ops.length) {
+    if (
+      parsed.intent !== "chat" &&
+      parsed.intent !== "question" &&
+      parsed.intent !== "clarify" &&
+      parsed.intent !== "help" &&
+      parsed.intent !== "state_question" &&
+      Array.isArray(parsed.ops) &&
+      parsed.ops.length
+    ) {
       await applyOps({
         client,
         session,
         ops: parsed.ops,
       });
+    }
+
+    if (parsed.intent === "state_question" && !parsed.reply) {
+      parsed.reply = humanDraftSummary(session);
     }
 
     if (shouldRefreshPreview(parsed, attachments)) {
@@ -1209,16 +1520,16 @@ function registerEmbedAi(client) {
   client.once("ready", async () => {
     const channel = await client.channels.fetch(EMBED_AI_CHANNEL_ID).catch(() => null);
     if (!channel || typeof channel.send !== "function") {
-      console.log("⚠️ [EMBED AI V2] A fix csatorna nem található vagy nem szöveges.");
+      console.log("⚠️ [EMBED AI V3] A fix csatorna nem található vagy nem szöveges.");
       return;
     }
 
     const session = getSession(channel.id);
     await refreshPreview(channel, session).catch((e) => {
-      console.log("⚠️ [EMBED AI V2] Előnézet inicializálási hiba:", e.message);
+      console.log("⚠️ [EMBED AI V3] Előnézet inicializálási hiba:", e.message);
     });
 
-    console.log("✅ [EMBED AI V2] Next level embed builder aktív.");
+    console.log("✅ [EMBED AI V3] Okos embed builder aktív.");
   });
 }
 

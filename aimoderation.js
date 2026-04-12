@@ -1049,14 +1049,25 @@ function buildImmediateRuleDecision(message, profile) {
 
   const targetedDegrading = isTargetedDegradingMessage(content);
 
-  const familyInsultDetected = containsCanonical(content, FAMILY_INSULT_WORDS);
+  const familyInsultDetected =
+  containsCanonical(content, FAMILY_INSULT_WORDS) ||
+  matchesAnyPattern(content, FAMILY_INSULT_PATTERNS);
 
-  const directInsultDetected =
-    containsInsultWord(content) &&
-    (
-      containsTargetWord(content) ||
-      /\b(te|ti|neked|nektek|vagy|vagytok|takarodj|kuss)\b/i.test(lower)
-    );
+const insultShieldBlocked =
+  /(ne anyázz|ne fenyegess|ne cigányozz|ne romázz|ne buzizz|ne nácizz|ne hitlerezz)/i.test(content) ||
+  (
+    /\b(nem menekülsz|nem úszod meg|nem fogod megúszni|véged lesz|majd meglátod|megbánod)\b/i.test(content) &&
+    !matchesAnyPattern(content, SOFT_THREAT_PATTERNS) &&
+    !matchesAnyPattern(content, ACTIVE_THREAT_PATTERNS)
+  );
+
+const directInsultDetected =
+  containsInsultWord(content) &&
+  (
+    containsTargetWord(content) ||
+    /\b(te|ti|neked|nektek|vagy|vagytok|takarodj|kuss)\b/i.test(lower)
+  ) &&
+  !insultShieldBlocked;
 
   const recentFamilyInsultCount = (profile.recentMessages || [])
     .slice(-6)
@@ -1231,6 +1242,12 @@ function falsePositiveShield(message, ruleScan, contextMessages = [], replyTarge
   }
 
   if (
+    /(ne anyázz|ne fenyegess|ne cigányozz|ne romázz|ne buzizz|ne nácizz|ne hitlerezz)/i.test(lower)
+  ) {
+    return { block: true, reason: "Moderáló vagy leállító szöveg, nem sértés." };
+  }
+
+  if (
     replyTarget?.targetContent &&
     rawContext.includes("bocs") &&
     /(bocs|ne haragudj|sajnálom)/i.test(lower) &&
@@ -1239,26 +1256,32 @@ function falsePositiveShield(message, ruleScan, contextMessages = [], replyTarge
     return { block: true, reason: "Valószínűleg békítő / konfliktuszáró üzenet." };
   }
 
-  // RP / eseményjelentés védelem
   if (isRpSafeViolenceContext(content)) {
     return { block: true, reason: "RP vagy múlt idejű eseményleírás, nem aktív fenyegetés." };
   }
 
   if (
     hasRpContext(content) &&
-    /\b(lelőttek|lelőttek|meglőttek|megöltek|meghaltam|meghalt|kiraboltak|elraboltak|megvertek|leszúrtak|bevittek)\b/i.test(content) &&
+    /\b(lelőttek|meglőttek|megöltek|meghaltam|meghalt|kiraboltak|elraboltak|megvertek|leszúrtak|bevittek)\b/i.test(content) &&
     !isActiveThreat(content)
   ) {
     return { block: true, reason: "RP kontextusú helyzetjelentés / eseményleírás." };
   }
 
-  // semleges etnikai említés ne büntessen
   if (
-    /\b(cigány|roma|cigányok|romák)\b/i.test(content) &&
+    /\b(cigány|roma|cigányok|romák|zsidó|zsidók|muszlim|muszlimok|arab|arabok)\b/i.test(content) &&
     !isRacistAbuse(content) &&
     !containsInsultWord(content)
   ) {
-    return { block: true, reason: "Semleges etnikai említés, nem automata büntetési eset." };
+    return { block: true, reason: "Semleges csoportemlítés, nem automata büntetési eset." };
+  }
+
+  if (
+    /\b(nem menekülsz|nem úszod meg|nem fogod megúszni|véged lesz|majd meglátod|megbánod)\b/i.test(content) &&
+    !matchesAnyPattern(content, SOFT_THREAT_PATTERNS) &&
+    !matchesAnyPattern(content, ACTIVE_THREAT_PATTERNS)
+  ) {
+    return { block: true, reason: "Kétértelmű fenyegető kifejezés, önmagában nem elég automata büntetésre." };
   }
 
   return { block: false, reason: "" };
@@ -1973,15 +1996,9 @@ const MILD_PROFANITY_WORDS = [
   "tele van a faszom a szerverrel", "tele van a faszom az adminokkal",
   "faszság",
 
+  "picsa",
   "szar", "szarba", "szar ez", "szar az egész", "szar ez az egész",
   "szar szerver", "szar rendszer",
-  "szar az admin", "szar az adminisztrátor", "szar a manager",
-  "szar a tulaj", "szar a vezetőség", "szar az adminsegéd",
-
-  "fos", "fos ez", "fos az egész", "fos szerver",
-  "fos az admin", "fos az adminisztrátor", "fos a manager",
-  "fos a tulaj", "fos a vezetőség", "fos az adminsegéd",
-
   "szopas", "szopás", "szopjatok",
   "baszas", "baszás",
   "szopás ez", "szopás az egész",
@@ -1990,12 +2007,12 @@ const MILD_PROFANITY_WORDS = [
   "felbasz ez", "felbaszott ez az egész",
   "szétidegel",
 
+  "idegbeteg leszek", "agyrém ez", "ez egy agyrém",
   "ez egy katasztrófa", "ez botrány", "ez már botrány",
   "ez egy vicc", "ez egy rohadt vicc",
   "ez egy kalap szar", "ez egy rakás szar",
   "ez egy nagy fos", "ez egy nagy szar",
   "röhej az egész", "nevetséges az egész",
-  "ez egy szánalom", "ez egy szégyen",
   "ez nagyon tré", "nagyon tré",
 
   "baszki ez mi", "baszki ez komoly",
@@ -2005,15 +2022,11 @@ const MILD_PROFANITY_WORDS = [
   "baszki már megint", "bazdmeg már megint",
 
   "anyám", "istenit", "rohadt élet", "kibaszott", "rohadtul",
-  "lófasz", "lofasz",
-
-  "cigányozás", "romázás",
-  "nácizás", "hitlerezés"
+  "lófasz", "lofasz"
 ];
 
 const INSULT_WORDS = [
-  "anyad", "anyadat", "anyatok", "kurvaanyad", "kurva anyad",
-  "nyomorek", "nyomorék", "retkes",
+  "nyomorek", "nyomorék",
   "patkany", "patkány",
   "semmirekello", "semmirekellő",
   "szarhazi", "szarházi",
@@ -2027,13 +2040,11 @@ const INSULT_WORDS = [
   "bohoc", "bohóc",
   "majom", "majomfej", "majomarc",
   "kutyafeju", "kutyafejű",
-  "allat", "állat",
-  "vadbarom", "barom",
+  "vadbarom",
   "diszno", "disznó",
   "korcs", "fattyu", "fattyú",
   "ribanc", "lotyo", "lotyó", "ringyo", "ringyó", "cafka",
   "pszichopata", "elmebeteg",
-  "orult", "őrült", "zakkant", "bolond", "agybajos",
   "undorito", "undorító",
   "gusztustalan",
   "hanyadek", "hányadék",
@@ -2041,21 +2052,15 @@ const INSULT_WORDS = [
   "szutyok", "szenny", "mocsok",
   "dogoljmeg", "dögöljmeg", "rohadjmeg",
   "pusztuljel", "pusztulj",
-  "nyomi", "nyominger", "balek", "szerencsétlen",
-  "csöves", "csóró", "szánalmas", "nevetséges",
+  "nyomi", "nyominger",
   "gyökér", "agyhalott", "agytalan",
   "retardált", "fogyatékos",
-  "hülyegyerek",
   "primitív", "suttyó", "paraszt",
   "bunkó",
-  "szar alak", "szar ember",
-  "vicc ember", "egy nulla",
-  "haszontalan",
   "rohadék", "tetves", "tetves szar",
-  "féreg", "gerinctelen", "büdös paraszt",
-  "mocskos állat", "rohadt gyökér",
-  "bohócfej",
-  "szellemi fogyatékos", "agyhalott idióta",
+  "féreg", "gerinctelen",
+  "mocskos állat",
+  "szellemi fogyatékos",
 
   "egy bohóc vagy", "egy szar vagy", "egy fos vagy",
   "egy senki vagy", "egy nulla vagy",
@@ -2074,42 +2079,7 @@ const INSULT_WORDS = [
   "adminsegéd bohóc", "adminsegéd gyökér",
   "manager bohóc", "manager hülye",
   "tulaj bohóc", "tulaj idióta",
-  "vezetőség bohóc", "vezetőség szar", "vezetőség nyomorék"
-];
-
-const HATE_SLUR_WORDS = [
-  // roma / cigány
-  "cigany", "cigány", "ciganyok", "cigányok",
-  "roman", "roma", "romak", "romák",
-  "büdös cigány", "retkes cigány", "mocskos cigány", "rohadt cigány",
-
-  // fekete / afro / rasszista angol szleng
-  "nigger", "nigga", "niga", "niggerek", "niggerek",
-  "dirty nigger", "black monkey", "cotton picker",
-
-  // zsidóellenes
-  "zsido", "zsidó", "zsidok", "zsidók",
-  "büdös zsidó", "mocskos zsidó", "rohadt zsidó",
-  "jewboy", "dirty jew", "kike",
-
-  // arab / muszlim / bevándorló
-  "terrorista arab", "büdös arab", "mocskos arab",
-  "mocskos muszlim", "rohadt muszlim",
-  "büdös migráns", "mocskos migráns",
-
-  // ázsiai
-  "kinai kutya", "kínai kutya", "csingcsong", "ching chong",
-  "gook", "chink",
-
-  // meleg / lmbtq gyűlölet
-  "buzi", "buzik", "buzerans", "buzeráns",
-  "köcsög buzi", "mocskos buzi",
-  "faggot", "dyke", "tranny",
-
-  // náci / szélsőséges
-  "náci", "naci", "náci", "hitlerista",
-  "heil hitler", "sieg heil", "white power",
-  "kkk", "ku klux klan", "skinhead patkány"
+  "vezetőség bohóc", "vezetőség nyomorék"
 ];
 
 const FAMILY_INSULT_WORDS = [
@@ -2155,9 +2125,10 @@ const FAMILY_INSULT_WORDS = [
   "anyád fos", "anyad fos",
   "anyád hulladék", "anyad hulladek",
   "anyád szutyok", "anyad szutyok",
-  "anyádra mondom", "anyadra mondom",
-  "anyádra esküszöm", "anyadra eskuszom",
-  "anyádra eskü", "anyadra esku",
+  "anyázlak", "anyazlak",
+  "anyázom", "anyazom",
+  "anyázd", "anyazd",
+  "anyázz", "anyazz",
   "anyádba verem", "anyadba verem",
   "anyádba baszok", "anyadba baszok",
   "anyádba rakom", "anyadba rakom",
@@ -2240,25 +2211,37 @@ const THREAT_WORDS = [
   "kinyirlak", "kinyírlak",
   "elkaplak",
   "megtalallak", "megtalállak",
+  "megkereslek",
   "kicsinallak", "kicsinállak",
   "szétverlek", "agyonverlek",
   "pofán váglak", "megütlek",
   "szétbaszlak", "szétcsaplak",
   "megbaszlak",
   "kicsinállak most",
-  "véged lesz", "nem úszod meg",
+  "elkaplak még", "utolérlek",
   "elkaplak kint", "meglátlak kint", "megkereslek kint",
-  "megverlek majd", "megöllek majd", "szétbaszlak majd",
+  "megvárlak",
+  "megverlek majd", "megöllek majd",
+  "szétcsaplak majd", "szétbaszlak majd",
+  "elintézlek", "elintézlek kint",
   "meg foglak találni", "meg foglak verni",
   "szét foglak verni", "agyon foglak verni",
-  "nem lesz jó vége", "rossz vége lesz",
+  "elkaplak egyszer", "utolérlek egyszer",
   "meg fogsz dögleni", "megdöglesz",
- "kivégezlek",
+  "meg foglak keresni",
+  "bevárlak", "kivégezlek",
   "kicsinállak este",
   "elkaplak este",
-  "nem éled túl",
   "szét lesz verve a fejed",
   "agyon leszel verve"
+];
+
+const HATE_SLUR_WORDS = [
+  "nigger", "nigga", "niga", "niggerek",
+  "kike", "dirty jew", "jewboy",
+  "gook", "chink", "ching chong", "csingcsong",
+  "faggot", "dyke", "tranny",
+  "heil hitler", "sieg heil", "white power", "kkk", "ku klux klan"
 ];
 
 const RP_CONTEXT_WORDS = [
@@ -2276,11 +2259,42 @@ const RP_CONTEXT_WORDS = [
   "baleset", "karambol", "üldözés", "lövöldözés", "túsz", "rablás", "intézkedés"
 ];
 
+const MILD_PROFANITY_PATTERNS = [
+  /\b(a\s+kurva\s+elet|a\s+kurva\s+eletbe|az\s+istenit|a\s+mindenit)\b/i,
+  /\b(lofasz|lófasz|faszom\s+kivan|tele\s+van\s+a\s+faszom)\b/i,
+];
+
+const INSULT_PATTERNS = [
+  /\b(kurva\s+any[aá]d|a\s+kurva\s+any[aá]d)\b/i,
+  /\b(d[oö]g[oö]lj\s+meg|dogolj\s+meg|rohadj\s+meg|pusztulj(\s+el)?)\b/i,
+  /\b(te\s+nyomor[eé]k|te\s+csicska|te\s+boh[oó]c|te\s+h[uü]lye|te\s+idi[oó]ta)\b/i,
+  /\b(szarh[aá]zi|semmirekell[oő]|faszfej|faszkalap|gecifej|geciarc)\b/i,
+];
+
+const FAMILY_INSULT_PATTERNS = [
+  /\b(kurva\s+any[aá]d|a\s+kurva\s+any[aá]d)\b/i,
+  /\b(any[aá]d)\b.{0,12}\b(kurva|ribanc|loty[oó]|ringy[oó]|szar|fos|hullad[eé]k|szutyok|szenny)\b/i,
+  /\b(menj\s+any[aá]dba|any[aá]dba\s+menj)\b/i,
+  /\b(any[aá]dba)\b.{0,8}\b(baszok|verem|tolom|rakom)\b/i,
+  /\b(any[aá]tok)\b.{0,12}\b(kurva|szar|fos)\b/i,
+];
+
+const SOFT_INSULT_PATTERNS = [
+  /\b(te|ti|neked|nektek|vagy|vagytok)\b.{0,12}\b(sz[aá]nalmas|nevets[eé]ges|retkes|barom|bolond|h[uü]lye|gy[oö]k[eé]r)\b/i,
+  /\b(sz[aá]nalmas|nevets[eé]ges|retkes|barom|bolond|h[uü]lye|gy[oö]k[eé]r)\b.{0,12}\b(te|ti|neked|nektek|vagy|vagytok)\b/i,
+];
+
 const ACTIVE_THREAT_PATTERNS = [
   /\b(megöllek|meg foglak ölni|megverlek|agyonverlek|szétverlek|szétbaszlak|kicsinállak|elintézlek)\b/i,
-  /\b(meg fogsz halni|megdöglesz|véged lesz|nem úszod meg|nem fogod megúszni)\b/i,
+  /\b(meg fogsz halni|megdöglesz)\b/i,
   /\b(megtalállak|megkereslek|elkaplak|utolérlek|megvárlak)\b.{0,20}\b(kint|majd|este|holnap|egyszer)\b/i,
   /\b(szét foglak verni|agyon foglak verni|meg foglak találni|meg foglak verni)\b/i,
+];
+
+const SOFT_THREAT_PATTERNS = [
+  /\b(nem menekülsz|nem úszod meg|nem fogod megúszni|véged lesz|megbánod|majd meglátod)\b.{0,20}\b(te|ti|neked|nektek|kint|este|holnap|egyszer)\b/i,
+  /\b(te|ti|neked|nektek)\b.{0,20}\b(nem menekülsz|nem úszod meg|nem fogod megúszni|véged lesz|megbánod)\b/i,
+  /\b(nem lesz jó vége|rossz vége lesz)\b.{0,20}\b(neked|ennek|ennek még)\b/i,
 ];
 
 const PASSIVE_RP_EVENT_PATTERNS = [
@@ -2290,28 +2304,27 @@ const PASSIVE_RP_EVENT_PATTERNS = [
 ];
 
 const RACIST_CONTEXT_PATTERNS = [
-  /\b(te|ti|ezek|azok|mocskos|rohadt|retkes|büdös)\b.{0,12}\b(cigány|roma)\b/i,
-  /\b(cigány|roma)\b.{0,12}\b(féreg|kutya|patkány|szar|szutyok|retkes|büdös|mocskos)\b/i,
-  /\b(cigányok|romák)\b.{0,16}\b(takarodjatok|dögöljetek|rohadtak|férgek|szemetek)\b/i,
-  /\b(büdös cigány|retkes cigány|mocskos cigány|rohadt cigány)\b/i
+  /\b(te|ti|ezek|azok|mocskos|rohadt|retkes|büdös)\b.{0,12}\b(cigány|roma|zsidó|muszlim|arab|buzi)\b/i,
+  /\b(cigány|roma|zsidó|muszlim|arab|buzi)\b.{0,12}\b(féreg|kutya|patkány|szar|szutyok|retkes|büdös|mocskos)\b/i,
+  /\b(cigányok|romák|zsidók|muszlimok|arabok|buzik)\b.{0,16}\b(takarodjatok|dögöljetek|rohadtak|férgek|szemetek)\b/i,
+  /\b(büdös cigány|retkes cigány|mocskos cigány|rohadt cigány|büdös zsidó|mocskos buzi)\b/i,
 ];
 
 const RACIST_SOFT_CONTEXT_PATTERNS = [
-  /\b(cigányozás|romázás)\b/i,
-  /\b(cigány|roma)\b.{0,12}\b(megint|tipikus|persze|nyilván)\b/i
+  /\b(cigányozás|romázás|nácizás|hitlerezés)\b/i,
+  /\b(cigány|roma|zsidó|muszlim|arab|náci)\b.{0,12}\b(megint|tipikus|persze|nyilván)\b/i
 ];
+
+const HATE_REFERENCE_PATTERNS = [
+  /\b(cig[aá]nyoz[aá]s|rom[aá]z[aá]s|n[aá]ciz[aá]s|hitlerez[eé]s)\b/i,
+  /\b(cig[aá]ny|roma|n[aá]ci|zsid[oó]|nigger)\b.{0,12}\b(megint|tipikus|persze|nyilv[aá]n)\b/i,
+];
+
 function isHateSlur(content = "") {
   const raw = String(content || "").toLowerCase();
   return HATE_SLUR_WORDS.some((word) => raw.includes(word.toLowerCase()));
 }
 
-function isRacistAbuse(content = "") {
-  const raw = String(content || "");
-  return (
-    RACIST_CONTEXT_PATTERNS.some((p) => p.test(raw)) ||
-    isHateSlur(raw)
-  );
-}
 function hasRpContext(content = "") {
   const text = normalizeModerationText(content);
   return containsCanonical(text, RP_CONTEXT_WORDS);
@@ -2340,11 +2353,6 @@ function isRpSafeViolenceContext(content = "") {
   }
 
   return false;
-}
-
-function isRacistAbuse(content = "") {
-  const raw = String(content || "");
-  return RACIST_CONTEXT_PATTERNS.some((p) => p.test(raw));
 }
 
 function isSoftRacistFriction(content = "") {
@@ -2432,18 +2440,6 @@ function matchesAnyPattern(content = "", patterns = []) {
   });
 }
 
-const MILD_PROFANITY_PATTERNS = [
-  /\b(a\s+kurva\s+elet|a\s+kurva\s+eletbe|az\s+istenit|a\s+mindenit)\b/i,
-  /\b(lofasz|lófasz|faszom\s+kivan|tele\s+van\s+a\s+faszom)\b/i,
-];
-
-const INSULT_PATTERNS = [
-  /\b(kurva\s+any[aá]d|a\s+kurva\s+any[aá]d)\b/i,
-  /\b(d[oö]g[oö]lj\s+meg|dogolj\s+meg|rohadj\s+meg|pusztulj(\s+el)?)\b/i,
-  /\b(te\s+nyomor[eé]k|te\s+retkes|te\s+csicska|te\s+barom|te\s+boh[oó]c)\b/i,
-  /\b(szarh[aá]zi|semmirekell[oő]|faszfej|faszkalap|gecifej|geciarc)\b/i,
-];
-
 function containsMildProfanity(content = "") {
   return (
     containsFromWordList(content, MILD_PROFANITY_WORDS) ||
@@ -2456,8 +2452,17 @@ function containsInsultWord(content = "") {
     containsFromWordList(content, INSULT_WORDS) ||
     containsFromWordList(content, FAMILY_INSULT_WORDS) ||
     containsFromWordList(content, STAFF_ABUSE_WORDS) ||
+    matchesAnyPattern(content, INSULT_PATTERNS) ||
+    matchesAnyPattern(content, FAMILY_INSULT_PATTERNS) ||
+    matchesAnyPattern(content, SOFT_INSULT_PATTERNS)
+  );
+}
+
+function containsThreatWord(content = "") {
+  return (
     containsFromWordList(content, THREAT_WORDS) ||
-    matchesAnyPattern(content, INSULT_PATTERNS)
+    matchesAnyPattern(content, ACTIVE_THREAT_PATTERNS) ||
+    matchesAnyPattern(content, SOFT_THREAT_PATTERNS)
   );
 }
 
@@ -2465,26 +2470,70 @@ function containsTargetWord(content = "") {
   return containsCanonical(content, TARGET_WORDS);
 }
 
+function isHateSlur(content = "") {
+  const raw = String(content || "").toLowerCase();
+  return HATE_SLUR_WORDS.some((word) => raw.includes(word.toLowerCase()));
+}
+
+function isRacistAbuse(content = "") {
+  const raw = String(content || "");
+  return (
+    RACIST_CONTEXT_PATTERNS.some((p) => p.test(raw)) ||
+    isHateSlur(raw)
+  );
+}
+
+function isSoftRacistFriction(content = "") {
+  const raw = String(content || "");
+  return (
+    RACIST_SOFT_CONTEXT_PATTERNS.some((p) => p.test(raw)) ||
+    HATE_REFERENCE_PATTERNS.some((p) => p.test(raw))
+  );
+}
+
+function hasRpContext(content = "") {
+  const text = normalizeModerationText(content);
+  return containsCanonical(text, RP_CONTEXT_WORDS);
+}
+
+function isPassiveRpEvent(content = "") {
+  const raw = String(content || "");
+  return PASSIVE_RP_EVENT_PATTERNS.some((p) => p.test(raw));
+}
+
+function isActiveThreat(content = "") {
+  const raw = String(content || "");
+  return matchesAnyPattern(raw, ACTIVE_THREAT_PATTERNS);
+}
+
+function isRpSafeViolenceContext(content = "") {
+  const raw = String(content || "");
+  const rpContext = hasRpContext(raw);
+  const passiveEvent = isPassiveRpEvent(raw);
+  const activeThreat = isActiveThreat(raw);
+
+  if (activeThreat) return false;
+  if (passiveEvent) return true;
+
+  if (
+    rpContext &&
+    /\b(megöltek|lelőttek|meglőttek|meghaltam|meghalt|megvertek|kiraboltak|elraboltak|leszúrtak)\b/i.test(raw)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function isContextualProfanity(content = "") {
   const raw = String(content || "");
   const normalized = normalizeModerationText(raw);
 
-  // RP / eseményjelentés sose legyen "mild profanity"
-  if (isRpSafeViolenceContext(raw)) {
-    return false;
-  }
+  if (isRpSafeViolenceContext(raw)) return false;
+  if (isActiveThreat(raw)) return false;
+  if (isRacistAbuse(raw)) return false;
 
-  // aktív fenyegetés nem mild kategória
-  if (isActiveThreat(raw)) {
-    return false;
-  }
-
-  // rasszista célzott beszólás nem mild kategória
-  if (isRacistAbuse(raw)) {
-    return false;
-  }
-
-  if (!containsMildProfanity(normalized) && !containsInsultWord(normalized)) {
+  if (!containsMildProfanity(normalized)) {
     return false;
   }
 
@@ -2492,18 +2541,7 @@ function isContextualProfanity(content = "") {
     return false;
   }
 
-  if (
-    /\b(te|ti|neked|nektek|o|ok|ez a|olyan vagy|vagytok|takarodj|kuss)\b/i.test(normalized)
-  ) {
-    return false;
-  }
-
-  // etnikai szó önmagában ne menjen trágárnak
-  if (
-    /\b(cigány|roma|cigányok|romák)\b/i.test(normalized) &&
-    !isSoftRacistFriction(normalized) &&
-    !isRacistAbuse(normalized)
-  ) {
+  if (/\b(te|ti|neked|nektek|o|ok|ez a|olyan vagy|vagytok|takarodj|kuss)\b/i.test(normalized)) {
     return false;
   }
 
@@ -2511,21 +2549,32 @@ function isContextualProfanity(content = "") {
 }
 
 function isTargetedDegradingMessage(content = "") {
-  const normalizedLoose = normalizeModerationText(content);
-  const normalizedCompact = normalizeModerationText(content, { compact: true });
+  const raw = String(content || "");
+  const normalized = normalizeModerationText(raw);
 
-  if (!normalizedCompact) return false;
+  // RP védelem
+  if (isRpSafeViolenceContext(raw)) return false;
 
-  const strongTargetPatterns = [
-    /\b(szerver|server|internalgaming)\b.{0,18}\b(szar|fos|hulladek|szutyok|szenny|bohoc|vicc|retkes|nyomorek)\b/i,
-    /\b(admin|adminok|staff|moderator|fejleszto|vezetoseg)\b.{0,18}\b(szar|fos|hulladek|szutyok|szenny|bohoc|vicc|retkes|nyomorek)\b/i,
-    /\b(szar|fos|hulladek|szutyok|szenny|bohoc|vicc|retkes|nyomorek)\b.{0,18}\b(szerver|server|internalgaming|admin|adminok|staff|moderator|fejleszto|vezetoseg)\b/i,
-  ];
+  // Ha nincs célzás → nem érdekel
+  if (!containsTargetWord(normalized)) return false;
 
-  if (strongTargetPatterns.some((p) => p.test(normalizedLoose))) return true;
-  if (containsCanonical(content, STAFF_ABUSE_WORDS)) return true;
+  // Ha már konkrét insult → azt máshol kezeljük
+  if (containsInsultWord(normalized)) return false;
 
-  return containsInsultWord(content) && containsTargetWord(content);
+  // Enyhébb, de célzott beszólás minták
+  if (
+    /\b(te|ti|neked|nektek|vagy|vagytok)\b.{0,15}\b(sz[aá]nalmas|nevets[eé]ges|g[aá]z|k[ií]nos|sz[eé]gyen|vicc)\b/i.test(raw)
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(sz[aá]nalmas|nevets[eé]ges|g[aá]z|k[ií]nos|sz[eé]gyen|vicc)\b.{0,15}\b(te|ti|neked|nektek|vagy|vagytok)\b/i.test(raw)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 function isTargetedInsult(content = "") {
   const raw = String(content || "");

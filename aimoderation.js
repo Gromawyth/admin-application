@@ -53,49 +53,49 @@ const CONFIG = {
   MAX_LAST_MESSAGES_PER_USER: 20,
   MAX_PREVIOUS_PROBLEM_MESSAGES: 5,
 
-  WATCH_THRESHOLD: 35,
-  HIGH_RISK_THRESHOLD: 55,
-  KICK_NEAR_THRESHOLD: 82,
-  BAN_NEAR_THRESHOLD: 95,
-  AUTO_BAN_READY_THRESHOLD: 100,
+WATCH_THRESHOLD: 45,
+HIGH_RISK_THRESHOLD: 60,
+KICK_NEAR_THRESHOLD: 85,
+BAN_NEAR_THRESHOLD: 95,
+AUTO_BAN_READY_THRESHOLD: 100,
 
-  MIN_AI_CONFIDENCE_FOR_TIMEOUT: 52,
-  MIN_AI_CONFIDENCE_FOR_KICK: 68,
-  MIN_AI_CONFIDENCE_FOR_BAN: 86,
+MIN_AI_CONFIDENCE_FOR_TIMEOUT: 52,
+MIN_AI_CONFIDENCE_FOR_KICK: 68,
+MIN_AI_CONFIDENCE_FOR_BAN: 86,
 
-  TIMEOUT_MINUTES_LOW: 15,
-  TIMEOUT_MINUTES_MEDIUM: 60,
-  TIMEOUT_MINUTES_HIGH: 360,
-  TIMEOUT_MINUTES_CRITICAL: 1440,
+TIMEOUT_MINUTES_LOW: 15,
+TIMEOUT_MINUTES_MEDIUM: 60,
+TIMEOUT_MINUTES_HIGH: 360,
+TIMEOUT_MINUTES_CRITICAL: 1440,
 
-  FLOOD_WINDOW_MS: 12_000,
-  FLOOD_MESSAGE_COUNT: 10,
-  DUPLICATE_WINDOW_MS: 45_000,
-  DUPLICATE_MIN_COUNT: 3,
-  MASS_MENTION_COUNT: 20,
-  CAPS_MIN_LENGTH: 16,
-  CAPS_RATIO_THRESHOLD: 0.72,
-  EMOJI_SPAM_THRESHOLD: 10,
-  REPEAT_CHAR_THRESHOLD: 15,
+FLOOD_WINDOW_MS: 12_000,
+FLOOD_MESSAGE_COUNT: 10,
+DUPLICATE_WINDOW_MS: 45_000,
+DUPLICATE_MIN_COUNT: 3,
+MASS_MENTION_COUNT: 20,
+CAPS_MIN_LENGTH: 16,
+CAPS_RATIO_THRESHOLD: 0.72,
+EMOJI_SPAM_THRESHOLD: 10,
+REPEAT_CHAR_THRESHOLD: 15,
 
-  MIN_INCIDENT_SCORE_FOR_LOG: 20,
-  USER_CASE_COOLDOWN_MS: 15_000,
-  DELETE_NOTICE_TTL_MS: 30_000,
+MIN_INCIDENT_SCORE_FOR_LOG: 20,
+USER_CASE_COOLDOWN_MS: 15_000,
+DELETE_NOTICE_TTL_MS: 30_000,
 
-  DECAY_DAYS_STRONG: 7,
-  DECAY_DAYS_MEDIUM: 30,
-  DECAY_DAYS_LIGHT: 90,
+DECAY_DAYS_STRONG: 7,
+DECAY_DAYS_MEDIUM: 30,
+DECAY_DAYS_LIGHT: 90,
 
-  UNBAN_RISK_RELIEF_POINTS: 35,
-  UNBAN_REMOVE_LAST_INCIDENTS: 2,
+UNBAN_RISK_RELIEF_POINTS: 35,
+UNBAN_REMOVE_LAST_INCIDENTS: 2,
 
-  SAFE_MODE_MAX_ACTION: "timeout",
-  SAFE_MODE_CONFIDENCE_PENALTY: 12,
-  SAFE_MODE_POINT_MULTIPLIER: 0.62,
+SAFE_MODE_MAX_ACTION: "timeout",
+SAFE_MODE_CONFIDENCE_PENALTY: 12,
+SAFE_MODE_POINT_MULTIPLIER: 0.62,
 
-  WATCH_MODE_ENABLED: true,
-  WATCH_BASE_POINTS: 8,
-  WATCH_WINDOW_MS: 20 * 60 * 1000,
+WATCH_MODE_ENABLED: true,
+WATCH_BASE_POINTS: 4,
+WATCH_WINDOW_MS: 15 * 60 * 1000,
 
   SUSPICION_DECAY_DAYS: 14,
   SUSPICION_WARN_THRESHOLD: 24,
@@ -619,16 +619,29 @@ function getRawRiskValue(profile) {
   for (const inc of profile.incidents || []) {
     const age = current - (inc.createdAt || current);
     const weight = getIncidentDecayWeight(age);
-    risk += Number(inc.points || 0) * weight;
+
+    const type = String(inc.type || "");
+    const basePoints = Number(inc.points || 0);
+
+    let typeMultiplier = 1;
+
+    if (type === "watch") typeMultiplier = 0.28;
+    else if (type === "warn") typeMultiplier = 0.42;
+    else if (type === "delete") typeMultiplier = 0.72;
+    else if (type === "timeout") typeMultiplier = 1;
+    else if (type === "kick") typeMultiplier = 1.15;
+    else if (type === "ban") typeMultiplier = 1.3;
+
+    risk += basePoints * typeMultiplier * weight;
   }
 
-  risk += (profile.totals?.timeouts || 0) * 12;
-  risk += (profile.totals?.kicks || 0) * 22;
-  risk += (profile.totals?.bans || 0) * 35;
-  risk -= (profile.totals?.forgiveness || 0) * 10;
+  risk += (profile.totals?.timeouts || 0) * 8;
+  risk += (profile.totals?.kicks || 0) * 16;
+  risk += (profile.totals?.bans || 0) * 26;
+  risk -= (profile.totals?.forgiveness || 0) * 8;
 
   const rehabScore = Number(profile.rehab?.score || 0);
-  risk -= rehabScore * 0.35;
+  risk -= rehabScore * 0.3;
 
   return Math.max(0, risk);
 }
@@ -853,7 +866,66 @@ function buildImmediateRuleDecision(message, profile) {
   const repeatCount = countRecentTargetedInsults(profile, content);
   const watchActive = isWatchActive(profile);
   const currentRisk = getRiskPercent(profile);
+  const recentProfanityCount = (profile.recentMessages || [])
+    .slice(-8)
+    .filter((m) => isContextualProfanity(m.content || ""))
+    .length;
 
+  if (isContextualProfanity(content)) {
+    let action = "watch";
+    let severity = "enyhe";
+    let points = 4;
+    let suspicionGain = 1;
+    let confidence = 82;
+
+    if (recentProfanityCount >= 1 || watchActive || currentRisk >= 35) {
+      action = "warn";
+      severity = "enyhe";
+      points = 6;
+      suspicionGain = 2;
+      confidence = 86;
+    }
+
+    if (recentProfanityCount >= 3 || currentRisk >= 55) {
+      action = "delete";
+      severity = "közepes";
+      points = 10;
+      suspicionGain = 4;
+      confidence = 90;
+    }
+
+    return {
+      action,
+      category: "other",
+      categoryHu: "Nyers / trágár megfogalmazás",
+      severity,
+      confidence,
+      points,
+      suspicionGain,
+      ruleBroken: "Indokolatlanul trágár, feszült megfogalmazás.",
+      reason:
+        action === "watch"
+          ? "A rendszer enyhe, nem célzott, de figyelendő trágár megfogalmazást talált."
+          : action === "warn"
+            ? "A rendszer ismétlődő vagy emelt kockázatú nyers, trágár megfogalmazást talált."
+            : "A rendszer ismétlődő nyers, trágár megfogalmazást talált, ezért már törlés indokolt.",
+      analysis:
+        action === "watch"
+          ? "Az üzenet nem közvetlen célzott sértés, de a hangnem már nem kulturált."
+          : action === "warn"
+            ? "Az üzenet önmagában még nem súlyos személyeskedés, de a visszatérő nyers hangnem miatt figyelmeztetés indokolt."
+            : "A felhasználó visszatérően használ nyers, trágár hangnemet, ezért a rendszer szigorúbban reagál.",
+      patternSummary:
+        action === "watch"
+          ? "Első szintű trágár megfogalmazás."
+          : action === "warn"
+            ? "Ismétlődő trágár megfogalmazás."
+            : "Visszatérő trágár hangnem.",
+      timeoutMinutes: 0,
+      shouldNotifyStaff: false,
+      forceWatch: true,
+    };
+  }
   const targetedDegrading = isTargetedDegradingMessage(content);
 
   const familyInsultDetected = containsCanonical(content, FAMILY_INSULT_WORDS);
@@ -1297,10 +1369,36 @@ if (shouldDeleteTriggerMessage && CONFIG.ALLOW_DELETE) {
     // =========================
     if (action === "timeout") {
       if (CONFIG.ALLOW_TIMEOUT) {
-        const ms = (final.timeoutMinutes || 10) * 60 * 1000;
+        const timeoutMinutes = Number(final.timeoutMinutes || 10) > 0
+          ? Number(final.timeoutMinutes)
+          : 10;
 
-        await member.timeout(ms, final.reason || "AI Moderation").catch(() => null);
-        profile.totals.timeouts++;
+        const ms = timeoutMinutes * 60 * 1000;
+
+        const dmSent = await sendAiTimeoutDM(
+          member.user,
+          { ...final, timeoutMinutes },
+          member,
+          message,
+          profile
+        ).catch((err) => {
+          console.error("[AIMOD] Timeout DM hiba:", err?.message || err);
+          return false;
+        });
+
+        const timeoutOk = await member.timeout(ms, final.reason || "AI Moderation")
+          .then(() => true)
+          .catch((err) => {
+            console.error("[AIMOD] member.timeout hiba:", err?.message || err);
+            return false;
+          });
+
+        if (timeoutOk) {
+          profile.totals.timeouts++;
+          console.log(
+            `[AIMOD] Timeout DM állapot ${member.user?.tag || member.id}: ${dmSent ? "elküldve" : "nem sikerült"}`
+          );
+        }
       }
     }
 
@@ -1475,7 +1573,182 @@ function extractJson(text) {
 
   return raw.slice(firstBrace, lastBrace + 1);
 }
+function getDefaultAiModerationResult() {
+  return {
+    category: "other",
+    categoryHu: "Egyéb szabálysértés",
+    severity: "enyhe",
+    confidence: 25,
+    points: 0,
+    ruleBroken: "Nem sikerült biztosan azonosítani.",
+    reason: "Az AI válasza nem volt biztonságosan feldolgozható.",
+    analysis:
+      "Az automatikus elemzés nem tudott megbízható eredményt adni, ezért a rendszer szabályalapú fallback logikát használt. A tartalom ettől még problémás lehet, csak az AI válasza nem volt jól feldolgozható. Ilyenkor a rendszer óvatosabb, de a visszaeső mintákat továbbra is figyelembe veszi.",
+    patternSummary: "Nem áll rendelkezésre biztos AI összegzés.",
+    recommendedAction: "ignore",
+    timeoutMinutes: 0,
+    shouldNotifyStaff: false,
+  };
+}
 
+function safeParseAiModeration(rawText) {
+  const fallback = getDefaultAiModerationResult();
+  const raw = String(rawText || "").trim();
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const extracted = extractJson(raw);
+
+  const candidates = [
+    extracted,
+    extracted
+      .replace(/[„”]/g, '"')
+      .replace(/[’]/g, "'")
+      .replace(/\t/g, " ")
+      .replace(/\r/g, " "),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+
+      let confidence = Number(parsed.confidence ?? fallback.confidence);
+      if (confidence <= 1) confidence = confidence * 100;
+
+      return {
+        category: cleanText(parsed.category || fallback.category, 80),
+        categoryHu: cleanText(
+          parsed.categoryHu || categoryToHu(parsed.category || fallback.category),
+          120
+        ),
+        severity: normalizeSeverityHu(parsed.severity || fallback.severity),
+        confidence: Math.max(0, Math.min(100, Math.round(confidence))),
+        points: Math.max(0, Math.round(Number(parsed.points ?? fallback.points))),
+        ruleBroken: cleanText(parsed.ruleBroken || fallback.ruleBroken, 220),
+        reason: cleanText(parsed.reason || fallback.reason, 500),
+        analysis: cleanText(parsed.analysis || fallback.analysis, 1200),
+        patternSummary: cleanText(
+          parsed.patternSummary || fallback.patternSummary,
+          300
+        ),
+        recommendedAction: normalizeAction(
+          parsed.recommendedAction || fallback.recommendedAction
+        ),
+        timeoutMinutes: Math.max(
+          0,
+          Math.round(Number(parsed.timeoutMinutes ?? fallback.timeoutMinutes))
+        ),
+        shouldNotifyStaff: Boolean(parsed.shouldNotifyStaff),
+      };
+    } catch (_) {}
+  }
+
+  console.error("[AIMOD] AI JSON parse hiba, nyers válasz:", raw);
+
+  const inferredCategory =
+    /"category"\s*:\s*"([^"]+)"/i.exec(raw)?.[1] || fallback.category;
+
+  const inferredSeverityRaw =
+    /"severity"\s*:\s*"([^"]+)"/i.exec(raw)?.[1] || fallback.severity;
+
+  const inferredAction =
+    /"recommendedAction"\s*:\s*"([^"]+)"/i.exec(raw)?.[1] ||
+    fallback.recommendedAction;
+
+  const inferredPoints = Number(
+    /"points"\s*:\s*(\d+)/i.exec(raw)?.[1] || fallback.points
+  );
+
+  const inferredTimeout = Number(
+    /"timeoutMinutes"\s*:\s*(\d+)/i.exec(raw)?.[1] || fallback.timeoutMinutes
+  );
+
+  let inferredConfidence = Number(
+    /"confidence"\s*:\s*([0-9.]+)/i.exec(raw)?.[1] || fallback.confidence
+  );
+
+  if (inferredConfidence <= 1) inferredConfidence = inferredConfidence * 100;
+
+  return {
+    category: cleanText(inferredCategory, 80),
+    categoryHu: categoryToHu(inferredCategory),
+    severity: normalizeSeverityHu(inferredSeverityRaw),
+    confidence: Math.max(0, Math.min(100, Math.round(inferredConfidence))),
+    points: Math.max(0, Math.round(inferredPoints)),
+    ruleBroken: fallback.ruleBroken,
+    reason: fallback.reason,
+    analysis: fallback.analysis,
+    patternSummary: fallback.patternSummary,
+    recommendedAction: normalizeAction(inferredAction),
+    timeoutMinutes: Math.max(0, Math.round(inferredTimeout)),
+    shouldNotifyStaff: /"shouldNotifyStaff"\s*:\s*true/i.test(raw),
+  };
+}
+function safeParseAiModeration(rawText) {
+  const fallback = getDefaultAiModerationResult();
+  const raw = String(rawText || "").trim();
+  if (!raw) return fallback;
+
+  const extracted = extractJson(raw);
+
+  const candidates = [
+    extracted,
+    extracted
+      .replace(/[„”]/g, '"')
+      .replace(/[’]/g, "'")
+      .replace(/\t/g, " ")
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+
+      return {
+        category: cleanText(parsed.category || fallback.category, 80),
+        categoryHu: cleanText(parsed.categoryHu || fallback.categoryHu, 120),
+        severity: normalizeSeverityHu(parsed.severity || fallback.severity),
+        confidence: Math.max(0, Math.min(100, Math.round(Number(parsed.confidence || fallback.confidence)))),
+        points: Math.max(0, Math.round(Number(parsed.points || fallback.points))),
+        ruleBroken: cleanText(parsed.ruleBroken || fallback.ruleBroken, 220),
+        reason: cleanText(parsed.reason || fallback.reason, 500),
+        analysis: cleanText(parsed.analysis || fallback.analysis, 700),
+        patternSummary: cleanText(parsed.patternSummary || fallback.patternSummary, 220),
+        recommendedAction: normalizeAction(parsed.recommendedAction || fallback.recommendedAction),
+        timeoutMinutes: Math.max(0, Math.round(Number(parsed.timeoutMinutes || fallback.timeoutMinutes))),
+        shouldNotifyStaff: Boolean(parsed.shouldNotifyStaff),
+      };
+    } catch (_) {}
+  }
+
+  console.error("[AIMOD] AI JSON parse hiba, nyers válasz:", raw);
+
+  return {
+    ...fallback,
+    category: /harassment/i.test(raw) ? "harassment" : fallback.category,
+    categoryHu: /Zaklatás|sért/i.test(raw) ? "Zaklatás / sértegetés" : fallback.categoryHu,
+    severity: /kritikus/i.test(raw)
+      ? "kritikus"
+      : /magas/i.test(raw)
+        ? "magas"
+        : /közepes/i.test(raw)
+          ? "közepes"
+          : "enyhe",
+    recommendedAction: /"recommendedAction"\s*:\s*"timeout"/i.test(raw)
+      ? "timeout"
+      : /"recommendedAction"\s*:\s*"delete"/i.test(raw)
+        ? "delete"
+        : /"recommendedAction"\s*:\s*"warn"/i.test(raw)
+          ? "warn"
+          : /"recommendedAction"\s*:\s*"watch"/i.test(raw)
+            ? "watch"
+            : "ignore",
+    points: Number((raw.match(/"points"\s*:\s*(\d+)/i) || [])[1] || 0),
+    timeoutMinutes: Number((raw.match(/"timeoutMinutes"\s*:\s*(\d+)/i) || [])[1] || 0),
+    shouldNotifyStaff: /"shouldNotifyStaff"\s*:\s*true/i.test(raw),
+  };
+}
 const REGEX = {
   invite: /(discord\.gg\/|discord\.com\/invite\/)/i,
   doxxing:
@@ -1892,11 +2165,11 @@ if (!content.trim()) return { hits, score };
 
 if (isContextualProfanity(content)) {
   hits.push({
-    key: "warn",
-    points: 18,
+    key: "watch",
+    points: 8,
     label: "Nyers, trágár megfogalmazás",
   });
-  score += 18;
+  score += 8;
 }
 
 if (isTargetedDegradingMessage(content)) {
@@ -2115,23 +2388,24 @@ async function aiAnalyzeModeration(payload) {
     watchActive = false,
     escalationLabel = "nincs",
   } = payload;
-  
-if (!getState("aimod_enabled")) {
-  return {
-    category: "other",
-    categoryHu: "Egyéb",
-    severity: "enyhe",
-    confidence: 0,
-    points: 0,
-    ruleBroken: "AI kikapcsolva",
-    reason: "Az AI moderáció ki van kapcsolva.",
-    analysis: "Az AI moderáció jelenleg nem aktív, csak alap szabályalapú rendszer fut.",
-    patternSummary: "AI nem fut.",
-    recommendedAction: "ignore",
-    timeoutMinutes: 0,
-    shouldNotifyStaff: false,
-  };
-}
+
+  if (!getState("aimod_enabled")) {
+    return {
+      category: "other",
+      categoryHu: "Egyéb",
+      severity: "enyhe",
+      confidence: 0,
+      points: 0,
+      ruleBroken: "AI kikapcsolva",
+      reason: "Az AI moderáció ki van kapcsolva.",
+      analysis: "Az AI moderáció jelenleg nem aktív, csak alap szabályalapú rendszer fut.",
+      patternSummary: "AI nem fut.",
+      recommendedAction: "ignore",
+      timeoutMinutes: 0,
+      shouldNotifyStaff: false,
+    };
+  }
+
   const prompt = `
 Te egy emberi hangnemű, de fegyelmezett Discord moderációs AI vagy a(z) ${CONFIG.SERVER_NAME} szerveren.
 
@@ -2171,85 +2445,51 @@ Döntési elvek:
 - Delete / timeout / kick skálát használd emberien.
 - Az "analysis" mező legyen max 3 teljes magyar mondat.
 - A "patternSummary" rövid legyen.
-- Csak JSON-t adj vissza.
+- A string mezőkben ne használj idézőjelet, se dupla idézőjelet, se magyar idézőjelet.
+- Ha az üzenetből példát említesz, idézőjelek helyett sima szövegként írd le.
+- Csak érvényes JSON-t adj vissza.
 
 {
   "category": "harassment | threat | staff_abuse | doxxing | nsfw | ad_server | spam | flood | ooc_trade | scam | ban_evasion | politics_sensitive | clean | other",
-  "categoryHu": "Zaklatás / sértegetés",
+  "categoryHu": "magyar kategórianév",
   "severity": "enyhe | közepes | magas | kritikus",
-  "confidence": 0,
-  "points": 0,
-  "ruleBroken": "rövid magyar szabály-megfogalmazás",
-  "reason": "rövid magyar indoklás",
-  "analysis": "max 3 mondatos emberi elemzés",
-  "patternSummary": "rövid visszaesési összegzés",
+  "confidence": 0-100,
+  "points": 0-160,
+  "ruleBroken": "rövid szabályleírás",
+  "reason": "rövid indoklás",
+  "analysis": "max 3 mondat",
+  "patternSummary": "rövid összegzés",
   "recommendedAction": "ignore | watch | warn | delete | timeout | kick | ban",
   "timeoutMinutes": 0,
   "shouldNotifyStaff": true
 }
 `;
 
-let response;
-
-try {
-  response = await openai.chat.completions.create({
-    model: CONFIG.AI_MODEL,
-    messages: [
-      {
-        role: "system",
-        content: "Te csak és kizárólag érvényes JSON-t adhatsz vissza.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-  });
-} catch (error) {
-  console.error("[AIMOD] OpenAI hiba:", error?.message || error);
-
-  return {
-    category: "other",
-    categoryHu: "Egyéb",
-    severity: "enyhe",
-    confidence: 0,
-    points: 0,
-    ruleBroken: "AI hiba történt",
-    reason: "Az AI válasz nem érhető el.",
-    analysis: "Az AI kérés hibába futott, ezért fallback logika lett használva.",
-    patternSummary: "AI elemzés nem futott le.",
-    recommendedAction: "ignore",
-    timeoutMinutes: 0,
-    shouldNotifyStaff: false,
-  };
-}
-
-  const content = response.choices?.[0]?.message?.content?.trim() || "{}";
-
   try {
-    const parsed = JSON.parse(extractJson(content));
-    parsed.severity = normalizeSeverityHu(parsed.severity);
-    parsed.categoryHu = parsed.categoryHu || categoryToHu(parsed.category);
-    parsed.analysis = cleanText(parsed.analysis || "", 1200);
-    parsed.patternSummary = cleanText(parsed.patternSummary || "", 300);
-    return parsed;
+    const response = await openai.chat.completions.create({
+      model: CONFIG.AI_MODEL,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Csak érvényes JSON objektummal válaszolj. Ne írj magyarázatot a JSON elé vagy mögé.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
+
+    const content =
+      response.choices?.[0]?.message?.content?.trim() || "{}";
+
+    return safeParseAiModeration(content);
   } catch (error) {
-    console.error("[AIMOD] AI JSON parse hiba:", error, content);
-    return {
-      category: "other",
-      categoryHu: "Egyéb szabálysértés",
-      severity: "enyhe",
-      confidence: 25,
-      points: 0,
-      ruleBroken: "Nem sikerült biztosan azonosítani.",
-      reason: "Az AI válasza nem volt biztonságosan feldolgozható.",
-      analysis:
-        "Az automatikus elemzés nem tudott megbízható eredményt adni, ezért a rendszer szabályalapú fallback logikát használt. A tartalom ettől még problémás lehet, csak az AI válasza nem volt jól feldolgozható. Ilyenkor a rendszer óvatosabb, de a visszaeső mintákat továbbra is figyelembe veszi.",
-      patternSummary: "Nem áll rendelkezésre biztos AI összegzés.",
-      recommendedAction: "ignore",
-      timeoutMinutes: 0,
-      shouldNotifyStaff: false,
-    };
+    console.error("[AIMOD] aiAnalyzeModeration hiba:", error);
+
+    return getDefaultAiModerationResult();
   }
 }
 

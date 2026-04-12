@@ -73,6 +73,8 @@ const ideaSystem = require("./otletek");
 const aiModeration = require("./aimoderation");
 const systemPanel = require("./systempanel");
 const { getState } = require("./systempanel");
+const embedAi = require("./embedai");
+embedAi.registerEmbedAi(client);
 systemPanel.registerSystemPanel(client);
 bugReport.registerBugReport(client);
 ideaSystem.registerIdeaSystem(client);

@@ -1702,7 +1702,52 @@ function isTargetedDegradingMessage(content = "") {
 
   return containsInsultWord(content) && containsTargetWord(content);
 }
+function isTargetedInsult(content = "") {
+  const raw = String(content || "");
+  const normalizedLoose = normalizeModerationText(raw);
+  const normalizedCompact = normalizeModerationText(raw, { compact: true });
 
+  if (!normalizedCompact) return false;
+
+  const targetedPatterns = [
+    /\b(te|ti|neked|nektek|rólad|rolad|róluk|roluk|vagy|vagytok)\b.{0,20}\b(nyomorek|retkes|patkany|patkány|semmirekello|semmirekellő|szarhazi|szarházi|csicska|idiota|idióta|hulye|hülye|balfasz|faszfej|faszkalap|gecifej|geciarc|szarfej|szararc|fosfej|fosarc|bohoc|bohóc|majom|barom|diszno|disznó|korcs|fattyu|fattyú|ribanc|lotyo|lotyó|ringyo|ringyó|cafka|pszichopata|elmebeteg|orult|őrült|zakkant|bolond|undorito|undorító|gusztustalan|hanyadek|hányadék|okadek|okádék|szutyok|szenny|mocsok)\b/i,
+    /\b(nyomorek|retkes|patkany|patkány|semmirekello|semmirekellő|szarhazi|szarházi|csicska|idiota|idióta|hulye|hülye|balfasz|faszfej|faszkalap|gecifej|geciarc|szarfej|szararc|fosfej|fosarc|bohoc|bohóc|majom|barom|diszno|disznó|korcs|fattyu|fattyú|ribanc|lotyo|lotyó|ringyo|ringyó|cafka|pszichopata|elmebeteg|orult|őrült|zakkant|bolond|undorito|undorító|gusztustalan|hanyadek|hányadék|okadek|okádék|szutyok|szenny|mocsok)\b.{0,20}\b(te|ti|neked|nektek|rólad|rolad|róluk|roluk|vagy|vagytok)\b/i,
+    /\b(admin|adminok|staff|moderator|moderátor|fejleszto|fejlesztő|vezetoseg|vezetőség|szerver|server|rendszer|kozosseg|közösség|internalgaming)\b.{0,20}\b(bohoc|bohóc|vicc|szanalmas|nevetseges|nevetséges|komolytalan|retkes|nyomorek|szutyok|szenny|hulladek|hulladék)\b/i,
+    /\b(bohoc|bohóc|vicc|szanalmas|nevetseges|nevetséges|komolytalan|retkes|nyomorek|szutyok|szenny|hulladek|hulladék)\b.{0,20}\b(admin|adminok|staff|moderator|moderátor|fejleszto|fejlesztő|vezetoseg|vezetőség|szerver|server|rendszer|kozosseg|közösség|internalgaming)\b/i,
+  ];
+
+  if (matchesAnyPattern(raw, targetedPatterns)) return true;
+
+  const hasInsult = containsInsultWord(raw);
+  const hasTarget = containsTargetWord(raw);
+
+  if (hasInsult && hasTarget) {
+    return true;
+  }
+
+  return false;
+}
+
+function isStrongDirectAbuse(content = "") {
+  const raw = String(content || "");
+  const normalizedLoose = normalizeModerationText(raw);
+  const normalizedCompact = normalizeModerationText(raw, { compact: true });
+
+  if (!normalizedCompact) return false;
+
+  const strongPatterns = [
+    /\b(kurva\s+anyad|a\s+kurva\s+anyad|dogolj\s+meg|dögölj\s+meg|rohadj\s+meg|pusztulj)\b/i,
+    /\b(te|ti|neked|nektek|vagy|vagytok)\b.{0,12}\b(kurva|geci|fasz|anyad|szarhazi|szarházi|csicska|faszfej|faszkalap|balfasz)\b/i,
+    /\b(kurva|geci|fasz|anyad|szarhazi|szarházi|csicska|faszfej|faszkalap|balfasz)\b.{0,12}\b(te|ti|neked|nektek|vagy|vagytok)\b/i,
+  ];
+
+  if (matchesAnyPattern(raw, strongPatterns)) return true;
+
+  const hasFamilyInsult = containsCanonical(raw, FAMILY_INSULT_WORDS);
+  if (hasFamilyInsult) return true;
+
+  return false;
+}
 function detectBypassPatterns(content = "") {
   const raw = String(content || "");
   const normalizedLoose = normalizeModerationText(raw);
